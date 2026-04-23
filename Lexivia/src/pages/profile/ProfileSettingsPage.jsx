@@ -16,8 +16,8 @@ export default function ProfileSettingsPage() {
   // TODO: replace with real auth context
   // const { currentUser } = useAuth()
   // const userId = currentUser?.supabaseId
-  const userId = 'PLACEHOLDER_USER_ID'
-
+  //const userId = 'PLACEHOLDER_USER_ID'
+const userId = 1
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')

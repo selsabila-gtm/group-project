@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabaseClient'
+import { supabase } from '../config/supabase'
 
 export async function getFullProfile(userId) {
   try {
@@ -26,39 +26,16 @@ export async function getFullProfile(userId) {
 
     if (expError) throw expError
 
-    const { data: organizedCompetitions, error: orgError } = await supabase
-      .from('competitions')
-      .select('id, title, status, task_type, start_date, end_date')
-      .eq('organizer_id', userId)
-      .order('created_at', { ascending: false })
-
-    if (orgError) throw orgError
-
-    const { data: participatedCompetitions, error: partError } = await supabase
-      .from('team_members')
-      .select(`
-        teams (
-          competition_id,
-          competitions (
-            id, title, status, task_type, start_date, end_date
-          )
-        )
-      `)
-      .eq('user_id', userId)
-
-    if (partError) throw partError
-
-    const participated = participatedCompetitions
-      ?.map((tm) => tm.teams?.competitions)
-      .filter(Boolean) ?? []
+    // ⚠️ competitions table has no organizer_id yet — skipped until team adds it
+    // ⚠️ team_members/teams link not ready yet — skipped until team adds it
 
     return {
       data: {
         user,
         profile: profile ?? {},
         experiences: experiences ?? [],
-        organizedCompetitions: organizedCompetitions ?? [],
-        participatedCompetitions: participated,
+        organizedCompetitions: [],
+        participatedCompetitions: [],
       },
       error: null,
     }
