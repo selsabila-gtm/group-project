@@ -1,18 +1,19 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import Dashboard from "./pages/Dashboard";
-import Competitions from "./pages/Competitions";
-import "./index.css";
+import { BrowserRouter, Routes, Route } from "react-router-dom"
+import Landing from "./pages/Landing"
+import Login from "./pages/Login"
+import Signup from "./pages/Signup"
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/competitions" element={<Competitions />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+
       </Routes>
     </BrowserRouter>
-  );
+  )
 }
 
-export default App;
+export default App

@@ -30,22 +30,22 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
     existing_user = db.query(User).filter(User.email == user.email).first()
 
-        if existing_user:
-            raise HTTPException(status_code=400, detail="Email already exists")
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already exists")
 
-        new_user = User(
-            full_name=user.full_name,
-            email=user.email,
-            password=hash_password(user.password)
-        )
+    new_user = User(
+        full_name=user.full_name,
+        email=user.email,
+        password=hash_password(user.password)
+    )
 
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
 
-        print("User created!")
+    print("User created!")
 
-        return {"message": "User created successfully"}
+    return {"message": "User created successfully"}
 
 
 # ✅ LOGIN
