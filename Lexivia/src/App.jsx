@@ -1,49 +1,33 @@
-<<<<<<< HEAD
-import { BrowserRouter, Routes, Route } from "react-router-dom"
-import Landing from "./pages/Landing"
-import Login from "./pages/Login"
-import Signup from "./pages/Signup"
-=======
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-
+import Landing from "./pages/Landing";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Competitions from "./pages/Competitions";
 import TeamsPage from "./pages/TeamsPage";
 import TeamDetailPage from "./pages/TeamDetailPage";
-
 import "./App.css";
->>>>>>> b6e8705ad25f1dd1a38087a5ce1747f370731eb6
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-<<<<<<< HEAD
+        {/* Public routes */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-      </Routes>
-    </BrowserRouter>
-  )
-}
 
-export default App
-=======
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-        {/* Main pages */}
+        {/* Protected routes - you'll want to add authentication guard later */}
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/competitions" element={<Competitions />} />
-
-        {/* Teams */}
         <Route path="/teams" element={<TeamsPage />} />
         <Route path="/teams/:teamId" element={<TeamDetailPage />} />
-
-        {/* Other pages */}
         <Route path="/datasets" element={<PlaceholderPage title="Datasets" />} />
         <Route path="/resources" element={<PlaceholderPage title="Resources" />} />
         <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
+
+        {/* Catch all - redirect to home or 404 */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
@@ -64,4 +48,3 @@ function PlaceholderPage({ title }) {
     </div>
   );
 }
->>>>>>> b6e8705ad25f1dd1a38087a5ce1747f370731eb6
