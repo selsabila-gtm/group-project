@@ -4,8 +4,8 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Competitions from "./pages/Competitions";
-import TeamsPage from "./pages/TeamsPage";
-import TeamDetailPage from "./pages/TeamDetailPage";
+import TeamsPage from "./pages/Teams/TeamsPage";
+import TeamDetailPage from "./pages/Teams/TeamDetailPage";
 import "./App.css";
 import "./index.css";
 

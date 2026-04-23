@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { supabase } from '../config/supabase';
+import { supabase } from '../../config/supabase';
 import './TeamDetailPage.css';
 
 const CURRENT_USER_ID = 1;

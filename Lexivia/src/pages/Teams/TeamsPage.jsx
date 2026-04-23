@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
-import { supabase } from '../config/supabase';
+import Sidebar from '../../components/Sidebar';
+import { supabase } from '../../config/supabase';
 import './TeamsPage.css';
-import CreateTeamModal from '../components/CreateTeamModal';
+import CreateTeamModal from '../../components/CreateTeamModal';
 
 const CURRENT_USER_ID = 1;
 
