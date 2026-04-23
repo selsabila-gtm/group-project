@@ -1,0 +1,124 @@
+/* Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(20, 22, 30, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+/* Modal container */
+.modal {
+  width: 420px;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.2s ease;
+}
+
+/* Title */
+.modal h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: #111;
+}
+
+/* Labels */
+.modal label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 6px;
+  margin-top: 14px;
+}
+
+/* Inputs */
+.modal input,
+.modal textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #dcdfe6;
+  background: #ffffff; /* ✅ PURE WHITE */
+  color: #111; /* ✅ DARK TEXT */
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+/* Placeholder */
+.modal input::placeholder,
+.modal textarea::placeholder {
+  color: #aaa;
+}
+
+/* Focus state */
+.modal input:focus,
+.modal textarea:focus {
+  border-color: #2d5cf6;
+  box-shadow: 0 0 0 2px rgba(45, 92, 246, 0.15);
+}
+
+/* Textarea */
+.modal textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Buttons */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.modal button {
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+/* Cancel */
+.btn-cancel {
+  background: #f1f3f5;
+  color: #444;
+}
+
+.btn-cancel:hover {
+  background: #e9ecef;
+}
+
+/* Create */
+.btn-create {
+  background: #2d5cf6;
+  color: white;
+}
+
+.btn-create:hover {
+  background: #1f4ae0;
+}
+
+/* Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

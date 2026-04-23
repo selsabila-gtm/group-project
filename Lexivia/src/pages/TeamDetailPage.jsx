@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../config/supabase';
 import './TeamDetailPage.css';
 
 const CURRENT_USER_ID = 1;
@@ -51,7 +51,7 @@ function SkeletonBlock({ w = '100%', h = 14, mb = 10, radius = 6 }) {
 }
 
 export default function TeamDetailPage() {
-  const { id: teamId } = useParams();
+  const { teamId } = useParams();
 
   const [team, setTeam] = useState(null);
   const [members, setMembers] = useState([]);
@@ -84,7 +84,7 @@ export default function TeamDetailPage() {
       const teamResult = await supabase
         .from('teams')
         .select('*')
-        .eq('id', teamId)
+        .eq('id', Number(teamId))
         .single();
 
       if (teamResult.error) throw teamResult.error;
@@ -97,7 +97,7 @@ export default function TeamDetailPage() {
       const membersResult = await supabase
         .from('team_members')
         .select('user_id, role, joined_at')
-        .eq('team_id', teamId)
+        .eq('team_id', Number(teamId))
         .order('joined_at', { ascending: true });
 
       if (membersResult.error) throw membersResult.error;
@@ -166,50 +166,68 @@ export default function TeamDetailPage() {
 
   // ── Invite member ─────────────────────────────────────────────
   async function handleInvite() {
-    if (!inviteEmail.trim()) return;
-    setInviting(true);
-    setInviteMsg(null);
-    try {
-      // Look up user by email
-      const { data: userData, error: userErr } = await supabase
-        .from('users')
-        .select('id, username')
-        .eq('email', inviteEmail.trim().toLowerCase())
-        .maybeSingle();
+  if (!inviteEmail.trim()) return;
+  setInviting(true);
+  setInviteMsg(null);
 
-      if (userErr) throw userErr;
-      if (!userData) {
-        setInviteMsg({ type: 'error', text: 'No user found with that email address.' });
-        return;
-      }
+  try {
+    // 1. Look up the receiver by email
+    const { data: userData, error: userErr } = await supabase
+      .from('users')
+      .select('id, username')
+      .eq('email', inviteEmail.trim().toLowerCase())
+      .maybeSingle();
 
-      // Check if already a member
-      const alreadyMember = members.some((m) => m.userId === userData.id);
-      if (alreadyMember) {
-        setInviteMsg({ type: 'error', text: `${userData.username} is already a member.` });
-        return;
-      }
-
-      // Insert into team_members
-      const { error: insertErr } = await supabase.from('team_members').insert({
-        team_id: teamId,
-        user_id: userData.id,
-        role: inviteRole,
-        joined_at: new Date().toISOString(),
-      });
-      if (insertErr) throw insertErr;
-
-      setInviteMsg({ type: 'success', text: `${userData.username} has been added to the team!` });
-      setInviteEmail('');
-      setInviteRole('member');
-      // Refresh members list
-      fetchTeamData();
-    } catch (err) {
-      setInviteMsg({ type: 'error', text: err.message || 'Failed to invite member.' });
-    } finally {
-      setInviting(false);
+    if (userErr) throw userErr;
+    if (!userData) {
+      setInviteMsg({ type: 'error', text: 'No user found with that email address.' });
+      return;
     }
+
+    // 2. Check if already a member
+    const alreadyMember = members.some((m) => m.userId === userData.id);
+    if (alreadyMember) {
+      setInviteMsg({ type: 'error', text: `${userData.username} is already a member.` });
+      return;
+    }
+
+    // 3. Check if a pending invite already exists
+    const { data: existingInvite } = await supabase
+      .from('invitations')
+      .select('id')
+      .eq('team_id', Number(teamId))
+      .eq('receiver_id', userData.id)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (existingInvite) {
+      setInviteMsg({ type: 'error', text: `${userData.username} already has a pending invitation.` });
+      return;
+    }
+
+    // 4. Insert the invitation row
+    const { error: insertErr } = await supabase.from('invitations').insert({
+      team_id:     Number(teamId),
+      sender_id:   CURRENT_USER_ID,
+      receiver_id: userData.id,
+      role:        inviteRole,
+      status:      'pending',
+      created_at:  new Date().toISOString(),
+      updated_at:  new Date().toISOString(),
+    });
+
+    if (insertErr) throw insertErr;
+
+    setInviteMsg({ type: 'success', text: `Invitation sent to ${userData.username}!` });
+    setInviteEmail('');
+    setInviteRole('member');
+
+  } catch (err) {
+    setInviteMsg({ type: 'error', text: err.message || 'Failed to send invitation.' });
+  } finally {
+    setInviting(false);
   }
+}
 
   const isLeader = currentUserRole === 'leader';
 
