@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { getFullProfile } from '../../services/profileService'
 import ProfileOverview from '../../components/profile/ProfileOverview'
-import './ProfilePage.css'
+import '../../styles/ProfilePage.css'
 
 export default function ProfilePage() {
   const { userId: paramUserId } = useParams()
@@ -10,8 +10,8 @@ export default function ProfilePage() {
   // TODO: replace this with your real auth context
   // const { currentUser } = useAuth()
   // const userId = paramUserId || currentUser?.supabaseId
-  const userId = paramUserId || 'PLACEHOLDER_USER_ID'
-
+  //const userId = paramUserId || 'PLACEHOLDER_USER_ID'
+const userId = paramUserId || 1
   const [profileData, setProfileData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -54,9 +54,9 @@ export default function ProfilePage() {
     <div className="profile-page">
       {isOwnProfile && (
         <div className="profile-page__actions">
-          <Link to="/profile/settings" className="btn btn--secondary">
-            Edit Profile
-          </Link>
+          <a href="/profile/settings" className="btn btn--secondary">
+  Edit Profile
+</a>
         </div>
       )}
       <ProfileOverview profileData={profileData} />

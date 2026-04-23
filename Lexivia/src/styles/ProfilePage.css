@@ -1,0 +1,541 @@
+/* ─── Design Tokens ─────────────────────────── */
+:root {
+  --bg-page:       #f4f5f7;
+  --bg-card:       #ffffff;
+  --bg-sidebar:    #1a1d23;
+  --text-primary:  #111827;
+  --text-secondary:#6b7280;
+  --text-sidebar:  #e5e7eb;
+  --accent:        #2563eb;
+  --accent-hover:  #1d4ed8;
+  --danger:        #ef4444;
+  --success:       #22c55e;
+  --border:        #e5e7eb;
+  --radius:        10px;
+  --shadow:        0 1px 4px rgba(0,0,0,0.08);
+}
+
+/* ─── Profile Page Layout ───────────────────── */
+.profile-page {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg-page);
+}
+
+.profile-sidebar {
+  width: 220px;
+  background: var(--bg-sidebar);
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.profile-avatar-wrap { margin-bottom: 8px; }
+
+.profile-avatar,
+.profile-avatar-placeholder {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile-avatar-placeholder {
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.profile-name {
+  color: var(--text-sidebar);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.profile-role {
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.profile-nav {
+  width: 100%;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-nav-item {
+  background: none;
+  border: none;
+  color: var(--text-sidebar);
+  text-align: left;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.profile-nav-item:hover   { background: rgba(255,255,255,0.08); }
+.profile-nav-item.active  { background: rgba(255,255,255,0.15); font-weight: 600; }
+
+/* ─── Profile Main ──────────────────────────── */
+.profile-main {
+  flex: 1;
+  padding: 32px;
+  overflow-y: auto;
+}
+
+.profile-main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.profile-main-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.profile-settings-icon {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+/* ─── Profile Grid ──────────────────────────── */
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.profile-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.profile-card h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--accent);
+  display: inline-block;
+}
+
+/* Bio card spans full width */
+.biography-card { grid-column: 1; }
+.skills-card    { grid-column: 2; }
+.experience-card    { grid-column: 1 / -1; }
+.competitions-card  { grid-column: 1; }
+.competitions-card:nth-of-type(5) { grid-column: 2; }
+
+.bio-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.bio-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.bio-links { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.bio-link {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.bio-link.linkedin { background: #e0e7ff; color: #2563eb; }
+.bio-link.github   { background: #f3f4f6; color: #111827; }
+.bio-link.website  { background: #fef3c7; color: #92400e; }
+
+/* ─── Skills ────────────────────────────────── */
+.skills-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.skill-tag {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.skill-tag.editable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.skill-remove {
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+}
+
+.skill-remove:hover { color: var(--danger); }
+
+/* ─── Experience (display) ──────────────────── */
+.experience-entry {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.experience-entry:last-child { border-bottom: none; }
+
+.exp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.exp-title    { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+.exp-org-name { font-size: 13px; color: var(--accent); }
+.exp-date-range { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.exp-description { font-size: 13px; color: var(--text-secondary); margin-top: 6px; line-height: 1.5; }
+
+/* ─── Competitions ──────────────────────────── */
+.competitions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.competition-item {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+}
+
+.comp-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.comp-tag   { background: #e0e7ff; color: #2563eb; font-size: 11px; border-radius: 20px; padding: 2px 8px; }
+.comp-role  { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+
+/* ─── Settings Page ─────────────────────────── */
+.settings-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.settings-header {
+  margin-bottom: 32px;
+}
+
+.settings-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 8px;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+}
+
+.settings-section {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+
+.settings-section h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.section-hint { font-size: 12px; color: var(--text-secondary); font-weight: 400; }
+
+.settings-section label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  margin-top: 14px;
+}
+
+.settings-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.settings-input:focus { border-color: var(--accent); }
+
+.settings-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  resize: vertical;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.settings-textarea:focus { border-color: var(--accent); }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* ─── Avatar Edit ───────────────────────────── */
+.avatar-edit-row { display: flex; align-items: center; gap: 24px; }
+
+.avatar-preview-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+.settings-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.settings-avatar-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.avatar-upload-btn {
+  font-size: 13px;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.name-field { flex: 1; }
+
+/* ─── Links Editor ──────────────────────────── */
+.bio-links-editor { display: flex; flex-direction: column; gap: 12px; }
+
+.link-field label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0 0 6px 0;
+}
+
+.link-icon {
+  width: 20px;
+  height: 20px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* ─── Skills Editor ─────────────────────────── */
+.skills-editor { display: flex; flex-direction: column; gap: 12px; }
+
+.skills-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.skills-input-wrap { position: relative; }
+
+.skills-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 100;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+}
+
+.skills-dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+
+.skills-dropdown-item:hover { background: #f0f5ff; color: var(--accent); }
+.skills-dropdown-item.custom { color: var(--accent); font-style: italic; }
+
+/* ─── Experience (settings) ─────────────────── */
+.section-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.section-title-row h2 { margin-bottom: 0; }
+
+.add-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.add-btn:hover { background: var(--accent-hover); }
+
+.exp-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.exp-item-info { display: flex; flex-direction: column; gap: 3px; }
+.exp-item-info strong { font-size: 14px; }
+.exp-org   { font-size: 13px; color: var(--accent); }
+.exp-years { font-size: 12px; color: var(--text-secondary); }
+.exp-desc  { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+
+.exp-item-actions { display: flex; gap: 8px; }
+
+.icon-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.icon-btn.delete:hover { background: #fee2e2; border-color: var(--danger); }
+.icon-btn.edit:hover   { background: #eff6ff; border-color: var(--accent); }
+
+.exp-form {
+  background: #f9fafb;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.exp-form h4 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+
+.exp-form-actions { display: flex; gap: 10px; }
+
+.save-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.save-btn:hover { background: var(--accent-hover); }
+
+.cancel-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 20px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* ─── Save Row ──────────────────────────────── */
+.settings-save-row { display: flex; justify-content: flex-end; padding: 8px 0 40px; }
+
+.primary-save-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 32px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.primary-save-btn:hover    { background: var(--accent-hover); }
+.primary-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ─── Alerts ────────────────────────────────── */
+.alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.alert-success { background: #dcfce7; color: #166534; }
+.alert-error   { background: #fee2e2; color: #991b1b; }
+
+/* ─── Misc ──────────────────────────────────── */
+.empty-text     { font-size: 13px; color: var(--text-secondary); font-style: italic; }
+.profile-loading { padding: 80px; text-align: center; color: var(--text-secondary); }
+.profile-error   { padding: 40px; text-align: center; color: var(--danger); }

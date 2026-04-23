@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
-import { supabase } from '../lib/supabase';
+import Sidebar from '../../components/Sidebar';
+import { supabase } from '../../config/supabase';
 import './TeamsPage.css';
+import CreateTeamModal from '../../components/CreateTeamModal';
 
 const CURRENT_USER_ID = 1;
 
@@ -107,6 +108,7 @@ export default function TeamsPage() {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const PAGE_SIZE = 6;
 
 
@@ -267,7 +269,7 @@ export default function TeamsPage() {
                 Connect with elite NLP research collectives and collaborate on high-density language modeling competitions.
               </p>
             </div>
-            <button className="create-btn" onClick={() => navigate('/teams/create')}>
+            <button className="create-btn" onClick={() => setShowCreateModal(true)}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
@@ -341,6 +343,14 @@ export default function TeamsPage() {
           )}
         </div>
       </div>
+      <CreateTeamModal
+  isOpen={showCreateModal}
+  onClose={() => setShowCreateModal(false)}
+  onCreated={fetchTeams}
+  userId={CURRENT_USER_ID}
+/>
     </div>
+    
   );
+  
 }

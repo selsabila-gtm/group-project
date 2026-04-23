@@ -1,5 +1,5 @@
 import React from 'react'
-import './ProfileOverview.css'
+
 
 const LinkedInIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -34,11 +34,6 @@ const BuildingIcon = () => (
   </svg>
 )
 
-function StatusBadge({ status }) {
-  const map = { active: 'badge--green', closed: 'badge--gray', draft: 'badge--yellow' }
-  return <span className={`badge ${map[status] || 'badge--gray'}`}>{status}</span>
-}
-
 function formatYearRange(start, end) {
   if (!start) return ''
   return `${start} – ${end ?? 'Present'}`
@@ -50,7 +45,7 @@ export default function ProfileOverview({ profileData }) {
   const links = [
     { url: profile.linkedin_url, label: 'LinkedIn', icon: <LinkedInIcon /> },
     { url: profile.github_url, label: 'GitHub', icon: <GitHubIcon /> },
-    { url: profile.website_url, label: 'Website', icon: <LinkIcon /> },
+    { url: profile.website_url, label: 'Research Profile', icon: <LinkIcon /> },
   ].filter((l) => l.url)
 
   return (
@@ -136,15 +131,7 @@ export default function ProfileOverview({ profileData }) {
             <div className="competition-grid">
               {organizedCompetitions.map((comp) => (
                 <div key={comp.id} className="competition-card">
-                  <div className="competition-card__top">
-                    <p className="competition-card__title">{comp.title}</p>
-                    <StatusBadge status={comp.status} />
-                  </div>
-                  {comp.task_type && (
-                    <div className="competition-card__tags">
-                      <span className="tag tag--type">{comp.task_type.replace(/_/g, ' ')}</span>
-                    </div>
-                  )}
+                  <p className="competition-card__title">{comp.title}</p>
                   <p className="competition-card__role">Role: Lead Organizer</p>
                 </div>
               ))}
@@ -160,15 +147,7 @@ export default function ProfileOverview({ profileData }) {
             <div className="competition-grid">
               {participatedCompetitions.map((comp) => (
                 <div key={comp.id} className="competition-card">
-                  <div className="competition-card__top">
-                    <p className="competition-card__title">{comp.title}</p>
-                    <StatusBadge status={comp.status} />
-                  </div>
-                  {comp.task_type && (
-                    <div className="competition-card__tags">
-                      <span className="tag tag--type">{comp.task_type.replace(/_/g, ' ')}</span>
-                    </div>
-                  )}
+                  <p className="competition-card__title">{comp.title}</p>
                 </div>
               ))}
             </div>
