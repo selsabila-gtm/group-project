@@ -1,58 +1,7 @@
+import { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 import "./Dashboard.css";
-
-const recentCompetitions = [
-    {
-        title: "SQuAD v2.0 Global Bench",
-        type: "QUESTION ANSWERING",
-        status: "IN PROGRESS",
-        score: "--",
-        sync: "Just now",
-        icon: "◎",
-    },
-    {
-        title: "Multi-Lingual Translation",
-        type: "TRANSLATION TASK",
-        status: "SUBMITTED",
-        score: "0.892 BLEU",
-        sync: "14 mins ago",
-        icon: "文",
-    },
-    {
-        title: "XSum News Summarization",
-        type: "SUMMARIZATION",
-        status: "DRAFT",
-        score: "--",
-        sync: "1 hour ago",
-        icon: "▣",
-    },
-];
-
-const notifications = [
-    {
-        title: 'Project "X-NLI-V2" Archived',
-        text: "Data saved to your persistent storage node.",
-        time: "2 minutes ago",
-        highlighted: true,
-    },
-    {
-        title: "Tier Upgrade Confirmed",
-        text: "You are now a verified Pro Tier Researcher.",
-        time: "1 hour ago",
-    },
-    {
-        title: "Team Invite",
-        text: 'User @nlp_master invited you to "Transformers-R-Us".',
-        time: "1 hour ago",
-        actions: true,
-    },
-    {
-        title: "Login Detected",
-        text: "New session started from OS X 10.15.7",
-        time: "4 hours ago",
-    },
-];
 
 function statusClass(status) {
     if (status === "IN PROGRESS") return "in-progress";
@@ -62,6 +11,32 @@ function statusClass(status) {
 }
 
 function Dashboard() {
+    const userId = "demo-user-1";
+
+    const [stats, setStats] = useState({
+        total_competitions: 0,
+        teams_joined: 0,
+    });
+    const [recentCompetitions, setRecentCompetitions] = useState([]);
+    const [notifications, setNotifications] = useState([]);
+
+    useEffect(() => {
+        fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`)
+            .then((res) => res.json())
+            .then((data) => setStats(data))
+            .catch((err) => console.error("Stats fetch error:", err));
+
+        fetch(`http://127.0.0.1:8000/dashboard/recent/${userId}`)
+            .then((res) => res.json())
+            .then((data) => setRecentCompetitions(data))
+            .catch((err) => console.error("Recent competitions fetch error:", err));
+
+        fetch(`http://127.0.0.1:8000/dashboard/notifications/${userId}`)
+            .then((res) => res.json())
+            .then((data) => setNotifications(data))
+            .catch((err) => console.error("Notifications fetch error:", err));
+    }, []);
+
     return (
         <div className="dashboard-shell">
             <Sidebar />
@@ -81,7 +56,7 @@ function Dashboard() {
                                     <span className="stat-icon">🏆</span>
                                     <span className="today-badge">+2 Today</span>
                                 </div>
-                                <h3>12</h3>
+                                <h3>{String(stats.total_competitions).padStart(2, "0")}</h3>
                                 <p>TOTAL COMPETITIONS</p>
                             </div>
 
@@ -89,7 +64,7 @@ function Dashboard() {
                                 <div className="stat-card-top">
                                     <span className="stat-icon">👥</span>
                                 </div>
-                                <h3>04</h3>
+                                <h3>{String(stats.teams_joined).padStart(2, "0")}</h3>
                                 <p>TEAMS JOINED</p>
                             </div>
                         </div>
@@ -112,7 +87,7 @@ function Dashboard() {
 
                             <div className="recent-list">
                                 {recentCompetitions.map((item) => (
-                                    <div className="recent-row" key={item.title}>
+                                    <div className="recent-row" key={item.id}>
                                         <div className="recent-main">
                                             <div className="recent-icon">{item.icon}</div>
                                             <div>
@@ -147,7 +122,7 @@ function Dashboard() {
                             <div className="notifications-list">
                                 {notifications.map((note) => (
                                     <div
-                                        key={note.title}
+                                        key={note.id}
                                         className={
                                             note.highlighted
                                                 ? "notification-item highlighted"
@@ -155,7 +130,7 @@ function Dashboard() {
                                         }
                                     >
                                         <h3>{note.title}</h3>
-                                        <p>{note.text}</p>
+                                        <p>{note.message}</p>
                                         <span>{note.time}</span>
 
                                         {note.actions && (
