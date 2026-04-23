@@ -1,0 +1,93 @@
+.sidebar {
+  width: 220px;
+  min-width: 220px;
+  height: 100vh;
+  background: #ffffff;
+  border-right: 1px solid #e8e9ec;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  position: sticky;
+  top: 0;
+  overflow: hidden;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 20px 24px;
+  border-bottom: 1px solid #f0f1f4;
+}
+
+.sidebar-logo-icon {
+  width: 34px;
+  height: 34px;
+  background: #2d5cf6;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar-logo-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1c20;
+  letter-spacing: -0.01em;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 12px;
+  flex: 1;
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #888;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+  cursor: pointer;
+}
+
+.sidebar-nav-item:hover {
+  background: #f4f5f7;
+  color: #1a1c20;
+}
+
+.sidebar-nav-item.active {
+  background: #eef2fe;
+  color: #2d5cf6;
+}
+
+.sidebar-nav-item.active .sidebar-nav-icon {
+  color: #2d5cf6;
+}
+
+.sidebar-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 12px 20px;
+  border-top: 1px solid #f0f1f4;
+}
