@@ -32,8 +32,6 @@ export default function App() {
   );
 }
 
-export default App;
-
 function PlaceholderPage({ title }) {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f4f5f7' }}>
