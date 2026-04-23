@@ -6,9 +6,17 @@
   padding: 0;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
+  width: 100%;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
   background: #f6f7f9;
+  text-align: left;
+  overflow-x: hidden;
 }
 
 body {

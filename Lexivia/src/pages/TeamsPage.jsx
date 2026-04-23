@@ -1,60 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
+import { supabase } from '../lib/supabase';
 import './TeamsPage.css';
 
-const TEAMS = [
-  {
-    id: 1,
-    name: 'Cyberdyne NLP',
-    description: 'Specializing in neural hardware acceleration for transformer-based...',
-    skillFocus: 'Transformer Optimization',
-    competitions: 14,
-    members: 11,
-    status: 'ACTIVE',
-    statusColor: 'active',
-  },
-  {
-    id: 2,
-    name: 'DeepMind Berlin',
-    description: 'Exploring the boundaries of zero-shot cross-lingual transfer in LLMs.',
-    skillFocus: 'Large Language Models',
-    competitions: 22,
-    members: 15,
-    status: 'PREMIUM',
-    statusColor: 'premium',
-  },
-  {
-    id: 3,
-    name: 'Sentient Semantic',
-    description: 'Applied NLP for sentiment analysis in decentralized financial markets.',
-    skillFocus: 'Sentiment Analysis',
-    competitions: 8,
-    members: 6,
-    status: 'RISING',
-    statusColor: 'rising',
-  },
-  {
-    id: 4,
-    name: 'Vector Visionaries',
-    description: 'Embedding-based retrieval for extremely large-scale document...',
-    skillFocus: 'Semantic Retrieval',
-    competitions: 31,
-    members: 25,
-    status: 'ACTIVE',
-    statusColor: 'active',
-  },
-  {
-    id: 5,
-    name: 'Syntax Sorcerers',
-    description: 'Refining grammatical error correction and stylistic rewriting engines.',
-    skillFocus: 'NLG Correction',
-    competitions: 5,
-    members: 7,
-    status: 'ELITE',
-    statusColor: 'elite',
-  },
-];
+const CURRENT_USER_ID = 1;
+
+// Derive a stable status badge from team data
+function deriveStatus(team, isMyTeam) {
+  if (isMyTeam) return { label: 'ACTIVE', color: 'active' };
+  const age = Date.now() - new Date(team.created_at).getTime();
+  const days = age / (1000 * 60 * 60 * 24);
+  if (days < 30) return { label: 'RISING', color: 'rising' };
+  const count = team._memberCount ?? 0;
+  if (count > 20) return { label: 'ELITE', color: 'elite' };
+  if (count > 10) return { label: 'PREMIUM', color: 'premium' };
+  return { label: 'ACTIVE', color: 'active' };
+}
 
 function MemberAvatars({ count }) {
   const visible = Math.min(count, 3);
@@ -73,6 +35,9 @@ function MemberAvatars({ count }) {
 }
 
 function TeamCard({ team, onClick }) {
+  const memberCount = team._memberCount ?? 0;
+  const { label, color } = deriveStatus(team, team._isMyTeam);
+
   return (
     <div className="team-card" onClick={onClick}>
       <div className="team-card-header">
@@ -83,31 +48,30 @@ function TeamCard({ team, onClick }) {
             <text x="14" y="16" textAnchor="middle" fill="white" fontSize="7" fontWeight="700" fontFamily="sans-serif">TAM</text>
           </svg>
         </div>
-        <span className={`status-badge status-${team.statusColor}`}>{team.status}</span>
+        <span className={`status-badge status-${color}`}>{label}</span>
       </div>
 
       <h3 className="team-name">{team.name}</h3>
-      <p className="team-desc">{team.description}</p>
+      <p className="team-desc">{team.description || 'No description provided.'}</p>
 
       <div className="team-meta">
         <div className="meta-box">
-          <span className="meta-label">SKILL FOCUS</span>
-          <span className="meta-value">{team.skillFocus}</span>
+          <span className="meta-label">MEMBERS</span>
+          <span className="meta-value">{memberCount} Total</span>
         </div>
         <div className="meta-box">
-          <span className="meta-label">COMPETITIONS</span>
-          <span className="meta-value">{team.competitions} Active</span>
+          <span className="meta-label">CREATED</span>
+          <span className="meta-value">
+            {new Date(team.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+          </span>
         </div>
       </div>
 
       <div className="team-footer">
-        <MemberAvatars count={team.members} />
+        <MemberAvatars count={memberCount} />
         <button
           className="view-team-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick();
-          }}
+          onClick={(e) => { e.stopPropagation(); onClick(); }}
         >
           View Team
         </button>
@@ -116,10 +80,138 @@ function TeamCard({ team, onClick }) {
   );
 }
 
+function SkeletonCard() {
+  return (
+    <div className="team-card" style={{ pointerEvents: 'none' }}>
+      {[120, 80, 60, 90].map((w, i) => (
+        <div key={i} style={{
+          height: i === 0 ? 44 : 14,
+          width: i === 0 ? 44 : `${w}%`,
+          background: '#eaeaea',
+          borderRadius: 8,
+          marginBottom: 12,
+          animation: 'pulse 1.4s ease-in-out infinite',
+        }} />
+      ))}
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+    </div>
+  );
+}
+
 export default function TeamsPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [teams, setTeams] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const PAGE_SIZE = 6;
+
+
+  const fetchTeams = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Step 1: resolve team IDs for "My Teams" tab
+      let myTeamIds = null;
+      if (activeTab === 'mine') {
+        const membershipsResult = await supabase
+          .from('team_members')
+          .select('team_id')
+          .eq('user_id', CURRENT_USER_ID);
+
+        if (membershipsResult.error) throw membershipsResult.error;
+
+        myTeamIds = (membershipsResult.data || []).map((m) => m.team_id);
+        if (myTeamIds.length === 0) {
+          setTeams([]);
+          setTotal(0);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Step 2: fetch teams (plain select, no embedded joins)
+      let query = supabase
+        .from('teams')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+
+      if (myTeamIds !== null) query = query.in('id', myTeamIds);
+      if (searchQuery.trim()) query = query.ilike('name', `%${searchQuery.trim()}%`);
+
+      const teamsResult = await query;
+      if (teamsResult.error) throw teamsResult.error;
+
+      const rows = teamsResult.data || [];
+      const totalCount = teamsResult.count ?? 0;
+
+      if (rows.length === 0) {
+        setTeams([]);
+        setTotal(totalCount);
+        return;
+      }
+
+      // Step 3: fetch member counts in a separate plain query
+      const ids = rows.map((t) => t.id);
+      const membersResult = await supabase
+        .from('team_members')
+        .select('team_id')
+        .in('team_id', ids);
+
+      if (membersResult.error) {
+        console.warn('Could not load member counts:', membersResult.error.message);
+      }
+
+      const countMap = {};
+      (membersResult.data || []).forEach((r) => {
+        countMap[r.team_id] = (countMap[r.team_id] || 0) + 1;
+      });
+
+      const tagged = rows.map((t) => ({
+        ...t,
+        _memberCount: countMap[t.id] ?? 0,
+        _isMyTeam: myTeamIds !== null,
+      }));
+
+      setTeams(tagged);
+      setTotal(totalCount);
+    } catch (err) {
+      console.error('Error fetching teams:', err);
+      setError('Failed to load teams. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab, searchQuery, page]);
+
+
+  useEffect(() => {
+    const debounce = setTimeout(fetchTeams, searchQuery ? 350 : 0);
+    return () => clearTimeout(debounce);
+  }, [fetchTeams]);
+
+  // Reset to page 1 when tab or search changes
+  useEffect(() => { setPage(1); }, [activeTab, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const visiblePages = () => {
+    const pages = [];
+    if (totalPages <= 5) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (page > 3) pages.push('...');
+      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
+      if (page < totalPages - 2) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  };
 
   return (
     <div className="app-layout">
@@ -138,7 +230,7 @@ export default function TeamsPage() {
               <input
                 type="text"
                 className="search-input"
-                placeholder="Search teams, members, or skills..."
+                placeholder="Search teams by name..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -175,7 +267,7 @@ export default function TeamsPage() {
                 Connect with elite NLP research collectives and collaborate on high-density language modeling competitions.
               </p>
             </div>
-            <button className="create-btn">
+            <button className="create-btn" onClick={() => navigate('/teams/create')}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
@@ -184,42 +276,69 @@ export default function TeamsPage() {
           </div>
 
           <div className="tabs">
-            <button
-              className={`tab${activeTab === 'all' ? ' active' : ''}`}
-              onClick={() => setActiveTab('all')}
-            >
-              All Teams
-            </button>
-            <button
-              className={`tab${activeTab === 'mine' ? ' active' : ''}`}
-              onClick={() => setActiveTab('mine')}
-            >
-              My Teams
-            </button>
-          </div>
-
-          <div className="teams-grid">
-            {TEAMS.map((team) => (
-              <TeamCard
-                key={team.id}
-                team={team}
-                onClick={() => navigate('/teams/neural-nexus')}
-              />
+            {['all', 'mine'].map((t) => (
+              <button
+                key={t}
+                className={`tab${activeTab === t ? ' active' : ''}`}
+                onClick={() => setActiveTab(t)}
+              >
+                {t === 'all' ? 'All Teams' : 'My Teams'}
+              </button>
             ))}
           </div>
 
-          <div className="pagination">
-            <span className="pagination-info">Showing 1–5 of 128 Teams</span>
-            <div className="pagination-controls">
-              <button className="page-btn" disabled>‹</button>
-              {[1, 2, 3].map((n) => (
-                <button key={n} className={`page-btn${n === 1 ? ' active' : ''}`}>{n}</button>
-              ))}
-              <span className="page-ellipsis">...</span>
-              <button className="page-btn">12</button>
-              <button className="page-btn">›</button>
+          {error && (
+            <div style={{ padding: '16px 20px', background: '#fff0f0', border: '1px solid #fcc', borderRadius: 10, marginBottom: 20, color: '#c33', fontSize: 13 }}>
+              {error}
             </div>
+          )}
+
+          <div className="teams-grid">
+            {loading
+              ? Array.from({ length: PAGE_SIZE }).map((_, i) => <SkeletonCard key={i} />)
+              : teams.length === 0
+                ? (
+                  <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '60px 0', color: '#aaa' }}>
+                    <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
+                    <div style={{ fontSize: 15, fontWeight: 600 }}>
+                      {activeTab === 'mine' ? "You haven't joined any teams yet." : 'No teams found.'}
+                    </div>
+                  </div>
+                )
+                : teams.map((team) => (
+                  <TeamCard
+                    key={team.id}
+                    team={team}
+                    onClick={() => navigate(`/teams/${team.id}`)}
+                  />
+                ))
+            }
           </div>
+
+          {!loading && total > 0 && (
+            <div className="pagination">
+              <span className="pagination-info">
+                Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total} Teams
+              </span>
+              <div className="pagination-controls">
+                <button className="page-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>‹</button>
+                {visiblePages().map((p, i) =>
+                  p === '...'
+                    ? <span key={`ellipsis-${i}`} className="page-ellipsis">...</span>
+                    : (
+                      <button
+                        key={p}
+                        className={`page-btn${p === page ? ' active' : ''}`}
+                        onClick={() => setPage(p)}
+                      >
+                        {p}
+                      </button>
+                    )
+                )}
+                <button className="page-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>›</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
