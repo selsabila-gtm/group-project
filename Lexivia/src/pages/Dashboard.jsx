@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 import "./Dashboard.css";
@@ -12,6 +13,7 @@ function statusClass(status) {
 }
 
 function Dashboard() {
+    const navigate = useNavigate();
     const userId = "demo-user-1";
 
     const [stats, setStats] = useState({
@@ -21,19 +23,27 @@ function Dashboard() {
 
     const [recentCompetitions, setRecentCompetitions] = useState([]);
 
-    useEffect(() => {
-        fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`)
-            .then((res) => res.json())
-            .then((data) => setStats(data))
-            .catch((err) => console.error("Stats fetch error:", err));
-
+    const fetchRecent = () => {
         fetch(`http://127.0.0.1:8000/dashboard/recent/${userId}`)
             .then((res) => res.json())
             .then((data) => {
                 const safeData = Array.isArray(data) ? data : [];
                 setRecentCompetitions(safeData);
             })
-            .catch((err) => console.error("Recent competitions fetch error:", err));
+            .catch((err) =>
+                console.error("Recent competitions fetch error:", err)
+            );
+    };
+
+    useEffect(() => {
+        fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`)
+            .then((res) => res.json())
+            .then((data) => setStats(data))
+            .catch((err) =>
+                console.error("Stats fetch error:", err)
+            );
+
+        fetchRecent();
     }, []);
 
     return (
@@ -71,9 +81,23 @@ function Dashboard() {
                         <div className="recent-card">
                             <div className="section-head">
                                 <h2>Recent Competitions</h2>
+
                                 <div className="small-actions">
-                                    <button type="button">⋯</button>
-                                    <button type="button">⋯</button>
+                                    <button
+                                        type="button"
+                                        title="View all competitions"
+                                        onClick={() => navigate("/competitions")}
+                                    >
+                                        ↗
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        title="Refresh"
+                                        onClick={fetchRecent}
+                                    >
+                                        ⟳
+                                    </button>
                                 </div>
                             </div>
 
@@ -86,7 +110,18 @@ function Dashboard() {
 
                             <div className="recent-list">
                                 {recentCompetitions.map((item) => (
-                                    <div className="recent-row" key={item.id}>
+                                    <div
+                                        className="recent-row"
+                                        key={item.id}
+                                        onClick={() => {
+                                            if (item.competition_id) {
+                                                navigate(`/competitions/${item.competition_id}`);
+                                            } else {
+                                                navigate(`/competitions?search=${encodeURIComponent(item.title)}`);
+                                            }
+                                        }}
+                                        style={{ cursor: "pointer" }}
+                                    >
                                         <div className="recent-main">
                                             <div className="recent-icon">{item.icon}</div>
                                             <div>
