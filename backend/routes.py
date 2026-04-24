@@ -1,4 +1,6 @@
 import json
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -233,10 +235,12 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     if not verify_password(user.password, db_user.password):
         raise HTTPException(status_code=400, detail="Incorrect password")
 
-    token = create_access_token({
-        "sub": db_user.email,
-        "user_id": db_user.id,
-    })
+    token = create_access_token(
+        {
+            "sub": db_user.email,
+            "user_id": db_user.id,
+        }
+    )
 
     return {
         "access_token": token,
@@ -252,7 +256,7 @@ def get_dashboard_stats(user_id: str, db: Session = Depends(get_db)):
     if not stats:
         stats = DashboardStat(
             user_id=user_id,
-            total_competitions=0,
+            total_competitions=db.query(Competition).filter(Competition.is_draft == False).count(),
             teams_joined=0,
         )
         db.add(stats)
@@ -264,16 +268,12 @@ def get_dashboard_stats(user_id: str, db: Session = Depends(get_db)):
 
 @router.get("/dashboard/recent/{user_id}", response_model=list[RecentCompetitionOut])
 def get_recent_competitions(user_id: str, db: Session = Depends(get_db)):
-    return db.query(RecentCompetition).filter(
-        RecentCompetition.user_id == user_id
-    ).all()
+    return db.query(RecentCompetition).filter(RecentCompetition.user_id == user_id).all()
 
 
 @router.get("/dashboard/notifications/{user_id}", response_model=list[NotificationOut])
 def get_notifications(user_id: str, db: Session = Depends(get_db)):
-    return db.query(Notification).filter(
-        Notification.user_id == user_id
-    ).all()
+    return db.query(Notification).filter(Notification.user_id == user_id).all()
 
 
 @router.get("/competitions", response_model=list[CompetitionOut])
@@ -342,6 +342,7 @@ def save_competition_draft(data: CompetitionCreateIn, db: Session = Depends(get_
         competition_id=competition.id,
         user_id=DEMO_USER_ID,
         role="owner",
+        created_at=datetime.utcnow().isoformat(),
     )
     db.add(organizer)
 
@@ -349,7 +350,7 @@ def save_competition_draft(data: CompetitionCreateIn, db: Session = Depends(get_
     db.refresh(competition)
 
     return {
-        "message": "Draft saved successfully",
+        "message": "Competition draft saved successfully",
         "competition_id": competition.id,
     }
 
@@ -366,13 +367,14 @@ def create_competition(data: CompetitionCreateIn, db: Session = Depends(get_db))
         competition_id=competition.id,
         user_id=DEMO_USER_ID,
         role="owner",
+        created_at=datetime.utcnow().isoformat(),
     )
     db.add(organizer)
 
     stats = db.query(DashboardStat).filter(DashboardStat.user_id == DEMO_USER_ID).first()
 
     if stats:
-        stats.total_competitions += 1
+        stats.total_competitions = db.query(Competition).filter(Competition.is_draft == False).count() + 1
     else:
         stats = DashboardStat(
             user_id=DEMO_USER_ID,
@@ -383,9 +385,9 @@ def create_competition(data: CompetitionCreateIn, db: Session = Depends(get_db))
 
     recent = RecentCompetition(
         user_id=DEMO_USER_ID,
-        title=data.competition_name,
-        type=(data.task_type or "GENERAL").upper(),
-        status="OPEN",
+        title=competition.title,
+        type=competition.category,
+        status=competition.status,
         score="--",
         sync="Just now",
         icon=get_icon_for_task(data.task_type),
@@ -411,6 +413,9 @@ def join_competition(competition_id: str, db: Session = Depends(get_db)):
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
 
+    if competition.status != "OPEN":
+        raise HTTPException(status_code=400, detail="Competition is not open")
+
     organizer = db.query(CompetitionOrganizer).filter(
         CompetitionOrganizer.competition_id == competition_id,
         CompetitionOrganizer.user_id == DEMO_USER_ID,
@@ -435,9 +440,33 @@ def join_competition(competition_id: str, db: Session = Depends(get_db)):
         user_id=DEMO_USER_ID,
         team_id=None,
         status="joined",
+        joined_at=datetime.utcnow().isoformat(),
     )
 
     db.add(participant)
+
+    recent = RecentCompetition(
+        user_id=DEMO_USER_ID,
+        title=competition.title,
+        type=competition.category,
+        status="IN PROGRESS",
+        score="--",
+        sync="Just now",
+        icon=get_icon_for_task(competition.task_type),
+    )
+    db.add(recent)
+
+    stats = db.query(DashboardStat).filter(DashboardStat.user_id == DEMO_USER_ID).first()
+    if stats:
+        stats.teams_joined += 1
+    else:
+        stats = DashboardStat(
+            user_id=DEMO_USER_ID,
+            total_competitions=db.query(Competition).filter(Competition.is_draft == False).count(),
+            teams_joined=1,
+        )
+        db.add(stats)
+
     db.commit()
 
     return {"message": "Joined competition successfully"}

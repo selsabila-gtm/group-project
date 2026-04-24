@@ -74,3 +74,67 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  font-family: Inter, -apple-system, Arial, sans-serif;
+  background: #f6f7fb;
+  color: #1d2333;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  max-width: 100%;
+  margin: 0 auto;
+  text-align: left;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  transition: opacity 0.15s ease;
+}
+
+a:hover {
+  opacity: 0.8;
+}
+
+button {
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+input {
+  font-family: inherit;
+}
+
+input:focus {
+  border-color: #1a2fff !important;
+  box-shadow: 0 0 0 3px rgba(26, 47, 255, 0.1);
+}
