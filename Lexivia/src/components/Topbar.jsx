@@ -1,8 +1,12 @@
+import { useNavigate } from "react-router-dom";
+
 function Topbar({
     title = "",
     subtitle = "",
     showBrowseButton = false,
 }) {
+    const navigate = useNavigate();
+
     return (
         <div
             style={{
@@ -100,6 +104,7 @@ function Topbar({
                 {showBrowseButton && (
                     <button
                         type="button"
+                        onClick={() => navigate("/competitions")}
                         style={{
                             height: "50px",
                             minWidth: "190px",

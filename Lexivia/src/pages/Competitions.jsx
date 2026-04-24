@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 import "./Competitions.css";
@@ -6,14 +7,28 @@ import "./Competitions.css";
 const PAGE_SIZE = 4;
 
 function Competitions() {
+    const navigate = useNavigate();
+    const location = useLocation();
+
     const [competitions, setCompetitions] = useState([]);
-    const [search, setSearch] = useState("");
-    const [searchInput, setSearchInput] = useState("");
-    const [category, setCategory] = useState("ALL TASKS");
-    const [tab, setTab] = useState("all");
+    const [search, setSearch] = useState(
+        localStorage.getItem("competitions_search") || ""
+    );
+    const [searchInput, setSearchInput] = useState(
+        localStorage.getItem("competitions_search") || ""
+    );
+    const [category, setCategory] = useState(
+        localStorage.getItem("competitions_category") || "ALL TASKS"
+    );
+    const [tab, setTab] = useState(
+        localStorage.getItem("competitions_tab") || "all"
+    );
     const [offset, setOffset] = useState(0);
     const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [viewMode, setViewMode] = useState(
+        localStorage.getItem("competitions_viewMode") || "grid"
+    );
 
     const categoryOptions = [
         "ALL TASKS",
@@ -24,9 +39,33 @@ function Competitions() {
     ];
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            setSearch(searchInput);
+        window.scrollTo(0, 0);
+    }, []);
+
+    useEffect(() => {
+        if (location.state?.refreshAll) {
+            setCategory("ALL TASKS");
+            setTab("all");
+            setSearch("");
+            setSearchInput("");
+            setViewMode("grid");
             setOffset(0);
+
+            localStorage.setItem("competitions_category", "ALL TASKS");
+            localStorage.setItem("competitions_tab", "all");
+            localStorage.setItem("competitions_viewMode", "grid");
+            localStorage.setItem("competitions_search", "");
+
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location, navigate]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            const cleanSearch = searchInput.trim();
+            setOffset(0);
+            setSearch(cleanSearch);
+            localStorage.setItem("competitions_search", cleanSearch);
         }, 350);
 
         return () => clearTimeout(timer);
@@ -39,7 +78,7 @@ function Competitions() {
             tab,
         });
 
-        if (search.trim()) params.append("search", search.trim());
+        if (search) params.append("search", search);
         if (category !== "ALL TASKS") params.append("category", category);
 
         setLoading(true);
@@ -47,42 +86,63 @@ function Competitions() {
         fetch(`http://127.0.0.1:8000/competitions?${params.toString()}`)
             .then((res) => res.json())
             .then((data) => {
+                const safeData = Array.isArray(data) ? data : [];
+
                 if (offset === 0) {
-                    setCompetitions(data);
+                    setCompetitions(safeData);
                 } else {
-                    setCompetitions((prev) => [...prev, ...data]);
+                    setCompetitions((prev) => {
+                        const merged = [...prev, ...safeData];
+                        return merged.filter(
+                            (item, index, self) =>
+                                index === self.findIndex((x) => x.id === item.id)
+                        );
+                    });
                 }
             })
-            .catch((err) => console.error("Competitions fetch error:", err))
+            .catch((err) => {
+                console.error("Competitions fetch error:", err);
+                if (offset === 0) setCompetitions([]);
+            })
             .finally(() => setLoading(false));
     }, [search, category, tab, offset]);
 
     useEffect(() => {
-        const params = new URLSearchParams({
-            tab,
-        });
+        const params = new URLSearchParams({ tab });
 
-        if (search.trim()) params.append("search", search.trim());
+        if (search) params.append("search", search);
         if (category !== "ALL TASKS") params.append("category", category);
 
         fetch(`http://127.0.0.1:8000/competitions/count?${params.toString()}`)
             .then((res) => res.json())
             .then((data) => setTotalCount(data.count || 0))
-            .catch((err) => console.error("Competitions count fetch error:", err));
+            .catch((err) => {
+                console.error("Competitions count fetch error:", err);
+                setTotalCount(0);
+            });
     }, [search, category, tab]);
 
     const handleCategoryChange = (selectedCategory) => {
-        setCategory(selectedCategory);
         setOffset(0);
+        setCategory(selectedCategory);
+        localStorage.setItem("competitions_category", selectedCategory);
     };
 
     const handleTabChange = (selectedTab) => {
-        setTab(selectedTab);
         setOffset(0);
+        setTab(selectedTab);
+        localStorage.setItem("competitions_tab", selectedTab);
+    };
+
+    const handleViewModeChange = (mode) => {
+        setViewMode(mode);
+        localStorage.setItem("competitions_viewMode", mode);
     };
 
     const handleLoadMore = () => {
-        setOffset((prev) => prev + PAGE_SIZE);
+        if (!loading && competitions.length < totalCount) {
+            setOffset((prev) => prev + PAGE_SIZE);
+        }
     };
 
     const canLoadMore = competitions.length < totalCount;
@@ -101,11 +161,21 @@ function Competitions() {
                 <div className="competitions-body">
                     <div className="view-switch-row">
                         <div></div>
+
                         <div className="grid-list-switch">
-                            <button type="button" className="active">
+                            <button
+                                type="button"
+                                className={viewMode === "grid" ? "active" : ""}
+                                onClick={() => handleViewModeChange("grid")}
+                            >
                                 Grid View
                             </button>
-                            <button type="button" disabled>
+
+                            <button
+                                type="button"
+                                className={viewMode === "list" ? "active" : ""}
+                                onClick={() => handleViewModeChange("list")}
+                            >
                                 List View
                             </button>
                         </div>
@@ -114,6 +184,7 @@ function Competitions() {
                     <div className="competitions-toolbar">
                         <div className="task-filters">
                             <span className="filter-title">FILTER BY TASK</span>
+
                             {categoryOptions.map((option) => (
                                 <button
                                     key={option}
@@ -134,6 +205,7 @@ function Competitions() {
                             >
                                 All
                             </button>
+
                             <button
                                 type="button"
                                 className={tab === "participating" ? "active" : ""}
@@ -141,6 +213,7 @@ function Competitions() {
                             >
                                 Participating
                             </button>
+
                             <button
                                 type="button"
                                 className={tab === "organizing" ? "active" : ""}
@@ -172,14 +245,27 @@ function Competitions() {
                     {loading && offset === 0 ? (
                         <p>Loading competitions...</p>
                     ) : (
-                        <div className="competition-grid">
+                        <div
+                            className={
+                                viewMode === "grid"
+                                    ? "competition-grid"
+                                    : "competition-list"
+                            }
+                        >
                             {competitions.map((item) => (
                                 <div
                                     key={item.id}
-                                    className={item.muted ? "competition-card muted" : "competition-card"}
+                                    className={
+                                        item.muted
+                                            ? "competition-card muted"
+                                            : "competition-card"
+                                    }
                                 >
                                     <div className="competition-top">
-                                        <span className="competition-category">{item.category}</span>
+                                        <span className="competition-category">
+                                            {item.category}
+                                        </span>
+
                                         <span
                                             className={
                                                 item.status === "OPEN"
@@ -208,10 +294,11 @@ function Competitions() {
 
                                     <div className="competition-footer">
                                         <span>{item.footer}</span>
+
                                         <button
                                             type="button"
                                             className="go-btn"
-                                            onClick={() => alert(`Competition: ${item.title}`)}
+                                            onClick={() => navigate(`/competitions/${item.id}`)}
                                         >
                                             →
                                         </button>
@@ -225,6 +312,7 @@ function Competitions() {
                         <p>
                             VIEWING {competitions.length} OF {totalCount} ACTIVE EVENTS
                         </p>
+
                         <button
                             type="button"
                             onClick={handleLoadMore}
@@ -238,7 +326,7 @@ function Competitions() {
                 <button
                     type="button"
                     className="floating-plus"
-                    onClick={() => alert("Create competition action")}
+                    onClick={() => navigate("/create-competition")}
                 >
                     +
                 </button>

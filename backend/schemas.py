@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr
+from typing import List, Optional, Dict, Any
 
 
 class UserCreate(BaseModel):
@@ -35,9 +36,31 @@ class CompetitionOut(BaseModel):
     footer: str
     muted: bool
 
+    is_draft: bool | None = False
+    task_type: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    prize_pool: int | None = None
+    primary_metric: str | None = None
+    secondary_metric: str | None = None
+    max_teams: int | None = None
+    min_members: int | None = None
+    max_members: int | None = None
+    merge_deadline: str | None = None
+    required_skills: str | None = None
+    max_submissions_per_day: int | None = None
+    allow_external_data: bool | None = True
+    allow_pretrained_models: bool | None = True
+    require_code_sharing: bool | None = False
+    additional_rules: str | None = None
+    complexity_level: int | None = None
+    datasets_json: str | None = None
+    milestones_json: str | None = None
+    validation_date: str | None = None
+    freeze_date: str | None = None
+
     class Config:
         from_attributes = True
-
 
 class RecentCompetitionOut(BaseModel):
     id: str
@@ -64,3 +87,38 @@ class NotificationOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class CompetitionCreateIn(BaseModel):
+    competition_name: str
+    task_type: str
+    description: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    prize_pool: Optional[int] = None
+
+    primary_metric: Optional[str] = None
+    secondary_metric: Optional[str] = None
+
+    max_teams: Optional[int] = None
+    min_members: Optional[int] = None
+    max_members: Optional[int] = None
+    merge_deadline: Optional[str] = None
+    required_skills: List[str] = []
+    max_submissions_per_day: Optional[int] = None
+    allow_external_data: bool = True
+    allow_pretrained_models: bool = True
+    require_code_sharing: bool = False
+    additional_rules: Optional[str] = None
+
+    complexity_level: Optional[int] = None
+
+    datasets: List[Dict[str, Any]] = []
+    milestones: List[Dict[str, Any]] = []
+    validation_date: Optional[str] = None
+    freeze_date: Optional[str] = None
+
+
+class CompetitionActionOut(BaseModel):
+    message: str
+    competition_id: str
