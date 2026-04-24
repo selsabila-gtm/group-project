@@ -10,13 +10,12 @@ function Competitions() {
     const navigate = useNavigate();
     const location = useLocation();
 
+    const urlParams = new URLSearchParams(location.search);
+    const urlSearch = urlParams.get("search") || "";
+
     const [competitions, setCompetitions] = useState([]);
-    const [search, setSearch] = useState(
-        localStorage.getItem("competitions_search") || ""
-    );
-    const [searchInput, setSearchInput] = useState(
-        localStorage.getItem("competitions_search") || ""
-    );
+    const [search, setSearch] = useState(urlSearch);
+    const [searchInput, setSearchInput] = useState(urlSearch);
     const [category, setCategory] = useState(
         localStorage.getItem("competitions_category") || "ALL TASKS"
     );
@@ -43,6 +42,15 @@ function Competitions() {
     }, []);
 
     useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const q = params.get("search") || "";
+
+        setSearch(q);
+        setSearchInput(q);
+        setOffset(0);
+    }, [location.search]);
+
+    useEffect(() => {
         if (location.state?.refreshAll) {
             setCategory("ALL TASKS");
             setTab("all");
@@ -63,13 +71,20 @@ function Competitions() {
     useEffect(() => {
         const timer = setTimeout(() => {
             const cleanSearch = searchInput.trim();
+
             setOffset(0);
             setSearch(cleanSearch);
-            localStorage.setItem("competitions_search", cleanSearch);
+
+            navigate(
+                cleanSearch
+                    ? `/competitions?search=${encodeURIComponent(cleanSearch)}`
+                    : "/competitions",
+                { replace: true }
+            );
         }, 350);
 
         return () => clearTimeout(timer);
-    }, [searchInput]);
+    }, [searchInput, navigate]);
 
     useEffect(() => {
         const params = new URLSearchParams({

@@ -4,56 +4,7 @@
     color: #111827;
 }
 
-.details-topbar {
-    height: 70px;
-    padding: 0 28px;
-    background: #ffffff;
-    border-bottom: 1px solid #edf0f6;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
 
-.details-brand {
-    font-size: 18px;
-    font-weight: 800;
-    color: #10172f;
-}
-
-.details-search {
-    width: 330px;
-    height: 42px;
-    background: #f3f5ff;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0 16px;
-    color: #65718a;
-}
-
-.details-search input {
-    border: none;
-    background: transparent;
-    outline: none;
-    width: 100%;
-    color: #4b5563;
-}
-
-.details-icons {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    color: #536079;
-}
-
-.details-avatar {
-    width: 26px;
-    height: 26px;
-    background: #075985;
-    color: #075985;
-    border-radius: 50%;
-}
 
 .details-main {
     padding: 28px 36px 60px;

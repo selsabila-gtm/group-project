@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import "./CompetitionDetails.css";
+import Topbar from "../components/Topbar";
 
 function safeJson(value, fallback = []) {
     try {
@@ -97,22 +98,7 @@ function CompetitionDetails() {
 
     return (
         <div className="details-page">
-            <header className="details-topbar">
-                <div className="details-brand" onClick={() => navigate("/competitions")}>
-                    Lexivia AI
-                </div>
-
-                <div className="details-search">
-                    <span>⌕</span>
-                    <input placeholder="Search datasets, models..." />
-                </div>
-
-                <div className="details-icons">
-                    <span>♧</span>
-                    <span>⚙</span>
-                    <span className="details-avatar"></span>
-                </div>
-            </header>
+            <Topbar />
 
             <main className="details-main">
                 <section className="details-hero">
