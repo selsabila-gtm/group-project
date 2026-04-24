@@ -1,7 +1,13 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import "./Sidebar.css";
 
 function Sidebar() {
+  const location = useLocation();
+
+  const competitionsActive =
+    location.pathname === "/competitions" ||
+    location.pathname === "/create-competition";
+
   return (
     <aside className="sidebar">
       <div>
@@ -25,9 +31,7 @@ function Sidebar() {
 
           <NavLink
             to="/competitions"
-            className={({ isActive }) =>
-              isActive ? "sidebar-link active" : "sidebar-link"
-            }
+            className={competitionsActive ? "sidebar-link active" : "sidebar-link"}
           >
             <span className="sidebar-icon">☆</span>
             <span>Competitions</span>

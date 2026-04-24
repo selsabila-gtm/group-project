@@ -1,65 +1,87 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import Landing from "./pages/Landing";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Competitions from "./pages/Competitions";
-import TeamsPage from "./pages/Teams/TeamsPage";
-import TeamDetailPage from "./pages/Teams/TeamDetailPage";
+import CreateCompetition from "./pages/CreateCompetition";
+import CompetitionDetails from "./pages/CompetitionDetails";
 
-import "./App.css";
+import Sidebar from "./components/Sidebar";
+import Topbar from "./components/Topbar";
+import SearchResults from "./pages/SearchResults";
+
 import "./index.css";
 
-export default function App() {
+function SimplePage({ title, subtitle }) {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Default redirect (optional) */}
-        <Route path="/" element={<Landing />} />
-        {/* If you want dashboard as default instead, use:
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        */}
+    <div style={{ display: "flex", minHeight: "100vh", background: "#f7f8fc" }}>
+      <Sidebar />
+      <div style={{ flex: 1 }}>
+        <Topbar title={title} subtitle={subtitle} />
 
-        {/* Public routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-
-        {/* Main app routes */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/competitions" element={<Competitions />} />
-        <Route path="/teams" element={<TeamsPage />} />
-        <Route path="/teams/:teamId" element={<TeamDetailPage />} />
-
-        {/* Placeholder routes */}
-        <Route path="/datasets" element={<PlaceholderPage title="Datasets" />} />
-        <Route path="/resources" element={<PlaceholderPage title="Resources" />} />
-        <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
-
-        {/* Catch all */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
-}
-
-function PlaceholderPage({ title }) {
-  return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#f4f5f7" }}>
-      <div style={{ width: 220, background: "#1a1c20" }} />
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div style={{ textAlign: "center" }}>
-          <h2>{title}</h2>
-          <p>This page is not yet implemented.</p>
+        <div style={{ padding: "24px 22px" }}>
+          <div
+            style={{
+              background: "#eef3ff",
+              borderRadius: "18px",
+              padding: "24px",
+              color: "#19233c",
+              fontWeight: 700,
+            }}
+          >
+            {title} page is working.
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/competitions" element={<Competitions />} />
+        <Route path="/create-competition" element={<CreateCompetition />} />
+        <Route path="/competitions/:competitionId" element={<CompetitionDetails />} />
+        <Route path="/search" element={<SearchResults />} />
+
+        <Route
+          path="/profile"
+          element={
+            <SimplePage
+              title="Profile"
+              subtitle="Manage your researcher profile."
+            />
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <SimplePage
+              title="Settings"
+              subtitle="Manage platform preferences."
+            />
+          }
+        />
+
+        <Route
+          path="/notifications"
+          element={
+            <SimplePage
+              title="Notifications"
+              subtitle="View your latest platform updates."
+            />
+          }
+        />
+
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;
