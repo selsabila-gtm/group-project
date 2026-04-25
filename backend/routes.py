@@ -222,21 +222,31 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         "user": response.user
     }
 
+from supabase_auth.errors import AuthApiError
+
 @router.post("/login")
 def login(user: UserLogin):
-    response = supabase.auth.sign_in_with_password({
-        "email": user.email,
-        "password": user.password
-    })
+    try:
+        response = supabase.auth.sign_in_with_password({
+            "email": user.email,
+            "password": user.password
+        })
+    except AuthApiError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
 
-    if response.session is None:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if response.user and not response.session:
+        raise HTTPException(
+            status_code=401,
+            detail="Email not confirmed"
+        )
 
     return {
         "access_token": response.session.access_token,
         "user": response.user
     }
-
 
 @router.post("/competitions/draft", response_model=CompetitionActionOut)
 def save_competition_draft(data: CompetitionCreateIn, db: Session = Depends(get_db)):

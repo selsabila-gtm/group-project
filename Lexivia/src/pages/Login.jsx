@@ -5,16 +5,16 @@ import { Link, useNavigate } from "react-router-dom"
 export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" })
   const navigate = useNavigate()
-
+  const [error, setError] = useState("")
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
   const handleLogin = async (e) => {
     e.preventDefault()
-
+    setError("")
     if (!form.email || !form.password) {
-      alert("Please fill all fields")
+      setError("Please fill all fields")
       return
     }
 
@@ -32,22 +32,26 @@ export default function Login() {
 
       const data = await res.json()
 
-      if (!res.ok) {
-        alert(data.detail || "Login failed")
-        return
-      }
+if (!res.ok) {
+  if (data.detail?.toLowerCase().includes("confirm")) {
+    setError("Please verify your email before logging in.")
+  } else if (data.detail?.toLowerCase().includes("invalid")) {
+    setError("Invalid email or password.")
+  } else {
+    setError(data.detail || "Login failed")
+  }
+  return
+}
 
-      // ✅ Save token + user
-      localStorage.setItem("token", data.access_token)
-      localStorage.setItem("user", JSON.stringify(data.user))
+// ✅ success
+localStorage.setItem("token", data.access_token)
+localStorage.setItem("user", JSON.stringify(data.user))
 
-      console.log("LOGIN SUCCESS")
-
-      navigate("/dashboard")
+navigate("/dashboard")
     } catch (err) {
-      console.error(err)
-      alert("Error connecting to server")
-    }
+  console.error(err)
+  setError("Server is not responding. Please try again later.")
+}
   }
 
   return (
@@ -70,7 +74,7 @@ export default function Login() {
           boxShadow: '0 4px 40px rgba(0,0,0,0.06)',
           border: '1px solid #e8eaf2',
         }}>
-          
+
           {/* Header */}
           <div style={{ textAlign: 'center', marginBottom: '36px' }}>
             <h1 style={{
@@ -136,7 +140,20 @@ export default function Login() {
                 }}
               />
             </div>
+            {error && (
 
+          <div style={{
+            background: "#ffe5e5",
+            color: "#d8000c",
+            padding: "10px",
+            borderRadius: "6px",
+            marginBottom: "12px",
+            fontSize: "13px",
+            textAlign: "center"
+            }}>
+            {error}
+           </div>
+            )}
             {/* Button */}
             <button
               type="submit"
