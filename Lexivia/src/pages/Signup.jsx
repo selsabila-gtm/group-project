@@ -2,9 +2,24 @@ import { useState } from "react"
 import { signup } from "../services/api"
 import Navbar from "../components/Navbar"
 import { Link, useNavigate } from "react-router-dom"
+import { supabase } from "../config/supabase"; // make sure this exists
+
 
 export default function Signup() {
+const handleGoogleLogin = async () => {
+  await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: "http://localhost:5173/dashboard",
+    },
+  });
+};
 
+const handleGithubLogin = async () => {
+  await supabase.auth.signInWithOAuth({
+    provider: "github",
+  });
+};
   const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm: "" })
   const navigate = useNavigate()
 
@@ -203,26 +218,49 @@ if (!form.password || form.password.length < 6) {
             </button>
 
             {/* Social auth */}
-            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <span style={{ fontSize: '11px', letterSpacing: '1px', color: '#8892a4' }}>SYSTEM AUTH</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              {[
-                { label: '⊞ Google', name: 'Google' },
-                { label: '⊙ GitHub', name: 'GitHub' },
-              ].map(btn => (
-                <button key={btn.name} style={{
-                  padding: '10px',
-                  background: '#f6f7fb',
-                  border: '1px solid #d6dae8',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                  color: '#1d2333',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                }}>{btn.label}</button>
-              ))}
-            </div>
+<div style={{ textAlign: 'center', marginBottom: '16px' }}>
+  <span style={{ fontSize: '11px', letterSpacing: '1px', color: '#8892a4' }}>
+    SYSTEM AUTH
+  </span>
+</div>
+
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+
+  {/* Google */}
+  <button
+    onClick={handleGoogleLogin}
+    style={{
+      padding: '10px',
+      background: '#f6f7fb',
+      border: '1px solid #d6dae8',
+      borderRadius: '8px',
+      fontSize: '13px',
+      color: '#1d2333',
+      cursor: 'pointer',
+      fontWeight: 500,
+    }}
+  >
+    ⊞ Google
+  </button>
+
+  {/* GitHub */}
+  <button
+    onClick={handleGithubLogin}
+    style={{
+      padding: '10px',
+      background: '#f6f7fb',
+      border: '1px solid #d6dae8',
+      borderRadius: '8px',
+      fontSize: '13px',
+      color: '#1d2333',
+      cursor: 'pointer',
+      fontWeight: 500,
+    }}
+  >
+    ⊙ GitHub
+  </button>
+
+</div>
           </div>
 
           <p style={{ textAlign: 'center', fontSize: '13px', color: '#8892a4' }}>

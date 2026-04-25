@@ -3,6 +3,10 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 import "./Dashboard.css";
+import { supabase } from "../config/supabase"; // make sure this exists
+
+
+
 
 function statusClass(status) {
     if (status === "IN PROGRESS") return "in-progress";
@@ -13,38 +17,78 @@ function statusClass(status) {
 }
 
 function Dashboard() {
+    const [userName, setUserName] = useState("User");
     const navigate = useNavigate();
-    const userId = "demo-user-1";
-
+   
+    const [userId, setUserId] = useState(null);
     const [stats, setStats] = useState({
         total_competitions: 0,
         teams_joined: 0,
     });
 
     const [recentCompetitions, setRecentCompetitions] = useState([]);
+    useEffect(() => {
 
-    const fetchRecent = () => {
-        fetch(`http://127.0.0.1:8000/dashboard/recent/${userId}`)
-            .then((res) => res.json())
-            .then((data) => {
-                const safeData = Array.isArray(data) ? data : [];
-                setRecentCompetitions(safeData);
-            })
-            .catch((err) =>
-                console.error("Recent competitions fetch error:", err)
-            );
+        const initUser = async () => {
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
+       if (!user) {
+    navigate("/login"); // redirect if not logged in
+    return;
+}
+
+        setUserId(user.id);
+const name =
+  user.user_metadata?.full_name ||
+  user.user_metadata?.name ||
+  user.email?.split("@")[0] || // fallback
+  "User";
+
+setUserName(name);
+      // 🔥 CREATE PROFILE IF NOT EXISTS
+      await fetch("http://127.0.0.1:8000/sync-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          full_name:
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name ||
+            "New User",
+        }),
+      });
     };
 
-    useEffect(() => {
-        fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`)
-            .then((res) => res.json())
-            .then((data) => setStats(data))
-            .catch((err) =>
-                console.error("Stats fetch error:", err)
-            );
+    initUser();
+  }, []);
+const fetchRecent = () => {
+    if (!userId) return; // ✅ prevent bad calls
 
-        fetchRecent();
-    }, []);
+    fetch(`http://127.0.0.1:8000/dashboard/recent/${userId}`)
+        .then((res) => res.json())
+        .then((data) => {
+            const safeData = Array.isArray(data) ? data : [];
+            setRecentCompetitions(safeData);
+        })
+        .catch((err) =>
+            console.error("Recent competitions fetch error:", err)
+        );
+};
+
+useEffect(() => {
+    if (!userId) return;
+
+    fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`)
+        .then((res) => res.json())
+        .then((data) => setStats(data))
+        .catch((err) => console.error("Stats fetch error:", err));
+
+    fetchRecent();
+}, [userId]); // ✅ depends on userId
 
     return (
         <div className="dashboard-shell">
@@ -52,7 +96,7 @@ function Dashboard() {
 
             <div className="dashboard-main">
                 <Topbar
-                    title="Welcome Home, 0x4"
+                    title={`Welcome Home, ${userName}`}
                     subtitle="Overview of your activity and performance across the laboratory."
                     showBrowseButton={true}
                 />
