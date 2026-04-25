@@ -6,7 +6,7 @@ import uuid
 class UserProfile(Base):
     __tablename__ = "user_profiles"
 
-    id = Column(String, primary_key=True)  # same as Supabase user id
+    user_id = Column(String, primary_key=True)  # ✅ match DB  # same as Supabase user id
     full_name = Column(String)
 
 

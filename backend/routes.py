@@ -4,6 +4,7 @@ from schemas import CompetitionActionOut
 from database import SessionLocal
 from schemas import UserCreate, UserLogin
 from supabase_client import supabase
+from models import UserProfile
 from fastapi import Header 
 router = APIRouter()
 def get_db():
@@ -192,7 +193,7 @@ def apply_competition_filters(query, db, search, category, status, tab):
 
 
 @router.post("/signup")
-def signup(user: UserCreate):
+def signup(user: UserCreate, db: Session = Depends(get_db)):
     response = supabase.auth.sign_up({
         "email": user.email,
         "password": user.password
@@ -201,11 +202,25 @@ def signup(user: UserCreate):
     if response.user is None:
         raise HTTPException(status_code=400, detail="Signup failed")
 
+    user_id = response.user.id
+
+    # ✅ check if already exists
+    existing = db.query(UserProfile).filter(
+        UserProfile.user_id == user_id
+    ).first()
+
+    if not existing:
+        db_user = UserProfile(
+            user_id=user_id,
+            full_name=user.full_name
+        )
+        db.add(db_user)
+        db.commit()
+
     return {
         "message": "User created successfully",
         "user": response.user
     }
-
 
 @router.post("/login")
 def login(user: UserLogin):

@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar"
 import { Link, useNavigate } from "react-router-dom"
 
 export default function Signup() {
+
   const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm: "" })
   const navigate = useNavigate()
 
