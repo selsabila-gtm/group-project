@@ -8,7 +8,9 @@ import CompetitionDetails from "./pages/CompetitionDetails";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import SearchResults from "./pages/SearchResults";
-
+import Landing from "./pages/Landing";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
 import "./index.css";
 
 function SimplePage({ title, subtitle }) {
@@ -37,51 +39,103 @@ function SimplePage({ title, subtitle }) {
 }
 
 function App() {
+
+  const isAuthenticated = () => {
+    return !!localStorage.getItem("token");
+  };
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        {/* Landing */}
+        <Route path="/" element={<Landing />} />
 
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/competitions" element={<Competitions />} />
-        <Route path="/create-competition" element={<CreateCompetition />} />
-        <Route path="/competitions/:competitionId" element={<CompetitionDetails />} />
-        <Route path="/search" element={<SearchResults />} />
+        {/* Auth */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+
+        {/* Protected */}
+        <Route
+          path="/dashboard"
+          element={
+            isAuthenticated() ? <Dashboard /> : <Navigate to="/login" replace />
+          }
+        />
+
+        <Route
+          path="/competitions"
+          element={
+            isAuthenticated() ? <Competitions /> : <Navigate to="/login" replace />
+          }
+        />
+
+        <Route
+          path="/create-competition"
+          element={
+            isAuthenticated() ? <CreateCompetition /> : <Navigate to="/login" replace />
+          }
+        />
+
+        <Route
+          path="/competitions/:competitionId"
+          element={
+            isAuthenticated() ? <CompetitionDetails /> : <Navigate to="/login" replace />
+          }
+        />
+
+        <Route
+          path="/search"
+          element={
+            isAuthenticated() ? <SearchResults /> : <Navigate to="/login" replace />
+          }
+        />
 
         <Route
           path="/profile"
           element={
-            <SimplePage
-              title="Profile"
-              subtitle="Manage your researcher profile."
-            />
+            isAuthenticated() ? (
+              <SimplePage
+                title="Profile"
+                subtitle="Manage your researcher profile."
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
           }
         />
 
         <Route
           path="/settings"
           element={
-            <SimplePage
-              title="Settings"
-              subtitle="Manage platform preferences."
-            />
+            isAuthenticated() ? (
+              <SimplePage
+                title="Settings"
+                subtitle="Manage platform preferences."
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
           }
         />
 
         <Route
           path="/notifications"
           element={
-            <SimplePage
-              title="Notifications"
-              subtitle="View your latest platform updates."
-            />
+            isAuthenticated() ? (
+              <SimplePage
+                title="Notifications"
+                subtitle="View your latest platform updates."
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
           }
         />
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
 }
-
 export default App;

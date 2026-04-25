@@ -3,13 +3,11 @@ from database import Base
 import uuid
 
 
-class User(Base):
-    __tablename__ = "users"
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    full_name = Column(String, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    password = Column(String, nullable=False)
+    id = Column(String, primary_key=True)  # same as Supabase user id
+    full_name = Column(String)
 
 
 class DashboardStat(Base):

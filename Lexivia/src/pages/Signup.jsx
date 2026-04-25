@@ -10,21 +10,46 @@ export default function Signup() {
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
+  const handleSignup = async (e) => {
+  e.preventDefault();
+  if (form.password !== form.confirm) {
+  alert("Passwords do not match");
+  return;
+}  
+if (!form.password || form.password.length < 6) {
+  alert("Password must be at least 6 characters");
+  return;
+}
+  try {
+    const res = await fetch("http://127.0.0.1:8000/signup", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        full_name: form.full_name,
+        email: form.email,
+        password: form.password,
+      }),
+    });
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (form.password !== form.confirm) {
-      alert("Passwords do not match")
-      return
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.detail || "Signup failed");
+      return;
     }
-    const res = await signup({ full_name: form.full_name, email: form.email, password: form.password })
-    if (res.message) {
-      alert("Account created!")
-      navigate("/login")
-    } else {
-      alert(res.detail || "Error")
-    }
+
+    alert("Signup successful! Please login.");
+    navigate("/login");
+
+  } catch (err) {
+    console.error(err);
+    alert("Error connecting to server");
   }
+};
+
+
 
   const inputStyle = {
     width: '100%',
@@ -104,7 +129,7 @@ export default function Signup() {
                 <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#b0b8cc', fontSize: '14px' }}>⚙</span>
                 <input
                   name="full_name"
-                  placeholder="Nikola Tesla"
+                  placeholder="YOUR NAME"
                   onChange={handleChange}
                   style={inputStyle}
                 />
@@ -136,6 +161,7 @@ export default function Signup() {
                     name="password"
                     type="password"
                     placeholder="••••••••"
+                    value={form.password}
                     onChange={handleChange}
                     style={inputStyle}
                   />
@@ -157,7 +183,7 @@ export default function Signup() {
             </div>
 
             <button
-              onClick={handleSubmit}
+              onClick={handleSignup}
               style={{
                 width: '100%',
                 padding: '13px',

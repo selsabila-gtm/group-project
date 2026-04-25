@@ -1,16 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-
+from schemas import CompetitionActionOut
 from database import SessionLocal
-from models import User
 from schemas import UserCreate, UserLogin
-from auth import hash_password, verify_password, create_access_token
-
+from supabase_client import supabase
+from fastapi import Header 
 router = APIRouter()
-
-DEMO_USER_ID = "demo-user-1"
-
-
 def get_db():
     db = SessionLocal()
     try:
@@ -38,6 +33,16 @@ def get_icon_for_task(task_type: str):
     return "◎"
 
 
+
+def get_current_user(authorization: str = Header(...)):
+    token = authorization.split(" ")[1]
+
+    user = supabase.auth.get_user(token)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    return user
 def validate_competition_payload(data: CompetitionCreateIn):
     if not data.competition_name or not data.competition_name.strip():
         raise HTTPException(status_code=400, detail="Competition name is required")
@@ -184,36 +189,38 @@ def apply_competition_filters(query, db, search, category, status, tab):
     return query
 
 
+
+
 @router.post("/signup")
-def signup(user: UserCreate, db: Session = Depends(get_db)):
-    existing_user = db.query(User).filter(User.email == user.email).first()
+def signup(user: UserCreate):
+    response = supabase.auth.sign_up({
+        "email": user.email,
+        "password": user.password
+    })
 
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already exists")
+    if response.user is None:
+        raise HTTPException(status_code=400, detail="Signup failed")
 
-    new_user = User(
-        full_name=user.full_name,
-        email=user.email,
-        password=hash_password(user.password),
-    )
-
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    print("User created:", new_user.email)
-
-    return {"message": "User created successfully"}
+    return {
+        "message": "User created successfully",
+        "user": response.user
+    }
 
 
 @router.post("/login")
-def login(user: UserLogin, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.email == user.email).first()
+def login(user: UserLogin):
+    response = supabase.auth.sign_in_with_password({
+        "email": user.email,
+        "password": user.password
+    })
 
-    if not competition:
-        raise HTTPException(status_code=404, detail="Competition not found")
+    if response.session is None:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return competition
+    return {
+        "access_token": response.session.access_token,
+        "user": response.user
+    }
 
 
 @router.post("/competitions/draft", response_model=CompetitionActionOut)
