@@ -1,0 +1,160 @@
+.csidebar {
+    width: 200px;
+    min-height: 100vh;
+    background: #ffffff;
+    border-right: 1px solid #e8edf8;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    padding: 20px 0 16px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+/* ── Back button ─────────────────────────────────────────────── */
+.csidebar-back {
+    border: none;
+    background: transparent;
+    text-align: left;
+    padding: 0 20px;
+    margin-bottom: 20px;
+    font-size: 10px;
+    font-weight: 800;
+    color: #8d94a8;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: color 0.15s;
+    white-space: nowrap;
+}
+
+.csidebar-back:hover {
+    color: #1359db;
+}
+
+/* ── Competition identity ─────────────────────────────────────── */
+.csidebar-identity {
+    padding: 0 20px;
+    margin-bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.csidebar-brand {
+    font-size: 14px;
+    font-weight: 800;
+    color: #1359db;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.csidebar-sub {
+    font-size: 9px;
+    font-weight: 800;
+    color: #8d94a8;
+    letter-spacing: 0.1em;
+}
+
+/* ── Nav items ────────────────────────────────────────────────── */
+.csidebar-nav {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 0 10px;
+}
+
+.csidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 38px;
+    padding: 0 12px;
+    border: none;
+    background: transparent;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #6f778c;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: background 0.12s, color 0.12s;
+    position: relative;
+}
+
+.csidebar-item:hover {
+    background: #f4f7ff;
+    color: #1d2333;
+}
+
+.csidebar-item.active {
+    background: #eef3ff;
+    color: #1359db;
+    font-weight: 700;
+}
+
+/* blue left bar on active item */
+.csidebar-item.active::before {
+    content: "";
+    position: absolute;
+    left: -10px;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    background: #1359db;
+    border-radius: 0 3px 3px 0;
+}
+
+.csidebar-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    flex-shrink: 0;
+    opacity: 0.65;
+}
+
+.csidebar-item.active .csidebar-icon,
+.csidebar-item:hover .csidebar-icon {
+    opacity: 1;
+}
+
+/* ── Bottom utilities ─────────────────────────────────────────── */
+.csidebar-bottom {
+    padding: 10px;
+    border-top: 1px solid #f0f3fa;
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.csidebar-util {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 34px;
+    padding: 0 12px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #8d94a8;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: background 0.12s, color 0.12s;
+}
+
+.csidebar-util:hover {
+    background: #f4f7ff;
+    color: #4f586f;
+}
+
+.csidebar-util .csidebar-icon {
+    opacity: 0.7;
+}
