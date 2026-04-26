@@ -50,8 +50,10 @@ def get_current_user(authorization: str = Header(...)):
         if not response or not response.user:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-        return response.user  # ✅ return actual user object
+        return response.user  # ✅ always returns the User object directly
 
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or missing token")
     
@@ -237,7 +239,13 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     try:
         response = supabase.auth.sign_up({
             "email": user.email,
-            "password": user.password
+            "password": user.password,
+            # ✅ Store full_name in Supabase user metadata so it's available client-side
+            "options": {
+                "data": {
+                    "full_name": user.full_name
+                }
+            }
         })
     except AuthApiError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -259,10 +267,15 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         db.add(db_user)
         db.commit()
 
-    return {
+    # ✅ Return access_token if Supabase issued a session (email confirmation disabled)
+    # If email confirmation is ON, session will be None — frontend should show "check your email"
+    result = {
         "message": "User created successfully",
-        "user": response.user
+        "user": response.user,
+        "access_token": response.session.access_token if response.session else None,
+        "session": response.session is not None,
     }
+    return result
 
 @router.post("/login")
 def login(user: UserLogin):
@@ -626,7 +639,7 @@ def create_text_sample(body: DataSampleIn, db: Session = Depends(get_db),
                        authorization: str = Header(...)):
     """Submit a text-based data sample (TEXT PROCESSING / TRANSLATION / COGNITIVE LOGIC)."""
     user = get_current_user(authorization)
-    user_id = user.user.id
+    user_id = user.id  # ✅ fixed: was user.user.id
  
     sample = DataSample(
         competition_id=body.competition_id,
@@ -653,7 +666,7 @@ async def create_audio_sample(
 ):
     """Submit an audio recording (AUDIO SYNTHESIS competitions)."""
     user    = get_current_user(authorization)
-    user_id = user.user.id
+    user_id = user.id  # ✅ fixed: was user.user.id
  
     sample_id    = str(uuid.uuid4())
     storage_path = f"{competition_id}/{sample_id}.wav"
@@ -693,7 +706,7 @@ async def bulk_import(
     """
     import csv, io
     user    = get_current_user(authorization)
-    user_id = user.user.id
+    user_id = user.id  # ✅ fixed: was user.user.id
     inserted = 0
  
     for f in files:
@@ -744,7 +757,7 @@ def my_stats(competition_id: str, authorization: str = Header(...),
              db: Session = Depends(get_db)):
     """Validated / flagged / pending counts for the current user."""
     user    = get_current_user(authorization)
-    user_id = user.user.id
+    user_id = user.id  # ✅ fixed: was user.user.id
  
     base = db.query(DataSample).filter(
         DataSample.competition_id == competition_id,

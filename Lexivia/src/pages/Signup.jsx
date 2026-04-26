@@ -56,8 +56,16 @@ if (!form.password || form.password.length < 6) {
       return;
     }
 
-    alert("Signup successful! Please login.");
-    navigate("/login");
+    // ✅ If Supabase returned a session (email confirmation disabled), auto-login directly
+    if (data.access_token) {
+      localStorage.setItem("token", data.access_token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      navigate("/dashboard");
+    } else {
+      // Email confirmation is enabled — ask user to verify inbox first
+      alert("Account created! Please check your email to confirm your account, then log in.");
+      navigate("/login");
+    }
 
   } catch (err) {
     console.error(err);
@@ -146,6 +154,7 @@ if (!form.password || form.password.length < 6) {
                 <input
                   name="full_name"
                   placeholder="YOUR NAME"
+                  value={form.full_name}
                   onChange={handleChange}
                   style={inputStyle}
                 />
@@ -161,6 +170,7 @@ if (!form.password || form.password.length < 6) {
                   name="email"
                   type="email"
                   placeholder="researcher@lab.precision.ai"
+                  value={form.email}
                   onChange={handleChange}
                   style={inputStyle}
                 />
@@ -191,6 +201,7 @@ if (!form.password || form.password.length < 6) {
                     name="confirm"
                     type="password"
                     placeholder="••••••••"
+                    value={form.confirm}
                     onChange={handleChange}
                     style={inputStyle}
                   />
