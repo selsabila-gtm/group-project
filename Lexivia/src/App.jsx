@@ -5,6 +5,7 @@ import Competitions from "./pages/Competitions";
 import CreateCompetition from "./pages/CreateCompetition";
 import CompetitionDetails from "./pages/CompetitionDetails";
 import DataCollection from "./pages/DataCollection";
+import TeamsPage from "./pages/Teams/TeamsPage"; // ← add this import
 
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
@@ -77,20 +78,26 @@ function App() {
           }
         />
 
-        {/* 🔥 Competition Details + Nested Routes */}
+        {/* Competition Details + Nested Routes */}
         <Route
           path="/competitions/:competitionId"
           element={
             isAuthenticated() ? <CompetitionDetails /> : <Navigate to="/login" replace />
           }
         >
-          {/* Default redirect (optional but recommended) */}
           <Route index element={<Navigate to="data-collection" replace />} />
-
           <Route path="data-collection" element={<DataCollection />} />
           <Route path="annotation" element={<div>Annotation</div>} />
           <Route path="leaderboard" element={<div>Leaderboard</div>} />
         </Route>
+
+        {/* Teams */}
+        <Route
+          path="/teams"
+          element={
+            isAuthenticated() ? <TeamsPage /> : <Navigate to="/login" replace />
+          }
+        />
 
         <Route
           path="/search"

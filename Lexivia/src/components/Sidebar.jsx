@@ -37,10 +37,15 @@ function Sidebar() {
             <span>Competitions</span>
           </NavLink>
 
-          <div className="sidebar-link muted">
+          <NavLink
+            to="/teams"
+            className={({ isActive }) =>
+              isActive ? "sidebar-link active" : "sidebar-link"
+            }
+          >
             <span className="sidebar-icon">⌘</span>
             <span>Teams</span>
-          </div>
+          </NavLink>
 
           <div className="sidebar-link muted">
             <span className="sidebar-icon">▤</span>
@@ -55,10 +60,15 @@ function Sidebar() {
           <span>Resources</span>
         </div>
 
-        <div className="sidebar-link muted">
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            isActive ? "sidebar-link active" : "sidebar-link muted"
+          }
+        >
           <span className="sidebar-icon">◌</span>
           <span>Settings</span>
-        </div>
+        </NavLink>
 
         <div className="sidebar-user">
           <div className="sidebar-user-avatar">👤</div>
