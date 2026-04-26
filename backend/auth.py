@@ -8,22 +8,3 @@ SECRET_KEY = "supersecretkey"   # change later
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 120
 
-
-# Hash password
-def hash_password(password: str):
-    return pwd_context.hash(password)
-
-
-# Verify password
-def verify_password(password: str, hashed: str):
-    return pwd_context.verify(password, hashed)
-
-
-# Create JWT token
-def create_access_token(data: dict):
-    to_encode = data.copy()
-
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)

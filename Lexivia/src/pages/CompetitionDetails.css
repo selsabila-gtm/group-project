@@ -1,0 +1,518 @@
+.details-page {
+    min-height: 100vh;
+    background: #f7f6fb;
+    color: #111827;
+}
+
+
+
+.details-main {
+    padding: 28px 36px 60px;
+}
+
+.details-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 28px;
+    margin-bottom: 22px;
+}
+
+.details-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #4c5872;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+.requirement-badge {
+    background: #d95b21;
+    color: #ffffff;
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+}
+
+.details-hero h1 {
+    margin: 0;
+    font-size: 44px;
+    line-height: 1;
+    color: #121a32;
+}
+
+.details-dates {
+    display: flex;
+    gap: 18px;
+    margin-top: 14px;
+    color: #506079;
+    font-size: 14px;
+}
+
+.details-hero-actions {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+}
+
+.prize-card {
+    min-width: 150px;
+    padding: 18px 20px;
+    background: #dbe6ff;
+    border: 1px solid #c4d5ff;
+    border-radius: 12px;
+    text-align: center;
+}
+
+.prize-card span {
+    display: block;
+    font-size: 10px;
+    color: #3564b8;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+}
+
+.prize-card strong {
+    font-size: 24px;
+    color: #0758c7;
+}
+
+.join-btn {
+    height: 72px;
+    min-width: 210px;
+    border: none;
+    border-radius: 12px;
+    background: #074bb8;
+    color: white;
+    font-size: 17px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 14px 24px rgba(7, 75, 184, 0.2);
+}
+
+.join-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.details-tabs {
+    display: flex;
+    gap: 28px;
+    margin-bottom: 28px;
+}
+
+.details-tabs button {
+    border: none;
+    background: transparent;
+    color: #1f2a44;
+    font-weight: 600;
+    cursor: pointer;
+    padding-bottom: 8px;
+}
+
+.details-tabs button.active {
+    color: #0758d8;
+    border-bottom: 3px solid #0758d8;
+}
+
+.details-layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 26px;
+}
+
+.overview-card,
+.datasets-card,
+.side-card {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+}
+
+.overview-card {
+    padding: 32px;
+}
+
+.overview-card h2,
+.datasets-card h2 {
+    margin: 0 0 20px;
+    font-size: 22px;
+}
+
+.overview-text {
+    max-width: 720px;
+    color: #36445d;
+    font-size: 17px;
+    line-height: 1.55;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 30px;
+}
+
+.info-box {
+    background: #f0f3ff;
+    border-radius: 12px;
+    padding: 22px;
+}
+
+.info-box h3 {
+    margin: 0 0 18px;
+    font-size: 12px;
+    color: #617089;
+    letter-spacing: 0.12em;
+}
+
+.metric-row {
+    margin-bottom: 18px;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.metric-bar,
+.complexity-bars {
+    margin-top: 10px;
+    height: 7px;
+    background: #dfe5f5;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.metric-bar div {
+    height: 100%;
+    background: #0758d8;
+}
+
+.metric-bar.small div {
+    background: #1f6feb;
+}
+
+.complexity-bars {
+    display: flex;
+    gap: 8px;
+    background: transparent;
+    height: 8px;
+    margin-bottom: 16px;
+}
+
+.complexity-bars span {
+    flex: 1;
+    background: #0758d8;
+    border-radius: 999px;
+}
+
+.complexity-bars span.muted {
+    background: #dfe5f5;
+}
+
+.info-box strong {
+    display: block;
+    margin-bottom: 8px;
+}
+
+.info-box p {
+    margin: 0;
+    color: #5e6b82;
+    font-size: 13px;
+}
+
+.datasets-card {
+    margin-top: 22px;
+    padding: 28px 32px;
+}
+
+.datasets-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.datasets-head button {
+    border: none;
+    background: transparent;
+    color: #0758d8;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.dataset-row {
+    margin-top: 14px;
+    padding: 18px;
+    background: #ffffff;
+    border-radius: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid #eef1fa;
+}
+
+.dataset-row p {
+    margin: 4px 0 0;
+    color: #64748b;
+    font-size: 13px;
+}
+
+.dataset-row span {
+    color: #0758d8;
+    font-size: 22px;
+}
+
+.details-right {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.side-card {
+    padding: 24px;
+}
+
+.side-card h3 {
+    margin: 0 0 18px;
+    color: #5d6b84;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+}
+
+.performers-card {
+    background: #dfe7ff;
+}
+
+.performer {
+    background: #eef3ff;
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.performer.first {
+    background: #ffffff;
+}
+
+.performer strong {
+    color: #0758d8;
+    font-size: 20px;
+}
+
+.performer b {
+    display: block;
+}
+
+.performer p {
+    margin: 3px 0 0;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.performer span {
+    margin-left: auto;
+    font-size: 11px;
+    color: #0758d8;
+    font-weight: 900;
+}
+
+.performers-card button {
+    width: 100%;
+    border: none;
+    background: #ffffff;
+    border-radius: 10px;
+    height: 42px;
+    font-weight: 700;
+    color: #526079;
+    cursor: pointer;
+}
+
+.milestone {
+    display: flex;
+    gap: 12px;
+    margin: 16px 0;
+}
+
+.milestone span {
+    width: 12px;
+    height: 12px;
+    background: #d9e1f2;
+    border-radius: 50%;
+    margin-top: 4px;
+}
+
+.milestone.active span {
+    background: #0758d8;
+}
+
+.milestone b {
+    display: block;
+}
+
+.milestone p {
+    margin: 4px 0 0;
+    color: #667085;
+    font-size: 12px;
+}
+
+.teams-card {
+    background: linear-gradient(135deg, #0758d8, #0346ae);
+    border-radius: 14px;
+    color: white;
+    padding: 26px;
+    display: flex;
+    gap: 18px;
+    align-items: center;
+}
+
+.teams-card span {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.15);
+    display: grid;
+    place-items: center;
+}
+
+.teams-card strong {
+    font-size: 30px;
+}
+
+.teams-card p {
+    margin: 3px 0 0;
+    opacity: 0.85;
+}
+
+.details-loading {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+    font-weight: 800;
+    color: #10172f;
+}
+
+@media (max-width: 1100px) {
+    .details-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .details-hero {
+        flex-direction: column;
+    }
+
+    .details-hero-actions {
+        width: 100%;
+    }
+
+    .join-btn,
+    .prize-card {
+        flex: 1;
+    }
+
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.details-hero {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 30px;
+    padding-top: 55px;
+}
+
+.back-button {
+    position: absolute;
+    top: 0;
+    left: 0;
+    border: none;
+    background: transparent;
+    color: #0057d9;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+}
+
+.back-button:hover {
+    text-decoration: underline;
+}
+
+.monitoring-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 30px;
+    margin-top: 26px;
+}
+
+.monitoring-card h2 {
+    margin: 0 0 8px;
+    font-size: 24px;
+    color: #111827;
+}
+
+.monitoring-card>p {
+    margin: 0 0 24px;
+    color: #64748b;
+}
+
+.monitoring-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+}
+
+.monitoring-box {
+    background: #f0f3ff;
+    border-radius: 14px;
+    padding: 20px;
+}
+
+.monitoring-box span {
+    display: block;
+    font-size: 11px;
+    font-weight: 800;
+    color: #617089;
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+}
+
+.monitoring-box strong {
+    display: block;
+    font-size: 30px;
+    color: #0758d8;
+    margin-bottom: 6px;
+}
+
+.monitoring-box p {
+    margin: 0;
+    font-size: 13px;
+    color: #64748b;
+}
+
+@media (max-width: 1100px) {
+    .monitoring-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.organizer-badge {
+    height: 72px;
+    min-width: 210px;
+    border-radius: 12px;
+    background: #e8f0ff;
+    color: #0758d8;
+    font-size: 16px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

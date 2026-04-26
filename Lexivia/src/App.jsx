@@ -1,74 +1,141 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
+import Dashboard from "./pages/Dashboard";
+import Competitions from "./pages/Competitions";
+import CreateCompetition from "./pages/CreateCompetition";
+import CompetitionDetails from "./pages/CompetitionDetails";
+
+import Sidebar from "./components/Sidebar";
+import Topbar from "./components/Topbar";
+import SearchResults from "./pages/SearchResults";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import Dashboard from "./pages/Dashboard";
-import Competitions from "./pages/Competitions";
-import TeamsPage from "./pages/Teams/TeamsPage";
-import TeamDetailPage from "./pages/Teams/TeamDetailPage";
-
-// ✅ Profile pages
-import ProfilePage from "./pages/profile/ProfilePage";
-import ProfileSettingsPage from "./pages/profile/ProfileSettingsPage";
-
-import "./App.css";
 import "./index.css";
 
-export default function App() {
+function SimplePage({ title, subtitle }) {
   return (
-    <BrowserRouter>
-      <Routes>
+    <div style={{ display: "flex", minHeight: "100vh", background: "#f7f8fc" }}>
+      <Sidebar />
+      <div style={{ flex: 1 }}>
+        <Topbar title={title} subtitle={subtitle} />
 
-        {/* ✅ ROOT → ProfilePage directly */}
-        <Route path="/" element={<ProfilePage />} />
-
-        {/* Public routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-
-        {/* Main app routes */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/competitions" element={<Competitions />} />
-        <Route path="/teams" element={<TeamsPage />} />
-        <Route path="/teams/:teamId" element={<TeamDetailPage />} />
-
-        {/* Profile routes */}
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/profile/:userId" element={<ProfilePage />} />
-        <Route path="/profile/settings" element={<ProfileSettingsPage />} />
-
-        {/* Optional placeholders */}
-        <Route path="/datasets" element={<PlaceholderPage title="Datasets" />} />
-        <Route path="/resources" element={<PlaceholderPage title="Resources" />} />
-        <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
-
-        {/* Catch-all */}
-        <Route path="*" element={<ProfilePage />} />
-
-      </Routes>
-    </BrowserRouter>
-  );
-}
-
-// ─── Placeholder Component ─────────────────────────────
-function PlaceholderPage({ title }) {
-  return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#f4f5f7" }}>
-      <div style={{ width: 220, background: "#1a1c20" }} />
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div style={{ textAlign: "center" }}>
-          <h2>{title}</h2>
-          <p>This page is not yet implemented.</p>
+        <div style={{ padding: "24px 22px" }}>
+          <div
+            style={{
+              background: "#eef3ff",
+              borderRadius: "18px",
+              padding: "24px",
+              color: "#19233c",
+              fontWeight: 700,
+            }}
+          >
+            {title} page is working.
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+function App() {
+
+  const isAuthenticated = () => {
+    return !!localStorage.getItem("token");
+  };
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Landing */}
+        <Route path="/" element={<Landing />} />
+
+        {/* Auth */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+
+        {/* Protected */}
+        <Route
+          path="/dashboard"
+          element={
+            isAuthenticated() ? <Dashboard /> : <Navigate to="/login" replace />
+          }
+        />
+
+        <Route
+          path="/competitions"
+          element={
+            isAuthenticated() ? <Competitions /> : <Navigate to="/login" replace />
+          }
+        />
+
+        <Route
+          path="/create-competition"
+          element={
+            isAuthenticated() ? <CreateCompetition /> : <Navigate to="/login" replace />
+          }
+        />
+
+        <Route
+          path="/competitions/:competitionId"
+          element={
+            isAuthenticated() ? <CompetitionDetails /> : <Navigate to="/login" replace />
+          }
+        />
+
+        <Route
+          path="/search"
+          element={
+            isAuthenticated() ? <SearchResults /> : <Navigate to="/login" replace />
+          }
+        />
+
+        <Route
+          path="/profile"
+          element={
+            isAuthenticated() ? (
+              <SimplePage
+                title="Profile"
+                subtitle="Manage your researcher profile."
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            isAuthenticated() ? (
+              <SimplePage
+                title="Settings"
+                subtitle="Manage platform preferences."
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/notifications"
+          element={
+            isAuthenticated() ? (
+              <SimplePage
+                title="Notifications"
+                subtitle="View your latest platform updates."
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+export default App;
