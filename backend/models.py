@@ -106,3 +106,29 @@ class Notification(Base):
     time = Column(String, nullable=False)
     highlighted = Column(Boolean, default=False)
     actions = Column(Boolean, default=False)
+
+
+class CompetitionPrompt(Base):
+    __tablename__ = "competition_prompts"
+    id             = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    competition_id = Column(String, nullable=False)
+    content        = Column(Text, nullable=False)
+    difficulty     = Column(String, nullable=True)
+    domain         = Column(String, nullable=True)
+    used_count     = Column(Integer, default=0)
+    created_at     = Column(String, nullable=True)
+
+class DataSample(Base):
+    __tablename__ = "data_samples"
+    id             = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    competition_id = Column(String, nullable=False, index=True)
+    contributor_id = Column(String, nullable=False, index=True)
+    status         = Column(String, default="pending")
+    text_content   = Column(Text, nullable=True)
+    annotation     = Column(Text, nullable=True)   # JSON string
+    audio_url      = Column(String, nullable=True)
+    audio_duration = Column(String, nullable=True)
+    quality_score  = Column(String, nullable=True)
+    flags          = Column(Text, default="[]")
+    meta_data       = Column(Text, default="{}")
+    submitted_at   = Column(String, nullable=True)

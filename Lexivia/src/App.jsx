@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard";
 import Competitions from "./pages/Competitions";
 import CreateCompetition from "./pages/CreateCompetition";
 import CompetitionDetails from "./pages/CompetitionDetails";
+import DataCollection from "./pages/DataCollection";
 
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
@@ -11,6 +12,7 @@ import SearchResults from "./pages/SearchResults";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+
 import "./index.css";
 
 function SimplePage({ title, subtitle }) {
@@ -39,7 +41,6 @@ function SimplePage({ title, subtitle }) {
 }
 
 function App() {
-
   const isAuthenticated = () => {
     return !!localStorage.getItem("token");
   };
@@ -76,12 +77,20 @@ function App() {
           }
         />
 
+        {/* 🔥 Competition Details + Nested Routes */}
         <Route
           path="/competitions/:competitionId"
           element={
             isAuthenticated() ? <CompetitionDetails /> : <Navigate to="/login" replace />
           }
-        />
+        >
+          {/* Default redirect (optional but recommended) */}
+          <Route index element={<Navigate to="data-collection" replace />} />
+
+          <Route path="data-collection" element={<DataCollection />} />
+          <Route path="annotation" element={<div>Annotation</div>} />
+          <Route path="leaderboard" element={<div>Leaderboard</div>} />
+        </Route>
 
         <Route
           path="/search"
@@ -138,4 +147,5 @@ function App() {
     </BrowserRouter>
   );
 }
+
 export default App;

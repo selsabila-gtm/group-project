@@ -123,3 +123,17 @@ class CompetitionCreateIn(BaseModel):
 class CompetitionActionOut(BaseModel):
     message: str
     competition_id: str
+
+
+class DataSampleIn(BaseModel):
+    competition_id: str
+    text_content:   Optional[str] = None
+    annotation:     Optional[dict] = None
+
+class DataSampleOut(BaseModel):
+    id:             str
+    competition_id: str
+    status:         str
+    submitted_at:   Optional[str]
+    class Config:
+        from_attributes = True
