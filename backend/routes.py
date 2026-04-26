@@ -11,6 +11,8 @@ from fastapi import Header
 from models import Competition, CompetitionOrganizer, DashboardStat, RecentCompetition, CompetitionParticipant
 import json
 from sqlalchemy import or_
+import json, uuid
+from fastapi import UploadFile, File, Form
 router = APIRouter()
 def get_db():
     db = SessionLocal()
@@ -347,6 +349,7 @@ def create_competition(
 
     recent = RecentCompetition(
         user_id = current_user.id,
+        competition_id = competition.id,
         title=competition.title,
         type=competition.category,
         status=competition.status,
@@ -364,6 +367,18 @@ def create_competition(
         "competition_id": competition.id,
     }
 
+@router.get("/competitions/{competition_id}/is-joined")
+def is_joined_competition(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    participant = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.competition_id == competition_id,
+        CompetitionParticipant.user_id == current_user.id,
+    ).first()
+
+    return {"joined": participant is not None}
 
 @router.post("/competitions/{competition_id}/join")
 def join_competition(
@@ -412,13 +427,14 @@ def join_competition(
     db.add(participant)
 
     recent = RecentCompetition(
-        user_id = current_user.id,
-        title=competition.title,
-        type=competition.category,
-        status="IN PROGRESS",
-        score="--",
-        sync="Just now",
-        icon=get_icon_for_task(competition.task_type),
+    competition_id=competition.id,
+    user_id=current_user.id,
+    title=competition.title,
+    type=competition.category,
+    status="IN PROGRESS",
+    score="--",
+    sync="Just now",
+    icon=get_icon_for_task(competition.task_type),
     )
     db.add(recent)
 
@@ -436,3 +452,344 @@ def join_competition(
     db.commit()
 
     return {"message": "Joined competition successfully"}
+@router.get("/competitions")
+def get_competitions(
+    limit: int = 20,
+    offset: int = 0,
+    search: str | None = None,
+    category: str | None = None,
+    status: str | None = None,
+    tab: str = "all",
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    query = db.query(Competition).filter(Competition.is_draft == False)
+
+    query = apply_competition_filters(
+        query=query,
+        db=db,
+        search=search,
+        category=category,
+        status=status,
+        tab=tab,
+        current_user=current_user,
+    )
+
+    return query.offset(offset).limit(limit).all()
+
+
+@router.get("/competitions/count")
+def get_competitions_count(
+    search: str | None = None,
+    category: str | None = None,
+    status: str | None = None,
+    tab: str = "all",
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    query = db.query(Competition).filter(Competition.is_draft == False)
+
+    query = apply_competition_filters(
+        query=query,
+        db=db,
+        search=search,
+        category=category,
+        status=status,
+        tab=tab,
+        current_user=current_user,
+    )
+
+    return {"count": query.count()}
+
+
+@router.get("/competitions/{competition_id}/monitoring")
+def get_competition_monitoring(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    competition = db.query(Competition).filter(
+        Competition.id == competition_id,
+        Competition.is_draft == False,
+    ).first()
+
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    organizer = db.query(CompetitionOrganizer).filter(
+        CompetitionOrganizer.competition_id == competition_id,
+        CompetitionOrganizer.user_id == current_user.id,
+    ).first()
+
+    is_organizer = organizer is not None
+
+    participants_count = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.competition_id == competition_id
+    ).count()
+
+    datasets = []
+    if competition.datasets_json:
+        try:
+            datasets = json.loads(competition.datasets_json)
+        except Exception:
+            datasets = []
+
+    return {
+        "is_organizer": is_organizer,
+        "participants_count": participants_count,
+        "teams_count": participants_count,
+        "max_teams": competition.max_teams,
+        "datasets_count": len(datasets),
+        "data_collection_status": "Configured" if len(datasets) > 0 else "Not configured",
+        "submissions_count": 0,
+        "best_score": "Pending",
+        "primary_metric": competition.primary_metric or "Not selected",
+        "leaderboard_status": "Waiting for submissions",
+    }
+
+@router.get("/competitions/{competition_id}")
+def get_competition_details(
+    competition_id: str,
+    db: Session = Depends(get_db),
+):
+    competition = db.query(Competition).filter(
+        Competition.id == competition_id,
+        Competition.is_draft == False,
+    ).first()
+
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    return competition
+
+@router.get("/dashboard/stats/{user_id}")
+def get_dashboard_stats(user_id: str, db: Session = Depends(get_db)):
+    total_competitions = db.query(CompetitionOrganizer).filter(
+        CompetitionOrganizer.user_id == user_id
+    ).count()
+
+    teams_joined = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.user_id == user_id
+    ).count()
+
+    return {
+        "user_id": user_id,
+        "total_competitions": total_competitions,
+        "teams_joined": teams_joined,
+    }
+
+
+@router.get("/dashboard/recent/{user_id}")
+def get_recent_competitions(user_id: str, db: Session = Depends(get_db)):
+    
+    return (
+        db.query(RecentCompetition)
+        .filter(RecentCompetition.user_id == user_id)
+        .order_by(RecentCompetition.id.desc())
+        .limit(10)
+        .all()
+    )
+
+
+
+@router.get("/competitions/{competition_id}")
+def get_competition(competition_id: str, db: Session = Depends(get_db)):
+    """Single competition detail — used by DataCollection page."""
+    comp = db.query(Competition).filter(Competition.id == competition_id).first()
+    if not comp:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    return comp
+ 
+ 
+@router.get("/competitions/{competition_id}/prompts/next")
+def get_next_prompt(competition_id: str, db: Session = Depends(get_db)):
+    """
+    Returns the least-used prompt for this competition.
+    Used by the AudioWidget to display a TARGET STIMULUS.
+    """
+    prompt = (
+        db.query(CompetitionPrompt)
+        .filter(CompetitionPrompt.competition_id == competition_id)
+        .order_by(CompetitionPrompt.used_count.asc())
+        .first()
+    )
+    if not prompt:
+        raise HTTPException(status_code=404, detail="No prompts available")
+ 
+    prompt.used_count += 1
+    db.commit()
+    return {"id": prompt.id, "content": prompt.content, "difficulty": prompt.difficulty}
+ 
+ 
+@router.post("/data-samples")
+def create_text_sample(body: DataSampleIn, db: Session = Depends(get_db),
+                       authorization: str = Header(...)):
+    """Submit a text-based data sample (TEXT PROCESSING / TRANSLATION / COGNITIVE LOGIC)."""
+    user = get_current_user(authorization)
+    user_id = user.user.id
+ 
+    sample = DataSample(
+        competition_id=body.competition_id,
+        contributor_id=user_id,
+        text_content=body.text_content,
+        annotation=json.dumps(body.annotation or {}),
+        status="pending",
+        submitted_at=datetime.utcnow().isoformat(),
+    )
+    db.add(sample)
+    db.commit()
+    db.refresh(sample)
+    return {"id": sample.id, "status": sample.status}
+ 
+ 
+@router.post("/data-samples/audio")
+async def create_audio_sample(
+    audio: UploadFile = File(...),
+    competition_id: str = Form(...),
+    annotation: str = Form(...),      # JSON string
+    audio_duration: float = Form(0),
+    authorization: str = Header(...),
+    db: Session = Depends(get_db),
+):
+    """Submit an audio recording (AUDIO SYNTHESIS competitions)."""
+    user    = get_current_user(authorization)
+    user_id = user.user.id
+ 
+    sample_id    = str(uuid.uuid4())
+    storage_path = f"{competition_id}/{sample_id}.wav"
+    audio_bytes  = await audio.read()
+ 
+    # Upload to Supabase Storage
+    supabase.storage.from_("audio-samples").upload(
+        storage_path, audio_bytes, {"content-type": "audio/wav"}
+    )
+ 
+    sample = DataSample(
+        id=sample_id,
+        competition_id=competition_id,
+        contributor_id=user_id,
+        audio_url=storage_path,
+        audio_duration=str(audio_duration),
+        annotation=annotation,
+        status="pending",
+        submitted_at=datetime.utcnow().isoformat(),
+    )
+    db.add(sample)
+    db.commit()
+    return {"id": sample_id, "status": "pending"}
+ 
+ 
+@router.post("/competitions/{competition_id}/samples/bulk")
+async def bulk_import(
+    competition_id: str,
+    files: list[UploadFile] = File(...),
+    authorization: str = Header(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Bulk-import .csv or .jsonl files.
+    CSV expected columns: text_content, label
+    JSONL: one object per line with text_content + annotation dict
+    """
+    import csv, io
+    user    = get_current_user(authorization)
+    user_id = user.user.id
+    inserted = 0
+ 
+    for f in files:
+        content = (await f.read()).decode("utf-8")
+        rows = []
+ 
+        if f.filename.endswith(".jsonl"):
+            for line in content.strip().splitlines():
+                obj = json.loads(line)
+                rows.append(DataSample(
+                    competition_id=competition_id,
+                    contributor_id=user_id,
+                    text_content=obj.get("text_content"),
+                    annotation=json.dumps(obj.get("annotation", {})),
+                    status="pending",
+                    submitted_at=datetime.utcnow().isoformat(),
+                ))
+        elif f.filename.endswith(".csv"):
+            reader = csv.DictReader(io.StringIO(content))
+            for row in reader:
+                rows.append(DataSample(
+                    competition_id=competition_id,
+                    contributor_id=user_id,
+                    text_content=row.get("text_content", ""),
+                    annotation=json.dumps({"label": row.get("label", "")}),
+                    status="pending",
+                    submitted_at=datetime.utcnow().isoformat(),
+                ))
+ 
+        db.add_all(rows)
+        inserted += len(rows)
+ 
+    db.commit()
+    return {"inserted": inserted}
+ 
+ 
+@router.get("/data-samples/count")
+def sample_count(competition_id: str, db: Session = Depends(get_db)):
+    """Total sample count for a competition (for the header badge)."""
+    count = db.query(DataSample).filter(
+        DataSample.competition_id == competition_id
+    ).count()
+    return {"count": count}
+ 
+ 
+@router.get("/competitions/{competition_id}/my-stats")
+def my_stats(competition_id: str, authorization: str = Header(...),
+             db: Session = Depends(get_db)):
+    """Validated / flagged / pending counts for the current user."""
+    user    = get_current_user(authorization)
+    user_id = user.user.id
+ 
+    base = db.query(DataSample).filter(
+        DataSample.competition_id == competition_id,
+        DataSample.contributor_id == user_id,
+    )
+    return {
+        "validated": base.filter(DataSample.status == "validated").count(),
+        "flagged":   base.filter(DataSample.status == "flagged").count(),
+        "pending":   base.filter(DataSample.status == "pending").count(),
+    }
+ 
+ 
+@router.get("/competitions/{competition_id}/team-stats")
+def team_stats(competition_id: str, db: Session = Depends(get_db)):
+    """
+    Total sample count + top-5 contributors with name/count.
+    Used by the TeamProgress right panel.
+    """
+    total = db.query(DataSample).filter(
+        DataSample.competition_id == competition_id
+    ).count()
+ 
+    # Top contributors
+    from sqlalchemy import func
+    rows = (
+        db.query(DataSample.contributor_id, func.count(DataSample.id).label("cnt"))
+        .filter(DataSample.competition_id == competition_id)
+        .group_by(DataSample.contributor_id)
+        .order_by(func.count(DataSample.id).desc())
+        .limit(5)
+        .all()
+    )
+ 
+    members = []
+    for contributor_id, cnt in rows:
+        profile = db.query(UserProfile).filter(UserProfile.user_id == contributor_id).first()
+        name = profile.full_name if profile else "Unknown"
+        initials = "".join(w[0].upper() for w in name.split()[:2])
+        members.append({
+            "id":       contributor_id,
+            "name":     name,
+            "initials": initials,
+            "role":     "Contributor",
+            "count":    cnt,
+            "today":    0,
+        })
+ 
+    return {"total": total, "members": members}

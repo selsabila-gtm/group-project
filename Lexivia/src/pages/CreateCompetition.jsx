@@ -217,10 +217,19 @@ function CreateCompetition() {
         try {
             setSubmitting(true);
 
+            const token = localStorage.getItem("token");
+
+            if (!token) {
+                alert("You must login first.");
+                navigate("/login");
+                return;
+            }
+
             const res = await fetch("http://127.0.0.1:8000/competitions/draft", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify(buildPayload()),
             });
@@ -228,7 +237,11 @@ function CreateCompetition() {
             const data = await res.json();
 
             if (!res.ok) {
-                throw new Error(data.detail || "Failed to save draft");
+                throw new Error(
+                    typeof data.detail === "string"
+                        ? data.detail
+                        : JSON.stringify(data.detail || data, null, 2)
+                );
             }
 
             alert("Draft saved successfully");
@@ -311,10 +324,19 @@ function CreateCompetition() {
         try {
             setSubmitting(true);
 
+            const token = localStorage.getItem("token");
+
+            if (!token) {
+                alert("You must login first.");
+                navigate("/login");
+                return;
+            }
+
             const res = await fetch("http://127.0.0.1:8000/competitions/create", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify(buildPayload()),
             });
@@ -322,7 +344,11 @@ function CreateCompetition() {
             const data = await res.json();
 
             if (!res.ok) {
-                throw new Error(data.detail || "Failed to create competition");
+                throw new Error(
+                    typeof data.detail === "string"
+                        ? data.detail
+                        : JSON.stringify(data.detail || data, null, 2)
+                );
             }
 
             alert("Competition created successfully");

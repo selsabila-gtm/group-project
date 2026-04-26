@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../../components/Sidebar';
 import { supabase } from '../../config/supabase';
+import Topbar from '../../components/Topbar';
 import './TeamsPage.css';
 import CreateTeamModal from '../../components/CreateTeamModal';
 
@@ -219,47 +220,10 @@ export default function TeamsPage() {
     <div className="app-layout">
       <Sidebar />
       <div className="main-content">
-        <header className="top-bar">
-          <div className="top-bar-left">
-            <h2 className="directory-label">Directory</h2>
-          </div>
-          <div className="top-bar-center">
-            <div className="search-wrap">
-              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" className="search-icon">
-                <circle cx="6.5" cy="6.5" r="5" stroke="#999" strokeWidth="1.4" />
-                <path d="M10.5 10.5L13.5 13.5" stroke="#999" strokeWidth="1.4" strokeLinecap="round" />
-              </svg>
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Search teams by name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="top-bar-right">
-            <button className="icon-btn">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path d="M9 2a5.5 5.5 0 0 1 5.5 5.5c0 2.8-.8 4.5-1.5 5.5H4c-.7-1-1.5-2.7-1.5-5.5A5.5 5.5 0 0 1 9 2Z" stroke="#666" strokeWidth="1.4" />
-                <path d="M7 13v.5a2 2 0 0 0 4 0V13" stroke="#666" strokeWidth="1.4" />
-                <circle cx="13" cy="4" r="2.5" fill="#e55" />
-              </svg>
-            </button>
-            <button className="icon-btn">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path d="M4 5h10M4 9h8M4 13h5" stroke="#666" strokeWidth="1.4" strokeLinecap="round" />
-              </svg>
-            </button>
-            <div className="user-chip">
-              <div className="user-info">
-                <span className="user-name">Dr. Aris Thorne</span>
-                <span className="user-role">Principal Researcher</span>
-              </div>
-              <div className="user-avatar">AT</div>
-            </div>
-          </div>
-        </header>
+        <Topbar title="Teams" 
+        subtitle="Connect with elite NLP research collectives and collaborate on high-density language modeling competitions." 
+        showBrowseButton={false}
+        />
 
         <div className="page-body">
           <div className="page-title-row">
