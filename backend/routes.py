@@ -365,6 +365,18 @@ def create_competition(
         "competition_id": competition.id,
     }
 
+@router.get("/competitions/{competition_id}/is-joined")
+def is_joined_competition(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    participant = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.competition_id == competition_id,
+        CompetitionParticipant.user_id == current_user.id,
+    ).first()
+
+    return {"joined": participant is not None}
 
 @router.post("/competitions/{competition_id}/join")
 def join_competition(

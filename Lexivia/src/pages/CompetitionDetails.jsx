@@ -36,6 +36,7 @@ function CompetitionDetails() {
     const [joining, setJoining] = useState(false);
     const [activeTab, setActiveTab] = useState("overview");
     const [monitoring, setMonitoring] = useState(null);
+    const [isJoined, setIsJoined] = useState(false);
 
     useEffect(() => {
         window.scrollTo(0, 0);
@@ -70,6 +71,19 @@ function CompetitionDetails() {
             .catch((err) => console.error("Monitoring fetch error:", err));
     }, [competitionId]);
 
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+
+        fetch(`http://127.0.0.1:8000/competitions/${competitionId}/is-joined`, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        })
+            .then((res) => res.json())
+            .then((data) => setIsJoined(data.joined === true))
+            .catch((err) => console.error("Joined check error:", err));
+    }, [competitionId]);
+
     const datasets = useMemo(() => {
         return safeJson(competition?.datasets_json, []);
     }, [competition]);
@@ -101,6 +115,7 @@ function CompetitionDetails() {
                 return;
             }
 
+            setIsJoined(true);
             alert("Joined competition successfully");
             navigate("/competitions");
         } catch (error) {
@@ -162,6 +177,10 @@ function CompetitionDetails() {
                         {monitoring && monitoring.is_organizer === true ? (
                             <div className="organizer-badge">
                                 You are the organizer
+                            </div>
+                        ) : isJoined ? (
+                            <div className="organizer-badge">
+                                Already Joined
                             </div>
                         ) : (
                             <button

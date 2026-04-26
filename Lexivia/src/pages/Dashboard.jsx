@@ -102,7 +102,7 @@ function Dashboard() {
                             <div className="stat-card">
                                 <div className="stat-card-top">
                                     <span className="stat-icon">🏆</span>
-                                    <span className="today-badge">+2 Today</span>
+                                    <span className="today-badge">Organized</span>
                                 </div>
                                 <h3>{String(stats.total_competitions || 0).padStart(2, "0")}</h3>
                                 <p>TOTAL COMPETITIONS</p>
@@ -110,10 +110,18 @@ function Dashboard() {
 
                             <div className="stat-card">
                                 <div className="stat-card-top">
+                                    <span className="stat-icon">🤝</span>
+                                </div>
+                                <h3>00</h3>
+                                <p>TEAMS JOINED</p>
+                            </div>
+
+                            <div className="stat-card">
+                                <div className="stat-card-top">
                                     <span className="stat-icon">👥</span>
                                 </div>
                                 <h3>{String(stats.teams_joined || 0).padStart(2, "0")}</h3>
-                                <p>TEAMS JOINED</p>
+                                <p>COMPETITIONS JOINED</p>
                             </div>
                         </div>
 
