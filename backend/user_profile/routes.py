@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from supabase_client import supabase
-from .auth import get_current_user
+from auth import get_current_user
 
 from .schemas import (
     ProfileUpdate,

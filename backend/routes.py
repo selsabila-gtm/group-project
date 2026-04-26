@@ -13,6 +13,8 @@ import json
 from sqlalchemy import or_
 import json, uuid
 from fastapi import UploadFile, File, Form
+from schemas import CompetitionActionOut, CompetitionCreateIn, DataSampleIn
+from models import DataSample, CompetitionPrompt
 router = APIRouter()
 def get_db():
     db = SessionLocal()
