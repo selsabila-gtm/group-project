@@ -37,10 +37,15 @@ function Sidebar() {
             <span>Competitions</span>
           </NavLink>
 
-          <div className="sidebar-link muted">
+          <NavLink
+            to="/teams"
+            className={({ isActive }) =>
+              isActive ? "sidebar-link active" : "sidebar-link"
+            }
+          >
             <span className="sidebar-icon">⌘</span>
             <span>Teams</span>
-          </div>
+          </NavLink>
 
           <div className="sidebar-link muted">
             <span className="sidebar-icon">▤</span>
@@ -68,6 +73,7 @@ function Sidebar() {
             </svg>
           </span>
           <span>Settings</span>
+        </NavLink>
         </NavLink>
 
         <NavLink to="/profile" className="sidebar-user">
