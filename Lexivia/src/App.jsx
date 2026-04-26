@@ -6,6 +6,8 @@ import CreateCompetition from "./pages/CreateCompetition";
 import CompetitionDetails from "./pages/CompetitionDetails";
 import TeamsPage from "./pages/teams/TeamsPage";
 import TeamDetailPage from "./pages/teams/TeamDetailPage";
+import DataCollection from "./pages/DataCollection";
+
 
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
@@ -61,6 +63,7 @@ function App() {
 
           <Route path="/competitions" element={<Competitions />} />
           <Route path="/competitions/:competitionId" element={<CompetitionDetails />} />
+          <Route path="/competitions/:competitionId/data-collection" element={<DataCollection />} />
           <Route path="/create-competition" element={<CreateCompetition />} />
 
           {/* ✅ Teams routes — these were missing, causing the redirect to "/" */}
