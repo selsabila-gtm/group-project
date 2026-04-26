@@ -22,7 +22,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../config/supabase'
 import Sidebar from '../../components/Sidebar'   // 🔧 adjust path if needed
-import '../../styles/profile.css'                // single shared CSS file
+import '../../styles/profilePage.css'                // single shared CSS file
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 const LinkedInIcon = () => (

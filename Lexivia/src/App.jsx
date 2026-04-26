@@ -8,6 +8,10 @@ import Competitions from "./pages/Competitions";
 import TeamsPage from "./pages/Teams/TeamsPage";
 import TeamDetailPage from "./pages/Teams/TeamDetailPage";
 
+// ✅ Profile pages
+import ProfilePage from "./pages/profile/ProfilePage";
+import ProfileSettingsPage from "./pages/profile/ProfileSettingsPage";
+
 import "./App.css";
 import "./index.css";
 
@@ -15,11 +19,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Default redirect (optional) */}
-        <Route path="/" element={<Landing />} />
-        {/* If you want dashboard as default instead, use:
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        */}
+
+        {/* ✅ ROOT → ProfilePage directly */}
+        <Route path="/" element={<ProfilePage />} />
 
         {/* Public routes */}
         <Route path="/login" element={<Login />} />
@@ -31,18 +33,25 @@ export default function App() {
         <Route path="/teams" element={<TeamsPage />} />
         <Route path="/teams/:teamId" element={<TeamDetailPage />} />
 
-        {/* Placeholder routes */}
+        {/* Profile routes */}
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/:userId" element={<ProfilePage />} />
+        <Route path="/profile/settings" element={<ProfileSettingsPage />} />
+
+        {/* Optional placeholders */}
         <Route path="/datasets" element={<PlaceholderPage title="Datasets" />} />
         <Route path="/resources" element={<PlaceholderPage title="Resources" />} />
         <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
 
-        {/* Catch all */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Catch-all */}
+        <Route path="*" element={<ProfilePage />} />
+
       </Routes>
     </BrowserRouter>
   );
 }
 
+// ─── Placeholder Component ─────────────────────────────
 function PlaceholderPage({ title }) {
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#f4f5f7" }}>

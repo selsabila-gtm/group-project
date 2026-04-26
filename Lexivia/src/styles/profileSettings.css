@@ -1,0 +1,73 @@
+/* ── Layout ───────────────────────── */
+.p-shell {
+  display: flex;
+  min-height: 100vh;
+  background: #f4f6f9;
+}
+
+.p-content {
+  flex: 1;
+  padding: 30px 40px;
+  max-width: 900px;
+}
+
+/* ── Header ───────────────────────── */
+.p-page-title {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.p-page-subtitle {
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+/* ── Sections ────────────────────── */
+.ps-section {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.ps-section-title {
+  font-weight: 600;
+  margin-bottom: 15px;
+}
+
+/* ── Inputs ─────────────────────── */
+.p-input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-top: 5px;
+}
+
+.p-textarea {
+  min-height: 100px;
+}
+
+/* ── Buttons ───────────────────── */
+.p-btn {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.p-btn--primary {
+  background: #2563eb;
+  color: white;
+}
+
+.p-btn--secondary {
+  background: white;
+  border: 1px solid #2563eb;
+  color: #2563eb;
+}
+
+/* ── Experience button ─────────── */
+.ps-exp-form {
+  margin-top: 15px;
+}
