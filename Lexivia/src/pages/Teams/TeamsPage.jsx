@@ -1,20 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../../components/Sidebar';
-import { supabase } from '../../config/supabase';
 import Topbar from '../../components/Topbar';
 import './TeamsPage.css';
 import CreateTeamModal from '../../components/CreateTeamModal';
 
-const CURRENT_USER_ID = 1;
+const API = 'http://127.0.0.1:8000';
 
-// Derive a stable status badge from team data
-function deriveStatus(team, isMyTeam) {
-  if (isMyTeam) return { label: 'ACTIVE', color: 'active' };
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+}
+
+// ── Status badge derived from team metadata ────────────────────────────────────
+function deriveStatus(team) {
+  if (team.is_my_team) return { label: 'ACTIVE', color: 'active' };
   const age = Date.now() - new Date(team.created_at).getTime();
   const days = age / (1000 * 60 * 60 * 24);
   if (days < 30) return { label: 'RISING', color: 'rising' };
-  const count = team._memberCount ?? 0;
+  const count = team.member_count ?? 0;
   if (count > 20) return { label: 'ELITE', color: 'elite' };
   if (count > 10) return { label: 'PREMIUM', color: 'premium' };
   return { label: 'ACTIVE', color: 'active' };
@@ -37,8 +41,8 @@ function MemberAvatars({ count }) {
 }
 
 function TeamCard({ team, onClick }) {
-  const memberCount = team._memberCount ?? 0;
-  const { label, color } = deriveStatus(team, team._isMyTeam);
+  const memberCount = team.member_count ?? 0;
+  const { label, color } = deriveStatus(team);
 
   return (
     <div className="team-card" onClick={onClick}>
@@ -112,85 +116,36 @@ export default function TeamsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const PAGE_SIZE = 6;
 
-
   const fetchTeams = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // Step 1: resolve team IDs for "My Teams" tab
-      let myTeamIds = null;
-      if (activeTab === 'mine') {
-        const membershipsResult = await supabase
-          .from('team_members')
-          .select('team_id')
-          .eq('user_id', CURRENT_USER_ID);
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(PAGE_SIZE),
+        tab: activeTab,
+      });
+      if (searchQuery.trim()) params.append('search', searchQuery.trim());
 
-        if (membershipsResult.error) throw membershipsResult.error;
+      const res = await fetch(`${API}/teams?${params}`, { headers: authHeaders() });
 
-        myTeamIds = (membershipsResult.data || []).map((m) => m.team_id);
-        if (myTeamIds.length === 0) {
-          setTeams([]);
-          setTotal(0);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Step 2: fetch teams (plain select, no embedded joins)
-      let query = supabase
-        .from('teams')
-        .select('*', { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
-
-      if (myTeamIds !== null) query = query.in('id', myTeamIds);
-      if (searchQuery.trim()) query = query.ilike('name', `%${searchQuery.trim()}%`);
-
-      const teamsResult = await query;
-      if (teamsResult.error) throw teamsResult.error;
-
-      const rows = teamsResult.data || [];
-      const totalCount = teamsResult.count ?? 0;
-
-      if (rows.length === 0) {
-        setTeams([]);
-        setTotal(totalCount);
+      if (res.status === 401) {
+        navigate('/login');
         return;
       }
+      if (!res.ok) throw new Error('Failed to load teams');
 
-      // Step 3: fetch member counts in a separate plain query
-      const ids = rows.map((t) => t.id);
-      const membersResult = await supabase
-        .from('team_members')
-        .select('team_id')
-        .in('team_id', ids);
-
-      if (membersResult.error) {
-        console.warn('Could not load member counts:', membersResult.error.message);
-      }
-
-      const countMap = {};
-      (membersResult.data || []).forEach((r) => {
-        countMap[r.team_id] = (countMap[r.team_id] || 0) + 1;
-      });
-
-      const tagged = rows.map((t) => ({
-        ...t,
-        _memberCount: countMap[t.id] ?? 0,
-        _isMyTeam: myTeamIds !== null,
-      }));
-
-      setTeams(tagged);
-      setTotal(totalCount);
+      const data = await res.json();
+      setTeams(data.teams ?? []);
+      setTotal(data.total ?? 0);
     } catch (err) {
-      console.error('Error fetching teams:', err);
+      console.error(err);
       setError('Failed to load teams. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [activeTab, searchQuery, page]);
-
+  }, [activeTab, searchQuery, page, navigate]);
 
   useEffect(() => {
     const debounce = setTimeout(fetchTeams, searchQuery ? 350 : 0);
@@ -220,9 +175,10 @@ export default function TeamsPage() {
     <div className="app-layout">
       <Sidebar />
       <div className="main-content">
-        <Topbar title="Teams" 
-        subtitle="Connect with elite NLP research collectives and collaborate on high-density language modeling competitions." 
-        showBrowseButton={false}
+        <Topbar
+          title="Teams"
+          subtitle="Connect with elite NLP research collectives and collaborate on high-density language modeling competitions."
+          showBrowseButton={false}
         />
 
         <div className="page-body">
@@ -307,14 +263,12 @@ export default function TeamsPage() {
           )}
         </div>
       </div>
+
       <CreateTeamModal
-  isOpen={showCreateModal}
-  onClose={() => setShowCreateModal(false)}
-  onCreated={fetchTeams}
-  userId={CURRENT_USER_ID}
-/>
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreated={fetchTeams}
+      />
     </div>
-    
   );
-  
 }

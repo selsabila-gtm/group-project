@@ -2,12 +2,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
 import models
-
-from routes import router
+import models_teams          # registers Team / TeamMember / TeamInvitation tables
+from routes import router    # single aggregated router from routes/
 from user_profile.routes import router as profile_router
 from user_profile.routes import competitions_router
 
-app = FastAPI()
+
+app = FastAPI(title="Precision Architect API")
 
 # Create tables on startup (better practice)
 @app.on_event("startup")
