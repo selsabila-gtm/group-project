@@ -1,71 +1,70 @@
 import { useState } from "react"
+import { Link } from "react-router-dom"
 import Navbar from "../components/Navbar"
-import { Link, useNavigate } from "react-router-dom"
-import { supabase } from "../config/supabase"
+import { signUp, signInWithGoogle, signInWithGithub } from "../lib/auth"
 
 export default function Signup() {
-  const navigate = useNavigate()
-  const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm: "" })
-  const [error, setError] = useState("")
+  const [form, setForm]       = useState({ full_name: "", email: "", password: "", confirm: "" })
+  const [error, setError]     = useState("")
+  const [loading, setLoading] = useState(false)
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
-  }
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
 
   const handleSignup = async (e) => {
     e.preventDefault()
     setError("")
 
-    if (!form.full_name) { setError("Please enter your full name"); return }
-    if (!form.email)     { setError("Please enter your email"); return }
-    if (form.password !== form.confirm) { setError("Passwords do not match"); return }
-    if (form.password.length < 6) { setError("Password must be at least 6 characters"); return }
+    if (!form.full_name)                  { setError("Please enter your full name"); return }
+    if (!form.email)                      { setError("Please enter your email"); return }
+    if (form.password !== form.confirm)   { setError("Passwords do not match"); return }
+    if (form.password.length < 6)        { setError("Password must be at least 6 characters"); return }
 
+    setLoading(true)
     try {
-      const res = await fetch("http://127.0.0.1:8000/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          full_name: form.full_name,
-          email: form.email,
-          password: form.password,
-        }),
+      // signUp() talks directly to Supabase
+      const { user, session } = await signUp({
+        fullName: form.full_name,
+        email:    form.email,
+        password: form.password,
       })
 
-      const data = await res.json()
+      if (session) {
+        // Email confirmation not required — log straight in
+        localStorage.setItem("token", session.access_token)
+        localStorage.setItem("user", JSON.stringify(user))
 
-      if (!res.ok) {
-        setError(data.detail || "Signup failed")
-        return
-      }
+        // Sync profile to backend (non-blocking)
+        fetch("http://127.0.0.1:8000/sync-user", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            user_id:   user.id,
+            full_name: form.full_name,
+            email:     user.email,
+          }),
+        }).catch(console.error)
 
-      // If backend returned a token (email confirmation not required) → go straight in
-      if (data.access_token) {
-        localStorage.setItem("token", data.access_token)
-        localStorage.setItem("user", JSON.stringify(data.user))
-        navigate("/profile")
+        window.location.href = "/dashboard"
       } else {
-        // Email confirmation required
-        setError(data.message || "Please confirm your email then log in.")
+        // Supabase requires email confirmation — session is null until confirmed
+        setError("Please check your email to confirm your account, then log in.")
       }
     } catch (err) {
-      console.error(err)
-      setError("Error connecting to server")
+      setError(err.message || "Signup failed")
+    } finally {
+      setLoading(false)
     }
   }
 
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: "http://localhost:5173/profile" },
-    })
+    try { await signInWithGoogle() } catch (err) { setError(err.message) }
   }
 
   const handleGithubLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: { redirectTo: "http://localhost:5173/profile" },
-    })
+    try { await signInWithGithub() } catch (err) { setError(err.message) }
   }
 
   const inputStyle = {
@@ -73,47 +72,27 @@ export default function Signup() {
     border: '1px solid #d6dae8', fontSize: '14px', color: '#0d0e14',
     background: '#fff', outline: 'none', boxSizing: 'border-box',
   }
-
-  const labelStyle = {
-    fontSize: '11px', letterSpacing: '1px',
-    color: '#8892a4', display: 'block', marginBottom: '6px',
-  }
+  const labelStyle = { fontSize: '11px', letterSpacing: '1px', color: '#8892a4', display: 'block', marginBottom: '6px' }
 
   return (
     <div style={{ minHeight: '100vh', background: '#f6f7fb', fontFamily: 'Inter, Arial, sans-serif', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 20px' }}>
-        <div style={{
-          background: '#f6f7fb', borderRadius: '16px', padding: '48px',
-          width: '100%', maxWidth: '460px', border: '1px solid #e8eaf2',
-        }}>
+        <div style={{ background: '#f6f7fb', borderRadius: '16px', padding: '48px', width: '100%', maxWidth: '460px', border: '1px solid #e8eaf2' }}>
 
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-            <p style={{
-              fontSize: '10px', letterSpacing: '2px', color: '#1a2fff',
-              background: '#eef0ff', display: 'inline-block',
-              padding: '4px 12px', borderRadius: '4px', marginBottom: '12px',
-            }}>REGISTRATION TERMINAL</p>
-            <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#0d0e14', margin: '0 0 4px', letterSpacing: '-0.5px' }}>
-              Create Account
-            </h1>
-            <p style={{ fontSize: '13px', color: '#8892a4', margin: 0 }}>
-              Initialize your precision workspace environment.
+            <p style={{ fontSize: '10px', letterSpacing: '2px', color: '#1a2fff', background: '#eef0ff', display: 'inline-block', padding: '4px 12px', borderRadius: '4px', marginBottom: '12px' }}>
+              REGISTRATION TERMINAL
             </p>
+            <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#0d0e14', margin: '0 0 4px', letterSpacing: '-0.5px' }}>Create Account</h1>
+            <p style={{ fontSize: '13px', color: '#8892a4', margin: 0 }}>Initialize your precision workspace environment.</p>
           </div>
 
-          <div style={{
-            background: '#fff', borderRadius: '12px', padding: '28px',
-            border: '1px solid #e8eaf2', marginBottom: '20px',
-          }}>
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '28px', border: '1px solid #e8eaf2', marginBottom: '20px' }}>
 
             {error && (
-              <div style={{
-                background: "#ffe5e5", color: "#d8000c", padding: "10px",
-                borderRadius: "6px", marginBottom: "16px",
-                fontSize: "13px", textAlign: "center",
-              }}>
+              <div style={{ background: "#ffe5e5", color: "#d8000c", padding: "10px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", textAlign: "center" }}>
                 {error}
               </div>
             )}
@@ -121,7 +100,7 @@ export default function Signup() {
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>FULL NAME</label>
               <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#b0b8cc', fontSize: '14px' }}>⚙</span>
+                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#b0b8cc' }}>⚙</span>
                 <input name="full_name" placeholder="YOUR NAME" onChange={handleChange} style={inputStyle} />
               </div>
             </div>
@@ -129,7 +108,7 @@ export default function Signup() {
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>EMAIL ADDRESS</label>
               <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#b0b8cc', fontSize: '14px' }}>◈</span>
+                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#b0b8cc' }}>◈</span>
                 <input name="email" type="email" placeholder="researcher@lab.precision.ai" onChange={handleChange} style={inputStyle} />
               </div>
             </div>
@@ -138,29 +117,28 @@ export default function Signup() {
               <div>
                 <label style={labelStyle}>PASSWORD</label>
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#b0b8cc', fontSize: '14px' }}>⬡</span>
+                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#b0b8cc' }}>⬡</span>
                   <input name="password" type="password" placeholder="••••••••" value={form.password} onChange={handleChange} style={inputStyle} />
                 </div>
               </div>
               <div>
                 <label style={labelStyle}>CONFIRM</label>
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#b0b8cc', fontSize: '14px' }}>⬡</span>
+                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#b0b8cc' }}>⬡</span>
                   <input name="confirm" type="password" placeholder="••••••••" onChange={handleChange} style={inputStyle} />
                 </div>
               </div>
             </div>
 
-            <button
-              onClick={handleSignup}
-              style={{
-                width: '100%', padding: '13px', background: '#1a2fff',
-                color: '#fff', border: 'none', borderRadius: '8px',
-                fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                letterSpacing: '0.3px', marginBottom: '20px',
-              }}
-            >
-              Join the Laboratory ↗
+            <button onClick={handleSignup} disabled={loading} style={{
+              width: '100%', padding: '13px',
+              background: loading ? '#8899ff' : '#1a2fff',
+              color: '#fff', border: 'none', borderRadius: '8px',
+              fontSize: '14px', fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              letterSpacing: '0.3px', marginBottom: '20px',
+            }}>
+              {loading ? 'Creating Account…' : 'Join the Laboratory ↗'}
             </button>
 
             <div style={{ textAlign: 'center', marginBottom: '16px' }}>
@@ -168,16 +146,10 @@ export default function Signup() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <button onClick={handleGoogleLogin} style={{
-                padding: '10px', background: '#f6f7fb', border: '1px solid #d6dae8',
-                borderRadius: '8px', fontSize: '13px', color: '#1d2333', cursor: 'pointer', fontWeight: 500,
-              }}>
+              <button onClick={handleGoogleLogin} style={{ padding: '10px', background: '#f6f7fb', border: '1px solid #d6dae8', borderRadius: '8px', fontSize: '13px', color: '#1d2333', cursor: 'pointer', fontWeight: 500 }}>
                 ⊞ Google
               </button>
-              <button onClick={handleGithubLogin} style={{
-                padding: '10px', background: '#f6f7fb', border: '1px solid #d6dae8',
-                borderRadius: '8px', fontSize: '13px', color: '#1d2333', cursor: 'pointer', fontWeight: 500,
-              }}>
+              <button onClick={handleGithubLogin} style={{ padding: '10px', background: '#f6f7fb', border: '1px solid #d6dae8', borderRadius: '8px', fontSize: '13px', color: '#1d2333', cursor: 'pointer', fontWeight: 500 }}>
                 ⊙ GitHub
               </button>
             </div>
@@ -185,17 +157,12 @@ export default function Signup() {
 
           <p style={{ textAlign: 'center', fontSize: '13px', color: '#8892a4' }}>
             Already part of the network?{' '}
-            <Link to="/login" style={{ color: '#1a2fff', fontWeight: 500, textDecoration: 'none' }}>
-              Login to Terminal
-            </Link>
+            <Link to="/login" style={{ color: '#1a2fff', fontWeight: 500, textDecoration: 'none' }}>Login to Terminal</Link>
           </p>
         </div>
       </div>
 
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '16px 60px', borderTop: '1px solid #e8eaf2', background: '#fff',
-      }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 60px', borderTop: '1px solid #e8eaf2', background: '#fff' }}>
         <span style={{ fontSize: '12px', color: '#8892a4' }}>© 2024 Precision Architect NLP. All rights reserved.</span>
         <div style={{ display: 'flex', gap: '20px' }}>
           {['Privacy Policy', 'Terms of Service', 'Security'].map(link => (

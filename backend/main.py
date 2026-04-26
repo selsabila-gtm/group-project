@@ -4,9 +4,6 @@ from database import engine, Base
 import models
 import models_teams          # registers Team / TeamMember / TeamInvitation tables
 from routes import router    # single aggregated router from routes/
-from user_profile.routes import router as profile_router
-from user_profile.routes import competitions_router
-
 
 app = FastAPI(title="Precision Architect API")
 
@@ -29,8 +26,6 @@ app.add_middleware(
 
 # Include all routers
 app.include_router(router)
-app.include_router(profile_router)
-app.include_router(competitions_router)
 
 @app.get("/")
 def root():

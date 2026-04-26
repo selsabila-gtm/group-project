@@ -4,13 +4,8 @@ import Sidebar from '../../components/Sidebar';
 import Topbar from '../../components/Topbar';
 import './TeamsPage.css';
 import CreateTeamModal from '../../components/CreateTeamModal';
-
-const API = 'http://127.0.0.1:8000';
-
-function authHeaders() {
-  const token = localStorage.getItem('token');
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
-}
+// ── Use the centralized auth fetch (handles 401/logout globally) ──────────────
+import { authFetch } from '../../utils/authFetch';
 
 // ── Status badge derived from team metadata ────────────────────────────────────
 function deriveStatus(team) {
@@ -104,17 +99,18 @@ function SkeletonCard() {
   );
 }
 
+const PAGE_SIZE = 6;
+
 export default function TeamsPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [teams, setTeams] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [activeTab, setActiveTab]       = useState('all');
+  const [searchQuery, setSearchQuery]   = useState('');
+  const [teams, setTeams]               = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState(null);
+  const [page, setPage]                 = useState(1);
+  const [total, setTotal]               = useState(0);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const PAGE_SIZE = 6;
 
   const fetchTeams = useCallback(async () => {
     setLoading(true);
@@ -128,15 +124,8 @@ export default function TeamsPage() {
       });
       if (searchQuery.trim()) params.append('search', searchQuery.trim());
 
-      const res = await fetch(`${API}/teams?${params}`, { headers: authHeaders() });
-
-      if (res.status === 401) {
-        navigate('/login');
-        return;
-      }
-      if (!res.ok) throw new Error('Failed to load teams');
-
-      const data = await res.json();
+      // authFetch handles 401 → auto logout globally
+      const data = await authFetch(`/teams?${params}`);
       setTeams(data.teams ?? []);
       setTotal(data.total ?? 0);
     } catch (err) {

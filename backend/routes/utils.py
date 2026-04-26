@@ -1,8 +1,21 @@
+# routes/utils.py
+#
+# Single source of truth for:
+#   - DB session injection
+#   - Supabase JWT verification  ← the ONE auth system used across all routes
+#   - Icon helper
+#
+# NOTE: The standalone auth.py in the project root (using jose + SECRET_KEY)
+# is NOT used by any route and should be deleted or left unused. All routes
+# import get_current_user from HERE, which delegates to Supabase.
+
 from fastapi import Header, HTTPException
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from supabase_client import supabase
 
+
+# ── Database ──────────────────────────────────────────────────────────────────
 
 def get_db():
     db = SessionLocal()
@@ -12,35 +25,47 @@ def get_db():
         db.close()
 
 
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
 def get_current_user(authorization: str = Header(...)):
-    """Validates the Bearer token and returns the Supabase user object."""
+    """
+    Validates the Supabase Bearer token from the Authorization header.
+
+    Returns the Supabase user object on success.
+    Raises HTTP 401 on any failure (missing token, invalid token, expired token).
+
+    The user object has:
+      .id          → UUID string (use as user_id throughout)
+      .email       → str
+      .user_metadata → dict  (contains 'full_name' etc.)
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Empty token")
+
     try:
-        token = authorization.split(" ")[1]
         response = supabase.auth.get_user(token)
+    except Exception as e:
+        # Supabase raises AuthApiError for expired/invalid tokens
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-        if not response or not response.user:
-            raise HTTPException(status_code=401, detail="Invalid token")
+    if not response or not response.user:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-        return response.user
+    return response.user
 
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or missing token")
 
+# ── Icon helper ────────────────────────────────────────────────────────────────
 
 def get_icon_for_task(task_type: str) -> str:
     task = (task_type or "").upper()
-    if "TRANSLATION" in task:
-        return "文"
-    if "AUDIO" in task:
-        return "◉"
-    if "TEXT" in task:
-        return "◎"
-    if "COGNITIVE" in task:
-        return "▣"
-    if "QUESTION" in task:
-        return "Q"
-    if "SUMMARIZATION" in task:
-        return "▤"
+    if "TRANSLATION" in task:  return "文"
+    if "AUDIO"       in task:  return "◉"
+    if "TEXT"        in task:  return "◎"
+    if "COGNITIVE"   in task:  return "▣"
+    if "QUESTION"    in task:  return "Q"
+    if "SUMMARIZATION" in task: return "▤"
     return "◎"

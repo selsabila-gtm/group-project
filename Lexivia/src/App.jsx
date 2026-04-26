@@ -1,9 +1,11 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
 import Dashboard from "./pages/Dashboard";
 import Competitions from "./pages/Competitions";
 import CreateCompetition from "./pages/CreateCompetition";
 import CompetitionDetails from "./pages/CompetitionDetails";
+import TeamsPage from "./pages/teams/TeamsPage";
+import TeamDetailPage from "./pages/teams/TeamDetailPage";
 
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
@@ -19,7 +21,6 @@ function SimplePage({ title, subtitle }) {
       <Sidebar />
       <div style={{ flex: 1 }}>
         <Topbar title={title} subtitle={subtitle} />
-
         <div style={{ padding: "24px 22px" }}>
           <div
             style={{
@@ -38,99 +39,53 @@ function SimplePage({ title, subtitle }) {
   );
 }
 
+// Inline ProtectedRoute — redirects to /login if no token
+function ProtectedRoute() {
+  return localStorage.getItem("token")
+    ? <Outlet />
+    : <Navigate to="/login" replace />;
+}
+
 function App() {
-
-  const isAuthenticated = () => {
-    return !!localStorage.getItem("token");
-  };
-
   return (
     <BrowserRouter>
       <Routes>
-        {/* Landing */}
+        {/* Public */}
         <Route path="/" element={<Landing />} />
-
-        {/* Auth */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        {/* Protected */}
-        <Route
-          path="/dashboard"
-          element={
-            isAuthenticated() ? <Dashboard /> : <Navigate to="/login" replace />
-          }
-        />
+        {/* All protected routes nested under one guard */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/dashboard" element={<Dashboard />} />
 
-        <Route
-          path="/competitions"
-          element={
-            isAuthenticated() ? <Competitions /> : <Navigate to="/login" replace />
-          }
-        />
+          <Route path="/competitions" element={<Competitions />} />
+          <Route path="/competitions/:competitionId" element={<CompetitionDetails />} />
+          <Route path="/create-competition" element={<CreateCompetition />} />
 
-        <Route
-          path="/create-competition"
-          element={
-            isAuthenticated() ? <CreateCompetition /> : <Navigate to="/login" replace />
-          }
-        />
+          {/* ✅ Teams routes — these were missing, causing the redirect to "/" */}
+          <Route path="/teams" element={<TeamsPage />} />
+          <Route path="/teams/:teamId" element={<TeamDetailPage />} />
 
-        <Route
-          path="/competitions/:competitionId"
-          element={
-            isAuthenticated() ? <CompetitionDetails /> : <Navigate to="/login" replace />
-          }
-        />
+          <Route path="/search" element={<SearchResults />} />
 
-        <Route
-          path="/search"
-          element={
-            isAuthenticated() ? <SearchResults /> : <Navigate to="/login" replace />
-          }
-        />
-
-        <Route
-          path="/profile"
-          element={
-            isAuthenticated() ? (
-              <SimplePage
-                title="Profile"
-                subtitle="Manage your researcher profile."
-              />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-
-        <Route
-          path="/settings"
-          element={
-            isAuthenticated() ? (
-              <SimplePage
-                title="Settings"
-                subtitle="Manage platform preferences."
-              />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-
-        <Route
-          path="/notifications"
-          element={
-            isAuthenticated() ? (
-              <SimplePage
-                title="Notifications"
-                subtitle="View your latest platform updates."
-              />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
+          <Route
+            path="/profile"
+            element={<SimplePage title="Profile" subtitle="Manage your researcher profile." />}
+          />
+          <Route
+            path="/profile/settings"
+            element={<SimplePage title="Settings" subtitle="Manage platform preferences." />}
+          />
+          <Route
+            path="/settings"
+            element={<SimplePage title="Settings" subtitle="Manage platform preferences." />}
+          />
+          <Route
+            path="/notifications"
+            element={<SimplePage title="Notifications" subtitle="View your latest platform updates." />}
+          />
+        </Route>
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -138,4 +93,5 @@ function App() {
     </BrowserRouter>
   );
 }
+
 export default App;
