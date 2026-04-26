@@ -1,17 +1,25 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { supabase } from '../../config/supabase';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import './TeamDetailPage.css';
 
-const CURRENT_USER_ID = 1;
+const API = 'http://127.0.0.1:8000';
+
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+}
+
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const ROLE_STYLES = {
-  leader:     { bg: '#fef0e6', fg: '#b85200' },
-  admin:      { bg: '#e8edfb', fg: '#2547c0' },
-  member:     { bg: '#f2f3f5', fg: '#555' },
+  leader: { bg: '#fef0e6', fg: '#b85200' },
+  admin:  { bg: '#e8edfb', fg: '#2547c0' },
+  member: { bg: '#f2f3f5', fg: '#555' },
 };
 
 const AVATAR_COLORS = ['#3b5bdb', '#7048e8', '#0c8599', '#2f9e44', '#e8590c', '#c2255c'];
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function RoleBadge({ role }) {
   const s = ROLE_STYLES[role] || ROLE_STYLES.member;
@@ -26,20 +34,19 @@ function timeAgo(dateStr) {
   if (!dateStr) return 'Unknown';
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  const hrs = Math.floor(mins / 60);
+  const hrs  = Math.floor(mins / 60);
   const days = Math.floor(hrs / 24);
   if (mins < 60) return `${mins}m ago`;
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24)  return `${hrs}h ago`;
   if (days === 1) return 'Yesterday';
   return `${days} days ago`;
 }
 
-function initials(username) {
-  if (!username) return '??';
-  return username.slice(0, 2).toUpperCase();
+function initials(name) {
+  if (!name) return '??';
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-// ── Skeleton helpers ──────────────────────────────────────────
 function SkeletonBlock({ w = '100%', h = 14, mb = 10, radius = 6 }) {
   return (
     <div style={{
@@ -50,8 +57,73 @@ function SkeletonBlock({ w = '100%', h = 14, mb = 10, radius = 6 }) {
   );
 }
 
+// ── Remove member button ───────────────────────────────────────────────────────
+
+function RemoveMemberBtn({ teamId, userId, username, onRemoved }) {
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function handleRemove() {
+    setLoading(true);
+    const res = await fetch(`${API}/teams/${teamId}/members/${userId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    setLoading(false);
+    setConfirming(false);
+    if (res.status === 401) { navigate('/login'); return; }
+    if (res.ok) {
+      onRemoved();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      alert('Failed to remove member: ' + (data.detail || 'Unknown error'));
+    }
+  }
+
+  if (confirming) {
+    return (
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button
+          onClick={handleRemove}
+          disabled={loading}
+          style={{ padding: '4px 10px', fontSize: 11.5, fontWeight: 600, background: '#c33', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+        >
+          {loading ? '…' : 'Confirm'}
+        </button>
+        <button
+          onClick={() => setConfirming(false)}
+          style={{ padding: '4px 10px', fontSize: 11.5, fontWeight: 600, background: '#f0f1f4', color: '#555', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      className="action-dots"
+      title={`Remove ${username}`}
+      onClick={() => setConfirming(true)}
+      style={{ fontSize: 13, color: '#e55' }}
+    >
+      Remove
+    </button>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
+
 export default function TeamDetailPage() {
   const { teamId } = useParams();
+  const navigate = useNavigate();
+
+  // Get the logged-in user's ID from localStorage
+  const currentUser = (() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+  })();
+  const currentUserId = currentUser.id ?? null;
 
   const [team, setTeam] = useState(null);
   const [members, setMembers] = useState([]);
@@ -59,13 +131,13 @@ export default function TeamDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Invite panel state
+  // Invite panel
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('member');
   const [inviting, setInviting] = useState(false);
   const [inviteMsg, setInviteMsg] = useState(null); // { type: 'success'|'error', text }
 
-  // Edit mode state (only for leaders)
+  // Edit mode (leaders only)
   const [editMode, setEditMode] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
@@ -73,165 +145,93 @@ export default function TeamDetailPage() {
 
   const [activeTab, setActiveTab] = useState('members');
 
-  // ── Fetch team + members ──────────────────────────────────────
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+
   const fetchTeamData = useCallback(async () => {
     if (!teamId) return;
     setLoading(true);
     setError(null);
 
     try {
-      // Step 1: fetch team row (no joins)
-      const teamResult = await supabase
-        .from('teams')
-        .select('*')
-        .eq('id', Number(teamId))
-        .single();
+      const res = await fetch(`${API}/teams/${teamId}`, { headers: authHeaders() });
 
-      if (teamResult.error) throw teamResult.error;
-      const teamData = teamResult.data;
-      setTeam(teamData);
-      setEditName(teamData.name);
-      setEditDesc(teamData.description || '');
+      if (res.status === 401) { navigate('/login'); return; }
+      if (res.status === 404) { setError('Team not found.'); return; }
+      if (!res.ok) throw new Error('Failed to load team');
 
-      // Step 2: fetch team_members rows for this team
-      const membersResult = await supabase
-        .from('team_members')
-        .select('user_id, role, joined_at')
-        .eq('team_id', Number(teamId))
-        .order('joined_at', { ascending: true });
-
-      if (membersResult.error) throw membersResult.error;
-      const memberRows = membersResult.data || [];
-
-      if (memberRows.length === 0) {
-        setMembers([]);
-        setCurrentUserRole(null);
-        setLoading(false);
-        return;
-      }
-
-      // Step 3: fetch user details for those user IDs
-      const userIds = memberRows.map((m) => m.user_id);
-      const usersResult = await supabase
-        .from('users')
-        .select('id, username, email')
-        .in('id', userIds);
-
-      if (usersResult.error) throw usersResult.error;
-
-      // Build a lookup map: userId -> user
-      const userMap = {};
-      (usersResult.data || []).forEach((u) => { userMap[u.id] = u; });
-
-      const flatMembers = memberRows.map((m) => ({
-        userId: m.user_id,
-        username: userMap[m.user_id]?.username ?? 'Unknown',
-        email: userMap[m.user_id]?.email ?? '',
-        role: m.role,
-        joinedAt: m.joined_at,
-      }));
-
-      setMembers(flatMembers);
-
-      const mine = flatMembers.find((m) => m.userId === CURRENT_USER_ID);
-      setCurrentUserRole(mine?.role ?? null);
-
+      const data = await res.json();
+      setTeam(data);
+      setEditName(data.name);
+      setEditDesc(data.description || '');
+      setMembers(data.members ?? []);
+      setCurrentUserRole(data.current_user_role ?? null);
     } catch (err) {
-      console.error('Error loading team:', err);
+      console.error(err);
       setError('Could not load team data.');
     } finally {
       setLoading(false);
     }
-  }, [teamId]);
-
+  }, [teamId, navigate]);
 
   useEffect(() => { fetchTeamData(); }, [fetchTeamData]);
 
-  // ── Save edited team info ─────────────────────────────────────
+  // ── Save edit ──────────────────────────────────────────────────────────────
+
   async function handleSaveEdit() {
     if (!editName.trim()) return;
     setSaving(true);
-    const { error: saveErr } = await supabase
-      .from('teams')
-      .update({ name: editName.trim(), description: editDesc.trim() })
-      .eq('id', Number(teamId));
+    const res = await fetch(`${API}/teams/${teamId}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ name: editName.trim(), description: editDesc.trim() }),
+    });
     setSaving(false);
-    if (!saveErr) {
-      setTeam((prev) => ({ ...prev, name: editName.trim(), description: editDesc.trim() }));
+    if (res.status === 401) { navigate('/login'); return; }
+    if (res.ok) {
+      setTeam(prev => ({ ...prev, name: editName.trim(), description: editDesc.trim() }));
       setEditMode(false);
     } else {
-      alert('Failed to save changes: ' + saveErr.message);
+      const data = await res.json().catch(() => ({}));
+      alert('Failed to save changes: ' + (data.detail || 'Unknown error'));
     }
   }
 
-  // ── Invite member ─────────────────────────────────────────────
+  // ── Invite member ──────────────────────────────────────────────────────────
+
   async function handleInvite() {
-  if (!inviteEmail.trim()) return;
-  setInviting(true);
-  setInviteMsg(null);
+    if (!inviteEmail.trim()) return;
+    setInviting(true);
+    setInviteMsg(null);
 
-  try {
-    // 1. Look up the receiver by email
-    const { data: userData, error: userErr } = await supabase
-      .from('users')
-      .select('id, username')
-      .eq('email', inviteEmail.trim().toLowerCase())
-      .maybeSingle();
+    try {
+      const res = await fetch(`${API}/teams/${teamId}/invite`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+      });
 
-    if (userErr) throw userErr;
-    if (!userData) {
-      setInviteMsg({ type: 'error', text: 'No user found with that email address.' });
-      return;
+      if (res.status === 401) { navigate('/login'); return; }
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setInviteMsg({ type: 'error', text: data.detail || 'Failed to send invitation.' });
+        return;
+      }
+
+      setInviteMsg({ type: 'success', text: data.message || 'Invitation sent!' });
+      setInviteEmail('');
+      setInviteRole('member');
+    } catch (err) {
+      setInviteMsg({ type: 'error', text: err.message || 'Failed to send invitation.' });
+    } finally {
+      setInviting(false);
     }
-
-    // 2. Check if already a member
-    const alreadyMember = members.some((m) => m.userId === userData.id);
-    if (alreadyMember) {
-      setInviteMsg({ type: 'error', text: `${userData.username} is already a member.` });
-      return;
-    }
-
-    // 3. Check if a pending invite already exists
-    const { data: existingInvite } = await supabase
-      .from('invitations')
-      .select('id')
-      .eq('team_id', Number(teamId))
-      .eq('receiver_id', userData.id)
-      .eq('status', 'pending')
-      .maybeSingle();
-
-    if (existingInvite) {
-      setInviteMsg({ type: 'error', text: `${userData.username} already has a pending invitation.` });
-      return;
-    }
-
-    // 4. Insert the invitation row
-    const { error: insertErr } = await supabase.from('invitations').insert({
-      team_id:     Number(teamId),
-      sender_id:   CURRENT_USER_ID,
-      receiver_id: userData.id,
-      role:        inviteRole,
-      status:      'pending',
-      created_at:  new Date().toISOString(),
-      updated_at:  new Date().toISOString(),
-    });
-
-    if (insertErr) throw insertErr;
-
-    setInviteMsg({ type: 'success', text: `Invitation sent to ${userData.username}!` });
-    setInviteEmail('');
-    setInviteRole('member');
-
-  } catch (err) {
-    setInviteMsg({ type: 'error', text: err.message || 'Failed to send invitation.' });
-  } finally {
-    setInviting(false);
   }
-}
+
+  // ── Render guards ──────────────────────────────────────────────────────────
 
   const isLeader = currentUserRole === 'leader';
 
-  // ── Loading skeleton ──────────────────────────────────────────
   if (loading) {
     return (
       <div className="detail-root">
@@ -264,7 +264,6 @@ export default function TeamDetailPage() {
     );
   }
 
-  // ── Error state ───────────────────────────────────────────────
   if (error || !team) {
     return (
       <div className="detail-root">
@@ -304,14 +303,11 @@ export default function TeamDetailPage() {
           <a href="#" className="topnav-link">SUPPORT</a>
         </nav>
         <div className="detail-topbar-right">
-          <div className="search-wrap-sm">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-              <circle cx="6" cy="6" r="4.5" stroke="#aaa" strokeWidth="1.3" />
-              <path d="M9.5 9.5L12 12" stroke="#aaa" strokeWidth="1.3" strokeLinecap="round" />
-            </svg>
-            <input className="search-input-sm" placeholder="Search experiments..." />
+          <div className="user-avatar-sm">
+            {currentUser?.user_metadata?.full_name
+              ? initials(currentUser.user_metadata.full_name)
+              : 'ME'}
           </div>
-          <div className="user-avatar-sm">AT</div>
         </div>
       </header>
 
@@ -323,12 +319,6 @@ export default function TeamDetailPage() {
               <span className="tag-chip">ID-{String(team.id).padStart(4, '0')}</span>
               <span className="tag-sep">•</span>
               <span className="tag-date">Created {createdMonth}</span>
-              {team.creator && (
-                <>
-                  <span className="tag-sep">•</span>
-                  <span className="tag-date">by {team.creator.username}</span>
-                </>
-              )}
               {isLeader && (
                 <>
                   <span className="tag-sep">•</span>
@@ -388,7 +378,7 @@ export default function TeamDetailPage() {
           </div>
         </div>
 
-        {/* ── Stats ── */}
+        {/* ── Stats row ── */}
         <div className="stats-row">
           <div className="stat-card">
             <span className="stat-label">TOTAL MEMBERS</span>
@@ -398,12 +388,12 @@ export default function TeamDetailPage() {
           </div>
           <div className="stat-card">
             <span className="stat-label">LEADERS</span>
-            <span className="stat-value">{members.filter((m) => m.role === 'leader').length}</span>
+            <span className="stat-value">{members.filter(m => m.role === 'leader').length}</span>
             <span className="stat-sub">Team leads</span>
           </div>
           <div className="stat-card">
             <span className="stat-label">ADMINS</span>
-            <span className="stat-value">{members.filter((m) => m.role === 'admin').length}</span>
+            <span className="stat-value">{members.filter(m => m.role === 'admin').length}</span>
             <span className="stat-sub">Moderators</span>
           </div>
           <div className="stat-card">
@@ -463,7 +453,7 @@ export default function TeamDetailPage() {
                                 <div>
                                   <div className="member-n">
                                     {m.username}
-                                    {m.userId === CURRENT_USER_ID && (
+                                    {m.userId === currentUserId && (
                                       <span style={{ fontSize: 10, fontWeight: 700, background: '#eef2fe', color: '#2547c0', borderRadius: 4, padding: '1px 6px', marginLeft: 6 }}>
                                         YOU
                                       </span>
@@ -481,7 +471,7 @@ export default function TeamDetailPage() {
                             </td>
                             {isLeader && (
                               <td>
-                                {m.userId !== CURRENT_USER_ID && (
+                                {m.userId !== currentUserId && (
                                   <RemoveMemberBtn
                                     teamId={teamId}
                                     userId={m.userId}
@@ -552,10 +542,7 @@ export default function TeamDetailPage() {
 
                   {inviteMsg && (
                     <div style={{
-                      padding: '9px 12px',
-                      borderRadius: 7,
-                      fontSize: 12.5,
-                      marginBottom: 10,
+                      padding: '9px 12px', borderRadius: 7, fontSize: 12.5, marginBottom: 10,
                       background: inviteMsg.type === 'success' ? '#e6f9ef' : '#fff0f0',
                       color: inviteMsg.type === 'success' ? '#1a7a44' : '#c33',
                       border: `1px solid ${inviteMsg.type === 'success' ? '#b2e4c8' : '#fcc'}`,
@@ -564,23 +551,27 @@ export default function TeamDetailPage() {
                     </div>
                   )}
 
-                  <button className="send-invite-btn" onClick={handleInvite} disabled={inviting || !inviteEmail.trim()}>
+                  <button
+                    className="send-invite-btn"
+                    onClick={handleInvite}
+                    disabled={inviting || !inviteEmail.trim()}
+                  >
                     {inviting ? 'Adding…' : 'Add Member'}
                   </button>
                 </>
               )}
             </div>
 
-            {/* Member summary panel */}
+            {/* Member composition panel */}
             <div className="activity-panel">
               <h4 className="activity-title">TEAM COMPOSITION</h4>
               <div className="activity-list">
                 {[
                   { label: 'Leaders', role: 'leader', color: '#b85200' },
-                  { label: 'Admins', role: 'admin', color: '#2d5cf6' },
+                  { label: 'Admins',  role: 'admin',  color: '#2d5cf6' },
                   { label: 'Members', role: 'member', color: '#2bb5a0' },
                 ].map(({ label, role, color }) => {
-                  const count = members.filter((m) => m.role === role).length;
+                  const count = members.filter(m => m.role === role).length;
                   return (
                     <div key={role} className="activity-item">
                       <div className="activity-dot" style={{ background: color }} />
@@ -591,9 +582,7 @@ export default function TeamDetailPage() {
                         </div>
                         <div style={{ marginTop: 4, height: 4, borderRadius: 4, background: '#f0f1f4', overflow: 'hidden' }}>
                           <div style={{
-                            height: '100%',
-                            borderRadius: 4,
-                            background: color,
+                            height: '100%', borderRadius: 4, background: color,
                             width: members.length ? `${(count / members.length) * 100}%` : '0%',
                             transition: 'width 0.4s ease',
                           }} />
@@ -608,66 +597,5 @@ export default function TeamDetailPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-// ── Remove member button (leaders only) ───────────────────────
-function RemoveMemberBtn({ teamId, userId, username, onRemoved }) {
-  const [confirming, setConfirming] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  async function handleRemove() {
-    setLoading(true);
-    const { error } = await supabase
-      .from('team_members')
-      .delete()
-      .eq('team_id', Number(teamId))
-      .eq('user_id', userId);
-    setLoading(false);
-    if (!error) {
-      onRemoved();
-    } else {
-      alert('Failed to remove member: ' + error.message);
-    }
-    setConfirming(false);
-  }
-
-  if (confirming) {
-    return (
-      <div style={{ display: 'flex', gap: 4 }}>
-        <button
-          onClick={handleRemove}
-          disabled={loading}
-          style={{
-            padding: '4px 10px', fontSize: 11.5, fontWeight: 600,
-            background: '#c33', color: '#fff', border: 'none',
-            borderRadius: 6, cursor: 'pointer',
-          }}
-        >
-          {loading ? '…' : 'Confirm'}
-        </button>
-        <button
-          onClick={() => setConfirming(false)}
-          style={{
-            padding: '4px 10px', fontSize: 11.5, fontWeight: 600,
-            background: '#f0f1f4', color: '#555', border: 'none',
-            borderRadius: 6, cursor: 'pointer',
-          }}
-        >
-          Cancel
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      className="action-dots"
-      title={`Remove ${username}`}
-      onClick={() => setConfirming(true)}
-      style={{ fontSize: 13, color: '#e55' }}
-    >
-      Remove
-    </button>
   );
 }

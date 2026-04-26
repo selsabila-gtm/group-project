@@ -206,13 +206,13 @@
 }
 
 .go-btn {
-    width: 40px;
+    width: 100px;
     height: 40px;
     border: none;
     border-radius: 999px;
     background: #1359db;
     color: #ffffff;
-    font-size: 20px;
+    font-size: 15px;
     cursor: pointer;
 }
 

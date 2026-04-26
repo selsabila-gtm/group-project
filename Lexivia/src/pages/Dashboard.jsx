@@ -37,6 +37,7 @@ function Dashboard() {
         setUserId(user.id);
 
         const name =
+            user.user_metadata?.full_name ||   // ✅ Supabase stores it here
             user.full_name ||
             user.name ||
             user.email?.split("@")[0] ||
@@ -112,16 +113,16 @@ function Dashboard() {
                                 <div className="stat-card-top">
                                     <span className="stat-icon">🤝</span>
                                 </div>
-                                <h3>00</h3>
-                                <p>TEAMS JOINED</p>
+                                <h3>{String(stats.teams_joined || 0).padStart(2, "0")}</h3>
+                                <p>COMPETITIONS JOINED</p>
                             </div>
 
                             <div className="stat-card">
                                 <div className="stat-card-top">
                                     <span className="stat-icon">👥</span>
                                 </div>
-                                <h3>{String(stats.teams_joined || 0).padStart(2, "0")}</h3>
-                                <p>COMPETITIONS JOINED</p>
+                                <h3>00</h3>
+                                <p>TEAMS JOINED</p>
                             </div>
                         </div>
 
