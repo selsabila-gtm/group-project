@@ -1,11 +1,16 @@
+from datetime import datetime
+from supabase_auth.errors import AuthApiError
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from schemas import CompetitionActionOut
+from schemas import CompetitionActionOut, CompetitionCreateIn
 from database import SessionLocal
 from schemas import UserCreate, UserLogin
 from supabase_client import supabase
 from models import UserProfile
 from fastapi import Header 
+from models import Competition, CompetitionOrganizer, DashboardStat, RecentCompetition, CompetitionParticipant
+import json
+from sqlalchemy import or_
 router = APIRouter()
 def get_db():
     db = SessionLocal()
@@ -36,14 +41,20 @@ def get_icon_for_task(task_type: str):
 
 
 def get_current_user(authorization: str = Header(...)):
-    token = authorization.split(" ")[1]
+    try:
+        token = authorization.split(" ")[1]
+        response = supabase.auth.get_user(token)
 
-    user = supabase.auth.get_user(token)
+        if not response or not response.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
 
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        return response.user  # ✅ return actual user object
 
-    return user
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or missing token")
+    
+
+    
 def validate_competition_payload(data: CompetitionCreateIn):
     if not data.competition_name or not data.competition_name.strip():
         raise HTTPException(status_code=400, detail="Competition name is required")
@@ -158,7 +169,7 @@ def build_competition_record(data: CompetitionCreateIn, is_draft: bool):
     )
 
 
-def apply_competition_filters(query, db, search, category, status, tab):
+def apply_competition_filters(query, db, search, category, status, tab, current_user):
     if search:
         search_term = f"%{search}%"
         query = query.filter(
@@ -177,13 +188,13 @@ def apply_competition_filters(query, db, search, category, status, tab):
 
     if tab == "participating":
         joined_ids = db.query(CompetitionParticipant.competition_id).filter(
-            CompetitionParticipant.user_id == DEMO_USER_ID
+            CompetitionParticipant.user_id == current_user.id
         )
         query = query.filter(Competition.id.in_(joined_ids))
 
     elif tab == "organizing":
         organized_ids = db.query(CompetitionOrganizer.competition_id).filter(
-            CompetitionOrganizer.user_id == DEMO_USER_ID
+            CompetitionOrganizer.user_id == current_user.id
         )
         query = query.filter(Competition.id.in_(organized_ids))
 
@@ -192,19 +203,48 @@ def apply_competition_filters(query, db, search, category, status, tab):
 
 
 
+
+@router.post("/sync-user")
+def sync_user(data: dict, db: Session = Depends(get_db)):
+    user_id = data.get("user_id")
+    full_name = data.get("full_name")
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Missing user_id")
+
+    # ✅ Check if already exists
+    existing = db.query(UserProfile).filter(
+        UserProfile.user_id == user_id
+    ).first()
+
+    if existing:
+        return {"message": "User already exists"}
+
+    # ✅ Create new profile
+    new_user = UserProfile(
+        user_id=user_id,
+        full_name=full_name,
+    )
+
+    db.add(new_user)
+    db.commit()
+
+    return {"message": "User profile created"}
 @router.post("/signup")
 def signup(user: UserCreate, db: Session = Depends(get_db)):
-    response = supabase.auth.sign_up({
-        "email": user.email,
-        "password": user.password
-    })
+    try:
+        response = supabase.auth.sign_up({
+            "email": user.email,
+            "password": user.password
+        })
+    except AuthApiError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     if response.user is None:
         raise HTTPException(status_code=400, detail="Signup failed")
 
     user_id = response.user.id
 
-    # ✅ check if already exists
     existing = db.query(UserProfile).filter(
         UserProfile.user_id == user_id
     ).first()
@@ -224,31 +264,43 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(user: UserLogin):
-    response = supabase.auth.sign_in_with_password({
-        "email": user.email,
-        "password": user.password
-    })
+    try:
+        response = supabase.auth.sign_in_with_password({
+            "email": user.email,
+            "password": user.password
+        })
+    except AuthApiError as e:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
 
-    if response.session is None:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if response.user and not response.session:
+        raise HTTPException(
+            status_code=401,
+            detail="Email not confirmed"
+        )
 
     return {
         "access_token": response.session.access_token,
         "user": response.user
     }
 
-
 @router.post("/competitions/draft", response_model=CompetitionActionOut)
-def save_competition_draft(data: CompetitionCreateIn, db: Session = Depends(get_db)):
+def save_competition_draft(
+    data: CompetitionCreateIn,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     competition = build_competition_record(data, is_draft=True)
     db.add(competition)
     db.flush()
 
     organizer = CompetitionOrganizer(
-        competition_id=competition.id,
-        user_id=DEMO_USER_ID,
-        role="owner",
-        created_at=datetime.utcnow().isoformat(),
+    competition_id=competition.id,
+    user_id=current_user.id,
+    role="owner",
+    created_at=datetime.utcnow().isoformat(),
     )
     db.add(organizer)
 
@@ -262,7 +314,11 @@ def save_competition_draft(data: CompetitionCreateIn, db: Session = Depends(get_
 
 
 @router.post("/competitions/create", response_model=CompetitionActionOut)
-def create_competition(data: CompetitionCreateIn, db: Session = Depends(get_db)):
+def create_competition(
+    data: CompetitionCreateIn,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     validate_competition_payload(data)
 
     competition = build_competition_record(data, is_draft=False)
@@ -271,26 +327,27 @@ def create_competition(data: CompetitionCreateIn, db: Session = Depends(get_db))
 
     organizer = CompetitionOrganizer(
         competition_id=competition.id,
-        user_id=DEMO_USER_ID,
+        user_id = current_user.id,
         role="owner",
         created_at=datetime.utcnow().isoformat(),
     )
     db.add(organizer)
 
-    stats = db.query(DashboardStat).filter(DashboardStat.user_id == DEMO_USER_ID).first()
+    stats = db.query(DashboardStat).filter(DashboardStat.user_id == current_user.id).first()
 
     if stats:
         stats.total_competitions = db.query(Competition).filter(Competition.is_draft == False).count() + 1
     else:
         stats = DashboardStat(
-            user_id=DEMO_USER_ID,
+            user_id = current_user.id,
             total_competitions=1,
             teams_joined=0,
         )
         db.add(stats)
 
     recent = RecentCompetition(
-        user_id=DEMO_USER_ID,
+        user_id = current_user.id,
+        competition_id = competition.id,
         title=competition.title,
         type=competition.category,
         status=competition.status,
@@ -308,9 +365,25 @@ def create_competition(data: CompetitionCreateIn, db: Session = Depends(get_db))
         "competition_id": competition.id,
     }
 
+@router.get("/competitions/{competition_id}/is-joined")
+def is_joined_competition(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    participant = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.competition_id == competition_id,
+        CompetitionParticipant.user_id == current_user.id,
+    ).first()
+
+    return {"joined": participant is not None}
 
 @router.post("/competitions/{competition_id}/join")
-def join_competition(competition_id: str, db: Session = Depends(get_db)):
+def join_competition(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     competition = db.query(Competition).filter(
         Competition.id == competition_id,
         Competition.is_draft == False,
@@ -324,7 +397,7 @@ def join_competition(competition_id: str, db: Session = Depends(get_db)):
 
     organizer = db.query(CompetitionOrganizer).filter(
         CompetitionOrganizer.competition_id == competition_id,
-        CompetitionOrganizer.user_id == DEMO_USER_ID,
+        CompetitionOrganizer.user_id == current_user.id,
     ).first()
 
     if organizer:
@@ -335,7 +408,7 @@ def join_competition(competition_id: str, db: Session = Depends(get_db)):
 
     existing = db.query(CompetitionParticipant).filter(
         CompetitionParticipant.competition_id == competition_id,
-        CompetitionParticipant.user_id == DEMO_USER_ID,
+        CompetitionParticipant.user_id == current_user.id,
     ).first()
 
     if existing:
@@ -343,7 +416,7 @@ def join_competition(competition_id: str, db: Session = Depends(get_db)):
 
     participant = CompetitionParticipant(
         competition_id=competition_id,
-        user_id=DEMO_USER_ID,
+        user_id = current_user.id,
         team_id=None,
         status="joined",
         joined_at=datetime.utcnow().isoformat(),
@@ -352,22 +425,23 @@ def join_competition(competition_id: str, db: Session = Depends(get_db)):
     db.add(participant)
 
     recent = RecentCompetition(
-        user_id=DEMO_USER_ID,
-        title=competition.title,
-        type=competition.category,
-        status="IN PROGRESS",
-        score="--",
-        sync="Just now",
-        icon=get_icon_for_task(competition.task_type),
+    competition_id=competition.id,
+    user_id=current_user.id,
+    title=competition.title,
+    type=competition.category,
+    status="IN PROGRESS",
+    score="--",
+    sync="Just now",
+    icon=get_icon_for_task(competition.task_type),
     )
     db.add(recent)
 
-    stats = db.query(DashboardStat).filter(DashboardStat.user_id == DEMO_USER_ID).first()
+    stats = db.query(DashboardStat).filter(DashboardStat.user_id == current_user.id).first()
     if stats:
         stats.teams_joined += 1
     else:
         stats = DashboardStat(
-            user_id=DEMO_USER_ID,
+            user_id = current_user.id,
             total_competitions=db.query(Competition).filter(Competition.is_draft == False).count(),
             teams_joined=1,
         )
@@ -376,3 +450,140 @@ def join_competition(competition_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Joined competition successfully"}
+@router.get("/competitions")
+def get_competitions(
+    limit: int = 20,
+    offset: int = 0,
+    search: str | None = None,
+    category: str | None = None,
+    status: str | None = None,
+    tab: str = "all",
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    query = db.query(Competition).filter(Competition.is_draft == False)
+
+    query = apply_competition_filters(
+        query=query,
+        db=db,
+        search=search,
+        category=category,
+        status=status,
+        tab=tab,
+        current_user=current_user,
+    )
+
+    return query.offset(offset).limit(limit).all()
+
+
+@router.get("/competitions/count")
+def get_competitions_count(
+    search: str | None = None,
+    category: str | None = None,
+    status: str | None = None,
+    tab: str = "all",
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    query = db.query(Competition).filter(Competition.is_draft == False)
+
+    query = apply_competition_filters(
+        query=query,
+        db=db,
+        search=search,
+        category=category,
+        status=status,
+        tab=tab,
+        current_user=current_user,
+    )
+
+    return {"count": query.count()}
+
+
+@router.get("/competitions/{competition_id}/monitoring")
+def get_competition_monitoring(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    competition = db.query(Competition).filter(
+        Competition.id == competition_id,
+        Competition.is_draft == False,
+    ).first()
+
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    organizer = db.query(CompetitionOrganizer).filter(
+        CompetitionOrganizer.competition_id == competition_id,
+        CompetitionOrganizer.user_id == current_user.id,
+    ).first()
+
+    is_organizer = organizer is not None
+
+    participants_count = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.competition_id == competition_id
+    ).count()
+
+    datasets = []
+    if competition.datasets_json:
+        try:
+            datasets = json.loads(competition.datasets_json)
+        except Exception:
+            datasets = []
+
+    return {
+        "is_organizer": is_organizer,
+        "participants_count": participants_count,
+        "teams_count": participants_count,
+        "max_teams": competition.max_teams,
+        "datasets_count": len(datasets),
+        "data_collection_status": "Configured" if len(datasets) > 0 else "Not configured",
+        "submissions_count": 0,
+        "best_score": "Pending",
+        "primary_metric": competition.primary_metric or "Not selected",
+        "leaderboard_status": "Waiting for submissions",
+    }
+
+@router.get("/competitions/{competition_id}")
+def get_competition_details(
+    competition_id: str,
+    db: Session = Depends(get_db),
+):
+    competition = db.query(Competition).filter(
+        Competition.id == competition_id,
+        Competition.is_draft == False,
+    ).first()
+
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    return competition
+
+@router.get("/dashboard/stats/{user_id}")
+def get_dashboard_stats(user_id: str, db: Session = Depends(get_db)):
+    total_competitions = db.query(CompetitionOrganizer).filter(
+        CompetitionOrganizer.user_id == user_id
+    ).count()
+
+    teams_joined = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.user_id == user_id
+    ).count()
+
+    return {
+        "user_id": user_id,
+        "total_competitions": total_competitions,
+        "teams_joined": teams_joined,
+    }
+
+
+@router.get("/dashboard/recent/{user_id}")
+def get_recent_competitions(user_id: str, db: Session = Depends(get_db)):
+    
+    return (
+        db.query(RecentCompetition)
+        .filter(RecentCompetition.user_id == user_id)
+        .order_by(RecentCompetition.id.desc())
+        .limit(10)
+        .all()
+    )

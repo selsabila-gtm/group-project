@@ -21,7 +21,11 @@ function SearchResults() {
         setLoading(true);
 
         Promise.all([
-            fetch(`http://127.0.0.1:8000/competitions?search=${encodeURIComponent(q)}`).then(res => res.json()),
+            fetch(`http://127.0.0.1:8000/competitions?search=${encodeURIComponent(q)}`, {
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                },
+            }).then(res => res.json()),
             fetch(`http://127.0.0.1:8000/teams?search=${encodeURIComponent(q)}`).then(res => res.json()).catch(() => []),
             fetch(`http://127.0.0.1:8000/datasets?search=${encodeURIComponent(q)}`).then(res => res.json()).catch(() => []),
         ])

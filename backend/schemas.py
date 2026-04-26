@@ -64,6 +64,7 @@ class CompetitionOut(BaseModel):
 
 class RecentCompetitionOut(BaseModel):
     id: str
+    competition_id: str | None = None
     user_id: str
     title: str
     type: str

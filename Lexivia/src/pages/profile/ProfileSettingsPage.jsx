@@ -16,7 +16,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../config/supabase'
 import Sidebar from '../../components/Sidebar'   // 🔧 adjust path if needed
-import '../../styles/profile.css'                // single shared CSS file
+import '../../styles/profileSettings.css'                // single shared CSS file
 
 // ─── Predefined skills ────────────────────────────────────────────────────────
 const PREDEFINED_SKILLS = [

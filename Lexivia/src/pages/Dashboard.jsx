@@ -13,17 +13,53 @@ function statusClass(status) {
 }
 
 function Dashboard() {
-    const navigate = useNavigate();
-    const userId = "demo-user-1";
-
+    const [userName, setUserName] = useState("User");
+    const [userId, setUserId] = useState(null);
     const [stats, setStats] = useState({
         total_competitions: 0,
         teams_joined: 0,
     });
-
     const [recentCompetitions, setRecentCompetitions] = useState([]);
 
+    const navigate = useNavigate();
+
+    // ✅ FIX: use localStorage instead of supabase
+    useEffect(() => {
+        const savedUser = localStorage.getItem("user");
+
+        if (!savedUser) {
+            navigate("/login");
+            return;
+        }
+
+        const user = JSON.parse(savedUser);
+
+        setUserId(user.id);
+
+        const name =
+            user.full_name ||
+            user.name ||
+            user.email?.split("@")[0] ||
+            "User";
+
+        setUserName(name);
+
+        // sync user to backend
+        fetch("http://127.0.0.1:8000/sync-user", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                user_id: user.id,
+                full_name: name,
+            }),
+        });
+    }, [navigate]);
+
     const fetchRecent = () => {
+        if (!userId) return;
+
         fetch(`http://127.0.0.1:8000/dashboard/recent/${userId}`)
             .then((res) => res.json())
             .then((data) => {
@@ -36,15 +72,16 @@ function Dashboard() {
     };
 
     useEffect(() => {
+        if (!userId) return;
+
+        // ✅ fetch stats
         fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`)
             .then((res) => res.json())
             .then((data) => setStats(data))
-            .catch((err) =>
-                console.error("Stats fetch error:", err)
-            );
+            .catch((err) => console.error("Stats fetch error:", err));
 
         fetchRecent();
-    }, []);
+    }, [userId]);
 
     return (
         <div className="dashboard-shell">
@@ -52,18 +89,20 @@ function Dashboard() {
 
             <div className="dashboard-main">
                 <Topbar
-                    title="Welcome Home, 0x4"
+                    title={`Welcome Home, ${userName}`}
                     subtitle="Overview of your activity and performance across the laboratory."
                     showBrowseButton={true}
                 />
 
                 <div className="dashboard-body">
                     <div className="dashboard-left full-width">
+
+                        {/* STATS */}
                         <div className="stats-row">
                             <div className="stat-card">
                                 <div className="stat-card-top">
                                     <span className="stat-icon">🏆</span>
-                                    <span className="today-badge">+2 Today</span>
+                                    <span className="today-badge">Organized</span>
                                 </div>
                                 <h3>{String(stats.total_competitions || 0).padStart(2, "0")}</h3>
                                 <p>TOTAL COMPETITIONS</p>
@@ -71,31 +110,32 @@ function Dashboard() {
 
                             <div className="stat-card">
                                 <div className="stat-card-top">
+                                    <span className="stat-icon">🤝</span>
+                                </div>
+                                <h3>00</h3>
+                                <p>TEAMS JOINED</p>
+                            </div>
+
+                            <div className="stat-card">
+                                <div className="stat-card-top">
                                     <span className="stat-icon">👥</span>
                                 </div>
                                 <h3>{String(stats.teams_joined || 0).padStart(2, "0")}</h3>
-                                <p>TEAMS JOINED</p>
+                                <p>COMPETITIONS JOINED</p>
                             </div>
                         </div>
 
+                        {/* RECENT */}
                         <div className="recent-card">
                             <div className="section-head">
                                 <h2>Recent Competitions</h2>
 
                                 <div className="small-actions">
-                                    <button
-                                        type="button"
-                                        title="View all competitions"
-                                        onClick={() => navigate("/competitions")}
-                                    >
+                                    <button onClick={() => navigate("/competitions")}>
                                         ↗
                                     </button>
 
-                                    <button
-                                        type="button"
-                                        title="Refresh"
-                                        onClick={fetchRecent}
-                                    >
+                                    <button onClick={fetchRecent}>
                                         ⟳
                                     </button>
                                 </div>
@@ -109,39 +149,44 @@ function Dashboard() {
                             </div>
 
                             <div className="recent-list">
-                                {recentCompetitions.map((item) => (
-                                    <div
-                                        className="recent-row"
-                                        key={item.id}
-                                        onClick={() => {
-                                            if (item.competition_id) {
-                                                navigate(`/competitions/${item.competition_id}`);
-                                            } else {
-                                                navigate(`/competitions?search=${encodeURIComponent(item.title)}`);
-                                            }
-                                        }}
-                                        style={{ cursor: "pointer" }}
-                                    >
-                                        <div className="recent-main">
-                                            <div className="recent-icon">{item.icon}</div>
-                                            <div>
-                                                <h3>{item.title}</h3>
-                                                <p>{item.type}</p>
+                                {recentCompetitions.length === 0 ? (
+                                    <p style={{ padding: "10px" }}>No recent competitions</p>
+                                ) : (
+                                    recentCompetitions.map((item) => (
+                                        <div
+                                            className="recent-row"
+                                            key={item.id}
+                                            onClick={() => {
+                                                if (item.competition_id) {
+                                                    navigate(`/competitions/${item.competition_id}`);
+                                                } else {
+                                                    navigate(`/competitions`);
+                                                }
+                                            }}
+                                            style={{ cursor: "pointer" }}
+                                        >
+                                            <div className="recent-main">
+                                                <div className="recent-icon">{item.icon}</div>
+                                                <div>
+                                                    <h3>{item.title}</h3>
+                                                    <p>{item.type}</p>
+                                                </div>
                                             </div>
-                                        </div>
 
-                                        <div>
-                                            <span className={`status-pill ${statusClass(item.status)}`}>
-                                                {item.status}
-                                            </span>
-                                        </div>
+                                            <div>
+                                                <span className={`status-pill ${statusClass(item.status)}`}>
+                                                    {item.status}
+                                                </span>
+                                            </div>
 
-                                        <div className="recent-score">{item.score}</div>
-                                        <div className="recent-sync">{item.sync}</div>
-                                    </div>
-                                ))}
+                                            <div className="recent-score">{item.score}</div>
+                                            <div className="recent-sync">{item.sync}</div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
+
                     </div>
                 </div>
             </div>
