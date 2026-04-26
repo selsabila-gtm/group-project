@@ -1,4 +1,4 @@
-from pydantic import BaseModel, HttpUrl, field_validator
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from datetime import datetime
 
@@ -27,17 +27,17 @@ class ExperienceUpdate(BaseModel):
 
 class ExperienceOut(ExperienceBase):
     id: int
-    user_id: int
+    user_id: str          # UUID from Supabase auth
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
 
-# ─── Profile update (fields on the users table) ───────────────────────────────
+# ─── Profile update (fields on the user_profiles table) ──────────────────────
 
 class ProfileUpdate(BaseModel):
     name: Optional[str] = None
-    avatar_url: Optional[str] = None
+    profile_picture: Optional[str] = None   # renamed from avatar_url
     bio: Optional[str] = None
     institution: Optional[str] = None
     skills: Optional[list[str]] = None
@@ -56,11 +56,11 @@ class ProfileUpdate(BaseModel):
 # ─── Full profile response ────────────────────────────────────────────────────
 
 class UserProfileOut(BaseModel):
-    id: int
+    id: str                          # UUID string
     username: Optional[str] = None
     email: Optional[str] = None
     name: Optional[str] = None
-    avatar_url: Optional[str] = None
+    profile_picture: Optional[str] = None   # renamed from avatar_url
     created_at: Optional[datetime] = None
     bio: Optional[str] = None
     institution: Optional[str] = None
