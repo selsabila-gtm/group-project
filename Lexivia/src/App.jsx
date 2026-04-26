@@ -1,141 +1,74 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import Dashboard from "./pages/Dashboard";
-import Competitions from "./pages/Competitions";
-import CreateCompetition from "./pages/CreateCompetition";
-import CompetitionDetails from "./pages/CompetitionDetails";
-
-import Sidebar from "./components/Sidebar";
-import Topbar from "./components/Topbar";
-import SearchResults from "./pages/SearchResults";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import Dashboard from "./pages/Dashboard";
+import Competitions from "./pages/Competitions";
+import TeamsPage from "./pages/Teams/TeamsPage";
+import TeamDetailPage from "./pages/Teams/TeamDetailPage";
+
+// Profile pages
+import ProfilePage from "./pages/profile/ProfilePage";
+import UpdateProfilePage from "./pages/profile/updateprofile";
+
+import "./App.css";
 import "./index.css";
 
-function SimplePage({ title, subtitle }) {
+export default function App() {
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#f7f8fc" }}>
-      <Sidebar />
-      <div style={{ flex: 1 }}>
-        <Topbar title={title} subtitle={subtitle} />
+    <BrowserRouter>
+      <Routes>
 
-        <div style={{ padding: "24px 22px" }}>
-          <div
-            style={{
-              background: "#eef3ff",
-              borderRadius: "18px",
-              padding: "24px",
-              color: "#19233c",
-              fontWeight: 700,
-            }}
-          >
-            {title} page is working.
-          </div>
+        {/* ✅ Redirect ROOT → /profile */}
+        <Route path="/" element={<Navigate to="/profile" replace />} />
+
+        {/* Public routes (still accessible if needed) */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+
+        {/* Main app routes */}
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/competitions" element={<Competitions />} />
+        <Route path="/teams" element={<TeamsPage />} />
+        <Route path="/teams/:teamId" element={<TeamDetailPage />} />
+
+        {/* ✅ Profile routes — specific routes MUST come before /:userId */}
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/update" element={<UpdateProfilePage />} />
+        <Route path="/profile/:userId" element={<ProfilePage />} />
+
+        {/* Optional placeholders */}
+        <Route path="/datasets" element={<PlaceholderPage title="Datasets" />} />
+        <Route path="/resources" element={<PlaceholderPage title="Resources" />} />
+        <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
+
+        {/* Catch-all → redirect to profile */}
+        <Route path="*" element={<Navigate to="/profile" replace />} />
+
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+// Placeholder Component
+function PlaceholderPage({ title }) {
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", background: "#f4f5f7" }}>
+      <div style={{ width: 220, background: "#1a1c20" }} />
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <h2>{title}</h2>
+          <p>This page is not yet implemented.</p>
         </div>
       </div>
     </div>
   );
 }
-
-function App() {
-
-  const isAuthenticated = () => {
-    return !!localStorage.getItem("token");
-  };
-
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* Landing */}
-        <Route path="/" element={<Landing />} />
-
-        {/* Auth */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-
-        {/* Protected */}
-        <Route
-          path="/dashboard"
-          element={
-            isAuthenticated() ? <Dashboard /> : <Navigate to="/login" replace />
-          }
-        />
-
-        <Route
-          path="/competitions"
-          element={
-            isAuthenticated() ? <Competitions /> : <Navigate to="/login" replace />
-          }
-        />
-
-        <Route
-          path="/create-competition"
-          element={
-            isAuthenticated() ? <CreateCompetition /> : <Navigate to="/login" replace />
-          }
-        />
-
-        <Route
-          path="/competitions/:competitionId"
-          element={
-            isAuthenticated() ? <CompetitionDetails /> : <Navigate to="/login" replace />
-          }
-        />
-
-        <Route
-          path="/search"
-          element={
-            isAuthenticated() ? <SearchResults /> : <Navigate to="/login" replace />
-          }
-        />
-
-        <Route
-          path="/profile"
-          element={
-            isAuthenticated() ? (
-              <SimplePage
-                title="Profile"
-                subtitle="Manage your researcher profile."
-              />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-
-        <Route
-          path="/settings"
-          element={
-            isAuthenticated() ? (
-              <SimplePage
-                title="Settings"
-                subtitle="Manage platform preferences."
-              />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-
-        <Route
-          path="/notifications"
-          element={
-            isAuthenticated() ? (
-              <SimplePage
-                title="Notifications"
-                subtitle="View your latest platform updates."
-              />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
-}
-export default App;
