@@ -2,16 +2,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
 import models
+
 from routes import router
+from user_profile.routes import router as profile_router
+from user_profile.routes import competitions_router
 
 app = FastAPI()
 
-# Create tables on startup
+# Create tables on startup (better practice)
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(bind=engine)
 
-# CORS for React (add production URL later)
+# CORS for React frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -23,7 +26,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include all routers
 app.include_router(router)
+app.include_router(profile_router)
+app.include_router(competitions_router)
 
 @app.get("/")
 def root():
