@@ -1,147 +1,158 @@
 import { useState } from "react"
 import Navbar from "../components/Navbar"
-import { Link, useNavigate } from "react-router-dom"
+import { Link } from "react-router-dom"   // ✅ ADD THIS
 
 export default function Login() {
-  const [form, setForm] = useState({ email: "", password: "" })
-  const navigate = useNavigate()
-  const [error, setError] = useState("")
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
-  }
+// ✅ correct state definitions
+const [form, setForm] = useState({ email: "", password: "" })
+const [error, setError] = useState("")   // ⚠️ FIXED
 
-  const handleLogin = async (e) => {
-    e.preventDefault()
-    setError("")
-    if (!form.email || !form.password) {
-      setError("Please fill all fields")
-      return
-    }
 
-    try {
-      const res = await fetch("http://127.0.0.1:8000/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: form.email,
-          password: form.password,
-        }),
-      })
+const handleChange = (e) => {
+setForm({ ...form, [e.target.name]: e.target.value })
+}
 
-      const data = await res.json()
+const handleLogin = async (e) => {
+e.preventDefault()
+setError("")
 
-if (!res.ok) {
-  if (data.detail?.toLowerCase().includes("confirm")) {
-    setError("Please verify your email before logging in.")
-  } else if (data.detail?.toLowerCase().includes("invalid")) {
-    setError("Invalid email or password.")
-  } else {
-    setError(data.detail || "Login failed")
-  }
+
+if (!form.email || !form.password) {
+  setError("Please fill all fields")
   return
 }
 
-// ✅ success
-localStorage.setItem("token", data.access_token)
-localStorage.setItem("user", JSON.stringify(data.user))
+try {
+  const res = await fetch("http://127.0.0.1:8000/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: form.email,
+      password: form.password,
+    }),
+  })
 
-navigate("/dashboard")
-    } catch (err) {
+  const data = await res.json()
+  console.log("LOGIN RESPONSE:", data)
+
+  if (!res.ok) {
+    if (data.detail?.toLowerCase().includes("confirm")) {
+      setError("Please verify your email before logging in.")
+    } else if (data.detail?.toLowerCase().includes("invalid")) {
+      setError("Invalid email or password.")
+    } else {
+      setError(data.detail || "Login failed")
+    }
+    return
+  }
+
+  // ✅ check token exists
+  if (!data.access_token) {
+    setError("Login failed: no token returned")
+    return
+  }
+
+  // ✅ save auth
+  localStorage.setItem("token", data.access_token)
+  localStorage.setItem("user", JSON.stringify(data.user))
+
+  // ✅ redirect (force refresh)
+  window.location.href = "/profile"
+
+} catch (err) {
   console.error(err)
   setError("Server is not responding. Please try again later.")
 }
-  }
 
-  return (
-    <div style={{ minHeight: '100vh', background: '#f6f7fb', fontFamily: 'Inter, Arial, sans-serif', display: 'flex', flexDirection: 'column' }}>
-      <Navbar />
 
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '60px 20px',
+}
+
+return (
+<div style={{
+minHeight: '100vh',
+background: '#f6f7fb',
+fontFamily: 'Inter, Arial, sans-serif',
+display: 'flex',
+flexDirection: 'column'
+}}> <Navbar />
+
+
+  <div style={{
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '60px 20px',
+  }}>
+    <div style={{
+      background: '#fff',
+      borderRadius: '16px',
+      padding: '48px',
+      width: '100%',
+      maxWidth: '420px',
+      boxShadow: '0 4px 40px rgba(0,0,0,0.06)',
+      border: '1px solid #e8eaf2',
+    }}>
+
+      <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+        <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#0d0e14', margin: '0 0 4px' }}>
+          Precision Architect
+        </h1>
+        <p style={{ fontSize: '11px', color: '#8892a4', margin: 0 }}>
+          AUTHENTICATION PROTOCOL v4.0
+        </p>
+      </div>
+
+      <form onSubmit={handleLogin} style={{
+        background: '#f6f7fb',
+        borderRadius: '12px',
+        padding: '28px',
+        border: '1px solid #e8eaf2',
       }}>
-        <div style={{
-          background: '#fff',
-          borderRadius: '16px',
-          padding: '48px',
-          width: '100%',
-          maxWidth: '420px',
-          boxShadow: '0 4px 40px rgba(0,0,0,0.06)',
-          border: '1px solid #e8eaf2',
-        }}>
 
-          {/* Header */}
-          <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-            <h1 style={{
-              fontSize: '26px',
-              fontWeight: 700,
-              color: '#0d0e14',
-              margin: '0 0 4px',
-            }}>Precision Architect</h1>
-            <p style={{ fontSize: '11px', color: '#8892a4', margin: 0 }}>
-              AUTHENTICATION PROTOCOL v4.0
-            </p>
-          </div>
-
-          {/* ✅ FORM STARTS HERE */}
-          <form
-            onSubmit={handleLogin}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ fontSize: '11px', color: '#8892a4' }}>
+            EMAIL ADDRESS
+          </label>
+          <input
+            name="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            placeholder="researcher@precision.arch"
             style={{
-              background: '#f6f7fb',
-              borderRadius: '12px',
-              padding: '28px',
-              border: '1px solid #e8eaf2',
+              width: '100%',
+              padding: '10px',
+              borderRadius: '8px',
+              border: '1px solid #d6dae8',
+              marginTop: '6px',
+              boxSizing: 'border-box',
             }}
-          >
+          />
+        </div>
 
-            {/* Email */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '11px', color: '#8892a4' }}>
-                EMAIL ADDRESS
-              </label>
-              <input
-                name="email"
-                type="email"
-                value={form.email}
-                onChange={handleChange}
-                placeholder="researcher@precision.arch"
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  borderRadius: '8px',
-                  border: '1px solid #d6dae8',
-                  marginTop: '6px'
-                }}
-              />
-            </div>
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ fontSize: '11px', color: '#8892a4' }}>
+            PASSWORD
+          </label>
+          <input
+            name="password"
+            type="password"
+            value={form.password}
+            onChange={handleChange}
+            placeholder="••••••••"
+            style={{
+              width: '100%',
+              padding: '10px',
+              borderRadius: '8px',
+              border: '1px solid #d6dae8',
+              marginTop: '6px',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
 
-            {/* Password */}
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ fontSize: '11px', color: '#8892a4' }}>
-                PASSWORD
-              </label>
-              <input
-                name="password"
-                type="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="••••••••"
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  borderRadius: '8px',
-                  border: '1px solid #d6dae8',
-                  marginTop: '6px'
-                }}
-              />
-            </div>
-            {error && (
-
+        {error && (
           <div style={{
             background: "#ffe5e5",
             color: "#d8000c",
@@ -149,38 +160,40 @@ navigate("/dashboard")
             borderRadius: "6px",
             marginBottom: "12px",
             fontSize: "13px",
-            textAlign: "center"
-            }}>
+            textAlign: "center",
+          }}>
             {error}
-           </div>
-            )}
-            {/* Button */}
-            <button
-              type="submit"
-              style={{
-                width: '100%',
-                padding: '13px',
-                background: '#1a2fff',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Initialize Login →
-            </button>
+          </div>
+        )}
 
-            <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '16px' }}>
-              New Investigator?{" "}
-              <Link to="/signup">Sign Up</Link>
-            </p>
+        <button type="submit" style={{
+          width: '100%',
+          padding: '13px',
+          background: '#1a2fff',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '8px',
+          fontWeight: 600,
+          cursor: 'pointer',
+        }}>
+          Initialize Login →
+        </button>
 
-          </form>
-          {/* ✅ FORM ENDS HERE */}
+        <p style={{
+          textAlign: 'center',
+          fontSize: '13px',
+          marginTop: '16px'
+        }}>
+          New Investigator?{" "}
+          <Link to="/signup">Sign Up</Link>
+        </p>
 
-        </div>
-      </div>
+      </form>
     </div>
-  )
+  </div>
+</div>
+
+
+)
+
 }

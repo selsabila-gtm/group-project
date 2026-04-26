@@ -31,10 +31,16 @@ def sync_user(data: dict, db: Session = Depends(get_db)):
 
 @router.post("/signup")
 def signup(user: UserCreate, db: Session = Depends(get_db)):
+    # 1. Create the user in Supabase auth
     try:
         response = supabase.auth.sign_up({
             "email": user.email,
-            "password": user.password
+            "password": user.password,
+            "options": {
+                "data": {
+                    "full_name": user.full_name,
+                }
+            }
         })
     except AuthApiError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -44,21 +50,42 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
     user_id = response.user.id
 
+    # 2. Save to user_profiles table in your local DB
     existing = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
     if not existing:
         db_user = UserProfile(
             user_id=user_id,
             full_name=user.full_name,
-            email=user.email,
         )
         db.add(db_user)
         db.commit()
 
-    return {"message": "User created successfully", "user": response.user}
+    # 3. Upsert into Supabase user_profiles table (correct column names)
+    supabase.table("user_profiles").upsert({
+        "user_id": user_id,        # primary key column
+        "full_name": user.full_name,  # correct column name (not "name")
+    }).execute()
+
+    # 4. Log the user in immediately so they get a token
+    try:
+        login_response = supabase.auth.sign_in_with_password({
+            "email": user.email,
+            "password": user.password,
+        })
+    except AuthApiError:
+        return {"message": "Signup successful. Please confirm your email then log in."}
+
+    if not login_response.session:
+        return {"message": "Signup successful. Please confirm your email then log in."}
+
+    return {
+        "access_token": login_response.session.access_token,
+        "user": login_response.user,
+    }
 
 
 @router.post("/login")
-def login(user: UserLogin):
+def login(user: UserLogin, db: Session = Depends(get_db)):
     try:
         response = supabase.auth.sign_in_with_password({
             "email": user.email,
@@ -67,8 +94,26 @@ def login(user: UserLogin):
     except AuthApiError:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    if response.user and not response.session:
-        raise HTTPException(status_code=401, detail="Email not confirmed")
+    if not response.user or not response.session:
+        raise HTTPException(status_code=401, detail="Please confirm your email before logging in.")
+
+    user_id = response.user.id
+
+    # Ensure user_profiles row exists in local DB
+    existing = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    if not existing:
+        db_user = UserProfile(
+            user_id=user_id,
+            full_name=response.user.user_metadata.get("full_name", ""),
+        )
+        db.add(db_user)
+        db.commit()
+
+    # Upsert into Supabase user_profiles table (correct column names)
+    supabase.table("user_profiles").upsert({
+        "user_id": user_id,        # primary key column
+        "full_name": response.user.user_metadata.get("full_name", ""),  # correct column name
+    }).execute()
 
     return {
         "access_token": response.session.access_token,
