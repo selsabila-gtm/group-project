@@ -488,6 +488,51 @@ def get_competitions_count(
     return {"count": query.count()}
 
 
+@router.get("/competitions/{competition_id}/monitoring")
+def get_competition_monitoring(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    competition = db.query(Competition).filter(
+        Competition.id == competition_id,
+        Competition.is_draft == False,
+    ).first()
+
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    organizer = db.query(CompetitionOrganizer).filter(
+        CompetitionOrganizer.competition_id == competition_id,
+        CompetitionOrganizer.user_id == current_user.id,
+    ).first()
+
+    is_organizer = organizer is not None
+
+    participants_count = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.competition_id == competition_id
+    ).count()
+
+    datasets = []
+    if competition.datasets_json:
+        try:
+            datasets = json.loads(competition.datasets_json)
+        except Exception:
+            datasets = []
+
+    return {
+        "is_organizer": is_organizer,
+        "participants_count": participants_count,
+        "teams_count": participants_count,
+        "max_teams": competition.max_teams,
+        "datasets_count": len(datasets),
+        "data_collection_status": "Configured" if len(datasets) > 0 else "Not configured",
+        "submissions_count": 0,
+        "best_score": "Pending",
+        "primary_metric": competition.primary_metric or "Not selected",
+        "leaderboard_status": "Waiting for submissions",
+    }
+
 @router.get("/competitions/{competition_id}")
 def get_competition_details(
     competition_id: str,
@@ -522,6 +567,7 @@ def get_dashboard_stats(user_id: str, db: Session = Depends(get_db)):
 
 @router.get("/dashboard/recent/{user_id}")
 def get_recent_competitions(user_id: str, db: Session = Depends(get_db)):
+    
     return (
         db.query(RecentCompetition)
         .filter(RecentCompetition.user_id == user_id)
