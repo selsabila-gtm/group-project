@@ -1,8 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from supabase_client import supabase
-
-def get_current_user():
-    return {"id": 1}
+from .auth import get_current_user
 
 from .schemas import (
     ProfileUpdate,
@@ -16,18 +14,25 @@ from .schemas import (
 router = APIRouter(prefix="/profile", tags=["profile"])
 competitions_router = APIRouter(prefix="/competitions", tags=["competitions"])
 
-def _require_own_profile(user_id: int, current_user: dict):
+
+def _require_own_profile(user_id: str, current_user: dict):
+    """Only the authenticated user may modify their own profile."""
     if current_user["id"] != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only modify your own profile.",
         )
 
-def _get_user_or_404(user_id: int) -> dict:
+
+def _get_profile_or_404(user_id: str) -> dict:
+    """
+    Fetch from user_profiles (custom table).
+    Joins against Supabase's built-in auth.users for username / email.
+    """
     res = (
-        supabase.table("users")
+        supabase.table("user_profiles")
         .select(
-            "id, username, email, name, avatar_url, created_at, "
+            "id, name, profile_picture, created_at, "
             "bio, institution, skills, linkedin_url, github_url, website_url"
         )
         .eq("id", user_id)
@@ -35,10 +40,25 @@ def _get_user_or_404(user_id: int) -> dict:
         .execute()
     )
     if not res.data:
-        raise HTTPException(status_code=404, detail="User not found.")
-    return res.data
+        raise HTTPException(status_code=404, detail="User profile not found.")
 
-def _get_experiences(user_id: int):
+    profile = res.data
+
+    # Pull username + email from the built-in auth.users table via admin API
+    try:
+        auth_user = supabase.auth.admin.get_user_by_id(user_id)
+        if auth_user and auth_user.user:
+            profile["username"] = auth_user.user.user_metadata.get("username") or auth_user.user.email
+            profile["email"] = auth_user.user.email
+    except Exception:
+        # Non-fatal — username/email just won't be present
+        profile.setdefault("username", None)
+        profile.setdefault("email", None)
+
+    return profile
+
+
+def _get_experiences(user_id: str):
     res = (
         supabase.table("user_experiences")
         .select(
@@ -50,42 +70,99 @@ def _get_experiences(user_id: int):
     )
     return res.data or []
 
+
+# ─── Profile endpoints ────────────────────────────────────────────────────────
+
+@router.get("/me", response_model=UserProfileOut)
+def get_my_profile(current_user: dict = Depends(get_current_user)):
+    """Returns the profile of the currently authenticated user."""
+    user_id = current_user["id"]
+    profile = _get_profile_or_404(user_id)
+    profile["experiences"] = _get_experiences(user_id)
+    return profile
+
+
 @router.get("/{user_id}", response_model=UserProfileOut)
-def get_profile(user_id: int):
-    user = _get_user_or_404(user_id)
-    user["experiences"] = _get_experiences(user_id)
-    return user
+def get_profile(user_id: str):
+    """Returns any user's public profile by their UUID."""
+    profile = _get_profile_or_404(user_id)
+    profile["experiences"] = _get_experiences(user_id)
+    return profile
+
+
+@router.put("/me", response_model=UserProfileOut)
+def update_my_profile(
+    payload: ProfileUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Updates the authenticated user's own profile."""
+    user_id = current_user["id"]
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields provided")
+
+    # Upsert so a profile row is created automatically on first edit
+    supabase.table("user_profiles").upsert({"id": user_id, **updates}).execute()
+
+    updated = _get_profile_or_404(user_id)
+    updated["experiences"] = _get_experiences(user_id)
+    return updated
+
 
 @router.put("/{user_id}", response_model=UserProfileOut)
-def update_profile(user_id: int, payload: ProfileUpdate, current_user: dict = Depends(get_current_user)):
+def update_profile(
+    user_id: str,
+    payload: ProfileUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Updates a profile by UUID — must be the authenticated user's own profile."""
     _require_own_profile(user_id, current_user)
 
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields provided")
 
-    supabase.table("users").update(updates).eq("id", user_id).execute()
+    supabase.table("user_profiles").upsert({"id": user_id, **updates}).execute()
 
-    updated = _get_user_or_404(user_id)
+    updated = _get_profile_or_404(user_id)
     updated["experiences"] = _get_experiences(user_id)
     return updated
 
-@router.post("/{user_id}/experience", response_model=ExperienceOut)
-def add_experience(user_id: int, payload: ExperienceCreate, current_user: dict = Depends(get_current_user)):
-    _require_own_profile(user_id, current_user)
 
+# ─── Experience endpoints ─────────────────────────────────────────────────────
+
+@router.post("/me/experience", response_model=ExperienceOut)
+def add_experience(
+    payload: ExperienceCreate,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = current_user["id"]
     row = {"user_id": user_id, **payload.model_dump()}
-
     res = supabase.table("user_experiences").insert(row).execute()
-
     if not res.data:
         raise HTTPException(status_code=500, detail="Insert failed")
-
     return res.data[0]
 
-@router.put("/{user_id}/experience/{exp_id}", response_model=ExperienceOut)
-def update_experience(user_id: int, exp_id: int, payload: ExperienceUpdate, current_user: dict = Depends(get_current_user)):
-    _require_own_profile(user_id, current_user)
+
+@router.put("/me/experience/{exp_id}", response_model=ExperienceOut)
+def update_experience(
+    exp_id: int,
+    payload: ExperienceUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = current_user["id"]
+
+    # Verify the experience belongs to this user
+    check = (
+        supabase.table("user_experiences")
+        .select("user_id")
+        .eq("id", exp_id)
+        .maybe_single()
+        .execute()
+    )
+    if not check.data or check.data["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not your experience entry.")
 
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
@@ -97,58 +174,52 @@ def update_experience(user_id: int, exp_id: int, payload: ExperienceUpdate, curr
         .eq("id", exp_id)
         .execute()
     )
-
     if not res.data:
         raise HTTPException(status_code=500, detail="Update failed")
-
     return res.data[0]
 
-@router.delete("/{user_id}/experience/{exp_id}")
-def delete_experience(user_id: int, exp_id: int, current_user: dict = Depends(get_current_user)):
-    _require_own_profile(user_id, current_user)
+
+@router.delete("/me/experience/{exp_id}")
+def delete_experience(
+    exp_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = current_user["id"]
+
+    # Verify ownership before deleting
+    check = (
+        supabase.table("user_experiences")
+        .select("user_id")
+        .eq("id", exp_id)
+        .maybe_single()
+        .execute()
+    )
+    if not check.data or check.data["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not your experience entry.")
 
     supabase.table("user_experiences").delete().eq("id", exp_id).execute()
-
     return {"message": "Deleted successfully"}
 
 
 # ─── Competition endpoints (read-only, auto-populated) ────────────────────────
 
 @competitions_router.get("/organizer/{user_id}")
-def get_organized_competitions(user_id: int):
-    """
-    Returns all competitions where this user is listed as an organizer.
-    Joins competition_organizers → competitions to get competition details.
-    """
+def get_organized_competitions(user_id: str):
     res = (
         supabase.table("competition_organizers")
         .select("competition_id, competitions(id, title)")
         .eq("user_id", user_id)
         .execute()
     )
-    competitions = []
-    for row in (res.data or []):
-        comp = row.get("competitions")
-        if comp:
-            competitions.append(comp)
-    return competitions
+    return [row["competitions"] for row in (res.data or []) if row.get("competitions")]
 
 
 @competitions_router.get("/participant/{user_id}")
-def get_participated_competitions(user_id: int):
-    """
-    Returns all competitions where this user is listed as a participant.
-    Joins competition_participants → competitions to get competition details.
-    """
+def get_participated_competitions(user_id: str):
     res = (
         supabase.table("competition_participants")
         .select("competition_id, competitions(id, title)")
         .eq("user_id", user_id)
         .execute()
     )
-    competitions = []
-    for row in (res.data or []):
-        comp = row.get("competitions")
-        if comp:
-            competitions.append(comp)
-    return competitions
+    return [row["competitions"] for row in (res.data or []) if row.get("competitions")]

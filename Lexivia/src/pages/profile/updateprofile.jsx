@@ -1,20 +1,21 @@
 /**
- * UpdateProfilePage.jsx  —  Edit your profile
+ * UpdateProfilePage.jsx  —  Edit your own profile
  *
- * Route:  /profile/update
+ * Route:  /profile/update  (protected — redirects to /login if not authenticated)
  *
- * 🔐 AUTH TODO: Replace TEST_USER_ID with real auth context when ready.
+ * Auth:   Reads the logged-in user from Supabase and passes the JWT token
+ *         in every API request so the backend can verify identity.
  */
 
 import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+
 import Sidebar from '../../components/Sidebar'
 import '../../styles/updateprofile.css'
-
+import { supabase } from '../../config/supabase'
 const API = 'http://localhost:8000'
 
-// ─── Hardcoded for testing ─────────────────────────────────────────────────────
-const TEST_USER_ID = 1
+
 
 // ─── Predefined skills ────────────────────────────────────────────────────────
 const PREDEFINED_SKILLS = [
@@ -44,56 +45,90 @@ const EMPTY_EXP = { title: '', organization: '', start_year: '', end_year: '', d
 export default function UpdateProfilePage() {
   const navigate = useNavigate()
 
-  // 🔐 Replace TEST_USER_ID with currentUser?.id from auth context when ready
-  const USER_ID = TEST_USER_ID
+  // ── Auth state ───────────────────────────────────────────────────────────────
+  const [authToken, setAuthToken] = useState(null)   // JWT access token
+  const [authReady, setAuthReady] = useState(false)  // true once session is resolved
 
+  // ── UI state ─────────────────────────────────────────────────────────────────
   const [loading, setLoading]    = useState(true)
   const [saving, setSaving]      = useState(false)
   const [successMsg, setSuccess] = useState('')
   const [errorMsg, setErrorMsg]  = useState('')
 
-  // ── form state ──────────────────────────────────────────────────────────────
-  const [name, setName]               = useState('')
-  const [avatarUrl, setAvatarUrl]     = useState('')
-  const [avatarPreview, setAvatarPreview] = useState('')
-  const [bio, setBio]                 = useState('')
-  const [institution, setInstitution] = useState('')
-  const [skills, setSkills]           = useState([])
-  const [linkedinUrl, setLinkedin]    = useState('')
-  const [githubUrl, setGithub]        = useState('')
-  const [websiteUrl, setWebsite]      = useState('')
-  const [experiences, setExperiences] = useState([])
+  // ── Form state ───────────────────────────────────────────────────────────────
+  const [name, setName]                     = useState('')
+  const [profilePicture, setProfilePicture] = useState('')   // renamed from avatarUrl
+  const [picturePreview, setPicturePreview] = useState('')   // renamed from avatarPreview
+  const [bio, setBio]                       = useState('')
+  const [institution, setInstitution]       = useState('')
+  const [skills, setSkills]                 = useState([])
+  const [linkedinUrl, setLinkedin]          = useState('')
+  const [githubUrl, setGithub]              = useState('')
+  const [websiteUrl, setWebsite]            = useState('')
+  const [experiences, setExperiences]       = useState([])
 
-  // ── competitions (read-only, auto-populated) ─────────────────────────────────
-  const [organizedComps, setOrganizedComps]     = useState([])
+  // ── Competitions (read-only) ─────────────────────────────────────────────────
+  const [organizedComps, setOrganizedComps]       = useState([])
   const [participatedComps, setParticipatedComps] = useState([])
 
-  // ── experience form state ────────────────────────────────────────────────────
+  // ── Experience form state ────────────────────────────────────────────────────
   const [showExpForm, setShowExpForm]   = useState(false)
   const [editingExpId, setEditingExpId] = useState(null)
   const [expForm, setExpForm]           = useState(EMPTY_EXP)
   const [expSaving, setExpSaving]       = useState(false)
   const [expError, setExpError]         = useState('')
 
-  // ── skills input state ───────────────────────────────────────────────────────
+  // ── Skills input state ───────────────────────────────────────────────────────
   const [skillInput, setSkillInput]       = useState('')
   const [skillDropdown, setSkillDropdown] = useState(false)
   const skillRef = useRef(null)
   const fileRef  = useRef(null)
 
-  // ── load data ────────────────────────────────────────────────────────────────
+  // ── Helper: get auth headers ─────────────────────────────────────────────────
+  function authHeaders(extra = {}) {
+    return {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...extra,
+    }
+  }
+
+  // ── 1. Resolve auth session ──────────────────────────────────────────────────
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        // Not logged in — redirect to login
+        navigate('/login')
+        return
+      }
+      setAuthToken(session.access_token)
+      setAuthReady(true)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthToken(session?.access_token ?? null)
+      if (!session) navigate('/login')
+    })
+    return () => subscription.unsubscribe()
+  }, [navigate])
+
+  // ── 2. Load profile data once auth is ready ──────────────────────────────────
+  useEffect(() => {
+    if (!authReady) return
+
     async function loadAll() {
       setLoading(true)
       try {
-        // Profile + experiences
-        const profileRes = await fetch(`${API}/profile/${USER_ID}`)
+        // /profile/me uses the JWT to return the logged-in user's data
+        const profileRes = await fetch(`${API}/profile/me`, {
+          headers: authHeaders(),
+        })
         if (!profileRes.ok) throw new Error(`Server error: ${profileRes.status}`)
         const data = await profileRes.json()
 
         setName(data.name || '')
-        setAvatarUrl(data.avatar_url || '')
-        setAvatarPreview(data.avatar_url || '')
+        setProfilePicture(data.profile_picture || '')   // ← was data.avatar_url
+        setPicturePreview(data.profile_picture || '')
         setBio(data.bio || '')
         setInstitution(data.institution || '')
         setSkills(data.skills || [])
@@ -102,18 +137,16 @@ export default function UpdateProfilePage() {
         setWebsite(data.website_url || '')
         setExperiences(data.experiences || [])
 
-        // Organized competitions
-        const orgRes = await fetch(`${API}/competitions/organizer/${USER_ID}`)
-        if (orgRes.ok) {
-          const orgData = await orgRes.json()
-          setOrganizedComps(orgData || [])
-        }
-
-        // Participated competitions
-        const partRes = await fetch(`${API}/competitions/participant/${USER_ID}`)
-        if (partRes.ok) {
-          const partData = await partRes.json()
-          setParticipatedComps(partData || [])
+        // Competitions — public endpoints, no token needed
+        const session = await supabase.auth.getSession()
+        const userId  = session.data.session?.user?.id
+        if (userId) {
+          const [orgRes, partRes] = await Promise.all([
+            fetch(`${API}/competitions/organizer/${userId}`),
+            fetch(`${API}/competitions/participant/${userId}`),
+          ])
+          if (orgRes.ok)  setOrganizedComps(await orgRes.json())
+          if (partRes.ok) setParticipatedComps(await partRes.json())
         }
       } catch (err) {
         console.error('[UpdateProfilePage] load:', err)
@@ -122,10 +155,12 @@ export default function UpdateProfilePage() {
         setLoading(false)
       }
     }
-    loadAll()
-  }, [USER_ID])
 
-  // ── close skills dropdown on outside click ───────────────────────────────────
+    loadAll()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authReady])
+
+  // ── Close skills dropdown on outside click ───────────────────────────────────
   useEffect(() => {
     function handleClick(e) {
       if (skillRef.current && !skillRef.current.contains(e.target)) {
@@ -136,16 +171,14 @@ export default function UpdateProfilePage() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // ── skills helpers ───────────────────────────────────────────────────────────
+  // ── Skills helpers ───────────────────────────────────────────────────────────
   const suggestions = PREDEFINED_SKILLS.filter(
     s => s.toLowerCase().includes(skillInput.toLowerCase()) && !skills.includes(s)
   )
 
   function addSkill(s) {
     const trimmed = s.trim()
-    if (trimmed && !skills.includes(trimmed)) {
-      setSkills(prev => [...prev, trimmed])
-    }
+    if (trimmed && !skills.includes(trimmed)) setSkills(prev => [...prev, trimmed])
     setSkillInput('')
     setSkillDropdown(false)
   }
@@ -154,36 +187,36 @@ export default function UpdateProfilePage() {
     setSkills(prev => prev.filter(x => x !== s))
   }
 
-  // ── avatar preview ───────────────────────────────────────────────────────────
-  function handleAvatarFile(e) {
+  // ── Profile picture preview ──────────────────────────────────────────────────
+  function handlePictureFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
     reader.onload = ev => {
-      setAvatarPreview(ev.target.result)
-      setAvatarUrl(ev.target.result)
+      setPicturePreview(ev.target.result)
+      setProfilePicture(ev.target.result)
     }
     reader.readAsDataURL(file)
   }
 
-  // ── save profile ─────────────────────────────────────────────────────────────
+  // ── Save profile ─────────────────────────────────────────────────────────────
   async function handleSave() {
     setSaving(true)
     setSuccess('')
     setErrorMsg('')
     try {
-      const res = await fetch(`${API}/profile/${USER_ID}`, {
+      const res = await fetch(`${API}/profile/me`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
           name,
-          avatar_url: avatarUrl,
+          profile_picture: profilePicture,   // ← was avatar_url
           bio,
           institution,
           skills,
           linkedin_url: linkedinUrl,
-          github_url: githubUrl,
-          website_url: websiteUrl,
+          github_url:   githubUrl,
+          website_url:  websiteUrl,
         }),
       })
       if (!res.ok) {
@@ -200,7 +233,7 @@ export default function UpdateProfilePage() {
     }
   }
 
-  // ── experience helpers ───────────────────────────────────────────────────────
+  // ── Experience helpers ───────────────────────────────────────────────────────
   function startEditExp(exp) {
     setEditingExpId(exp.id)
     setExpForm({
@@ -239,15 +272,15 @@ export default function UpdateProfilePage() {
     try {
       let res
       if (editingExpId) {
-        res = await fetch(`${API}/profile/${USER_ID}/experience/${editingExpId}`, {
+        res = await fetch(`${API}/profile/me/experience/${editingExpId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(),
           body: JSON.stringify(body),
         })
       } else {
-        res = await fetch(`${API}/profile/${USER_ID}/experience`, {
+        res = await fetch(`${API}/profile/me/experience`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(),
           body: JSON.stringify(body),
         })
       }
@@ -273,8 +306,9 @@ export default function UpdateProfilePage() {
 
   async function removeExp(expId) {
     try {
-      const res = await fetch(`${API}/profile/${USER_ID}/experience/${expId}`, {
+      const res = await fetch(`${API}/profile/me/experience/${expId}`, {
         method: 'DELETE',
+        headers: authHeaders(),
       })
       if (!res.ok) throw new Error('Delete failed')
       setExperiences(prev => prev.filter(e => e.id !== expId))
@@ -284,8 +318,8 @@ export default function UpdateProfilePage() {
     }
   }
 
-  // ── render ───────────────────────────────────────────────────────────────────
-  if (loading) return (
+  // ── Render ───────────────────────────────────────────────────────────────────
+  if (!authReady || loading) return (
     <div className="p-shell">
       <Sidebar />
       <div className="p-content p-center">
@@ -321,10 +355,10 @@ export default function UpdateProfilePage() {
           <h2 className="ps-section-title">Basic Information</h2>
           <div className="ps-basic-grid">
 
-            {/* Avatar */}
+            {/* Profile picture */}
             <div className="ps-avatar-wrap">
-              {avatarPreview ? (
-                <img src={avatarPreview} alt="avatar" className="p-avatar p-avatar--xl" />
+              {picturePreview ? (
+                <img src={picturePreview} alt="profile" className="p-avatar p-avatar--xl" />
               ) : (
                 <div className="p-avatar p-avatar--xl p-avatar--ph">
                   {name?.charAt(0)?.toUpperCase() || '?'}
@@ -342,7 +376,7 @@ export default function UpdateProfilePage() {
                 type="file"
                 accept="image/*"
                 hidden
-                onChange={handleAvatarFile}
+                onChange={handlePictureFile}
               />
             </div>
 
@@ -452,7 +486,7 @@ export default function UpdateProfilePage() {
                 onChange={e => { setSkillInput(e.target.value); setSkillDropdown(true) }}
                 onFocus={() => setSkillDropdown(true)}
                 onKeyDown={e => {
-                  if (e.key === 'Enter') { e.preventDefault(); addSkill(skillInput) }
+                  if (e.key === 'Enter')  { e.preventDefault(); addSkill(skillInput) }
                   if (e.key === 'Escape') setSkillDropdown(false)
                 }}
               />
@@ -472,8 +506,8 @@ export default function UpdateProfilePage() {
                 </ul>
               )}
             </div>
-            <p className="p-hint">Press Enter or select from suggestions.</p>
           </div>
+          <p className="p-hint">Press Enter or select from suggestions.</p>
         </section>
 
         {/* ── Experience ── */}
@@ -615,7 +649,6 @@ export default function UpdateProfilePage() {
         <section className="ps-section">
           <h2 className="ps-section-title">Competitions</h2>
 
-          {/* Organized */}
           {organizedComps.length > 0 && (
             <>
               <h3 className="ps-section-title" style={{ fontSize: '14px', marginBottom: '10px' }}>
@@ -635,7 +668,6 @@ export default function UpdateProfilePage() {
             </>
           )}
 
-          {/* Participated */}
           {participatedComps.length > 0 && (
             <>
               <h3 className="ps-section-title" style={{ fontSize: '14px', marginBottom: '10px' }}>
