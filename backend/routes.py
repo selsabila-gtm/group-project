@@ -347,6 +347,7 @@ def create_competition(
 
     recent = RecentCompetition(
         user_id = current_user.id,
+        competition_id = competition.id,
         title=competition.title,
         type=competition.category,
         status=competition.status,
@@ -412,13 +413,14 @@ def join_competition(
     db.add(participant)
 
     recent = RecentCompetition(
-        user_id = current_user.id,
-        title=competition.title,
-        type=competition.category,
-        status="IN PROGRESS",
-        score="--",
-        sync="Just now",
-        icon=get_icon_for_task(competition.task_type),
+    competition_id=competition.id,
+    user_id=current_user.id,
+    title=competition.title,
+    type=competition.category,
+    status="IN PROGRESS",
+    score="--",
+    sync="Just now",
+    icon=get_icon_for_task(competition.task_type),
     )
     db.add(recent)
 
@@ -436,3 +438,94 @@ def join_competition(
     db.commit()
 
     return {"message": "Joined competition successfully"}
+@router.get("/competitions")
+def get_competitions(
+    limit: int = 20,
+    offset: int = 0,
+    search: str | None = None,
+    category: str | None = None,
+    status: str | None = None,
+    tab: str = "all",
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    query = db.query(Competition).filter(Competition.is_draft == False)
+
+    query = apply_competition_filters(
+        query=query,
+        db=db,
+        search=search,
+        category=category,
+        status=status,
+        tab=tab,
+        current_user=current_user,
+    )
+
+    return query.offset(offset).limit(limit).all()
+
+
+@router.get("/competitions/count")
+def get_competitions_count(
+    search: str | None = None,
+    category: str | None = None,
+    status: str | None = None,
+    tab: str = "all",
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    query = db.query(Competition).filter(Competition.is_draft == False)
+
+    query = apply_competition_filters(
+        query=query,
+        db=db,
+        search=search,
+        category=category,
+        status=status,
+        tab=tab,
+        current_user=current_user,
+    )
+
+    return {"count": query.count()}
+
+
+@router.get("/competitions/{competition_id}")
+def get_competition_details(
+    competition_id: str,
+    db: Session = Depends(get_db),
+):
+    competition = db.query(Competition).filter(
+        Competition.id == competition_id,
+        Competition.is_draft == False,
+    ).first()
+
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    return competition
+
+@router.get("/dashboard/stats/{user_id}")
+def get_dashboard_stats(user_id: str, db: Session = Depends(get_db)):
+    total_competitions = db.query(CompetitionOrganizer).filter(
+        CompetitionOrganizer.user_id == user_id
+    ).count()
+
+    teams_joined = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.user_id == user_id
+    ).count()
+
+    return {
+        "user_id": user_id,
+        "total_competitions": total_competitions,
+        "teams_joined": teams_joined,
+    }
+
+
+@router.get("/dashboard/recent/{user_id}")
+def get_recent_competitions(user_id: str, db: Session = Depends(get_db)):
+    return (
+        db.query(RecentCompetition)
+        .filter(RecentCompetition.user_id == user_id)
+        .order_by(RecentCompetition.id.desc())
+        .limit(10)
+        .all()
+    )

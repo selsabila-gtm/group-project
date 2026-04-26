@@ -98,7 +98,13 @@ function Competitions() {
 
         setLoading(true);
 
-        fetch(`http://127.0.0.1:8000/competitions?${params.toString()}`)
+        const token = localStorage.getItem("token");
+
+        fetch(`http://127.0.0.1:8000/competitions?${params.toString()}`, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        })
             .then((res) => res.json())
             .then((data) => {
                 const safeData = Array.isArray(data) ? data : [];
@@ -128,7 +134,13 @@ function Competitions() {
         if (search) params.append("search", search);
         if (category !== "ALL TASKS") params.append("category", category);
 
-        fetch(`http://127.0.0.1:8000/competitions/count?${params.toString()}`)
+        const token = localStorage.getItem("token");
+
+        fetch(`http://127.0.0.1:8000/competitions/count?${params.toString()}`, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        })
             .then((res) => res.json())
             .then((data) => setTotalCount(data.count || 0))
             .catch((err) => {
