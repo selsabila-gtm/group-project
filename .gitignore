@@ -1,0 +1,28 @@
+# 🔐 Secrets
+.env
+.env.*
+
+# 🐍 Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+.venv/
+
+# 🧠 FastAPI / logs
+*.log
+
+# 🟢 Node / React
+node_modules/
+dist/
+build/
+
+# 🧾 OS files
+.DS_Store
+Thumbs.db
+
+# 🧪 IDE
+.vscode/
+.idea/
