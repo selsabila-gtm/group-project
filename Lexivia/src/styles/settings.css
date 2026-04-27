@@ -199,3 +199,6 @@
 .settings-btn-save.saved {
   background: #16a34a;
 }
+.settings-layout {
+  display: flex;
+}

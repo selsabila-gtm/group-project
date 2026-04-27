@@ -126,7 +126,7 @@ export default function UpdateProfilePage() {
         if (!profileRes.ok) throw new Error(`Server error: ${profileRes.status}`)
         const data = await profileRes.json()
 
-        setName(data.name || '')
+        setName(data.full_name || data.name || '')
         setProfilePicture(data.profile_picture || '')   // ← was data.avatar_url
         setPicturePreview(data.profile_picture || '')
         setBio(data.bio || '')
@@ -209,7 +209,7 @@ export default function UpdateProfilePage() {
         method: 'PUT',
         headers: authHeaders(),
         body: JSON.stringify({
-          name,
+          full_name: name,
           profile_picture: profilePicture,   // ← was avatar_url
           bio,
           institution,

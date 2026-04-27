@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from supabase_client import supabase
-from .auth import get_current_user
 
+from routes.utils import get_current_user
 from .schemas import (
     ProfileUpdate,
     ExperienceCreate,
@@ -17,7 +17,7 @@ competitions_router = APIRouter(prefix="/competitions", tags=["competitions"])
 
 def _require_own_profile(user_id: str, current_user: dict):
     """Only the authenticated user may modify their own profile."""
-    if current_user["id"] != user_id:
+    if current_user.id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only modify your own profile.",
@@ -25,17 +25,13 @@ def _require_own_profile(user_id: str, current_user: dict):
 
 
 def _get_profile_or_404(user_id: str) -> dict:
-    """
-    Fetch from user_profiles (custom table).
-    Joins against Supabase's built-in auth.users for username / email.
-    """
     res = (
         supabase.table("user_profiles")
         .select(
-            "id, name, profile_picture, created_at, "
+            "user_id, full_name, profile_picture, updated_at, "
             "bio, institution, skills, linkedin_url, github_url, website_url"
         )
-        .eq("id", user_id)
+        .eq("user_id", user_id)
         .maybe_single()
         .execute()
     )
@@ -43,15 +39,15 @@ def _get_profile_or_404(user_id: str) -> dict:
         raise HTTPException(status_code=404, detail="User profile not found.")
 
     profile = res.data
+    # Expose full_name as "name" so the frontend can use either key
+    profile["name"] = profile.get("full_name")
 
-    # Pull username + email from the built-in auth.users table via admin API
     try:
         auth_user = supabase.auth.admin.get_user_by_id(user_id)
         if auth_user and auth_user.user:
             profile["username"] = auth_user.user.user_metadata.get("username") or auth_user.user.email
             profile["email"] = auth_user.user.email
     except Exception:
-        # Non-fatal — username/email just won't be present
         profile.setdefault("username", None)
         profile.setdefault("email", None)
 
@@ -71,12 +67,9 @@ def _get_experiences(user_id: str):
     return res.data or []
 
 
-# ─── Profile endpoints ────────────────────────────────────────────────────────
-
 @router.get("/me", response_model=UserProfileOut)
 def get_my_profile(current_user: dict = Depends(get_current_user)):
-    """Returns the profile of the currently authenticated user."""
-    user_id = current_user["id"]
+    user_id = current_user.id
     profile = _get_profile_or_404(user_id)
     profile["experiences"] = _get_experiences(user_id)
     return profile
@@ -84,7 +77,6 @@ def get_my_profile(current_user: dict = Depends(get_current_user)):
 
 @router.get("/{user_id}", response_model=UserProfileOut)
 def get_profile(user_id: str):
-    """Returns any user's public profile by their UUID."""
     profile = _get_profile_or_404(user_id)
     profile["experiences"] = _get_experiences(user_id)
     return profile
@@ -95,15 +87,17 @@ def update_my_profile(
     payload: ProfileUpdate,
     current_user: dict = Depends(get_current_user),
 ):
-    """Updates the authenticated user's own profile."""
-    user_id = current_user["id"]
+    user_id = current_user.id
 
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields provided")
 
-    # Upsert so a profile row is created automatically on first edit
-    supabase.table("user_profiles").upsert({"id": user_id, **updates}).execute()
+    # Frontend sends "name"; DB column is "full_name" — remap if needed
+    if "name" in updates:
+        updates["full_name"] = updates.pop("name")
+
+    supabase.table("user_profiles").upsert({"user_id": user_id, **updates}).execute()
 
     updated = _get_profile_or_404(user_id)
     updated["experiences"] = _get_experiences(user_id)
@@ -116,28 +110,25 @@ def update_profile(
     payload: ProfileUpdate,
     current_user: dict = Depends(get_current_user),
 ):
-    """Updates a profile by UUID — must be the authenticated user's own profile."""
     _require_own_profile(user_id, current_user)
 
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields provided")
 
-    supabase.table("user_profiles").upsert({"id": user_id, **updates}).execute()
+    supabase.table("user_profiles").upsert({"user_id": user_id, **updates}).execute()
 
     updated = _get_profile_or_404(user_id)
     updated["experiences"] = _get_experiences(user_id)
     return updated
 
 
-# ─── Experience endpoints ─────────────────────────────────────────────────────
-
 @router.post("/me/experience", response_model=ExperienceOut)
 def add_experience(
     payload: ExperienceCreate,
     current_user: dict = Depends(get_current_user),
 ):
-    user_id = current_user["id"]
+    user_id = current_user.id
     row = {"user_id": user_id, **payload.model_dump()}
     res = supabase.table("user_experiences").insert(row).execute()
     if not res.data:
@@ -151,9 +142,8 @@ def update_experience(
     payload: ExperienceUpdate,
     current_user: dict = Depends(get_current_user),
 ):
-    user_id = current_user["id"]
+    user_id = current_user.id
 
-    # Verify the experience belongs to this user
     check = (
         supabase.table("user_experiences")
         .select("user_id")
@@ -184,9 +174,8 @@ def delete_experience(
     exp_id: int,
     current_user: dict = Depends(get_current_user),
 ):
-    user_id = current_user["id"]
+    user_id = current_user.id
 
-    # Verify ownership before deleting
     check = (
         supabase.table("user_experiences")
         .select("user_id")
@@ -201,13 +190,11 @@ def delete_experience(
     return {"message": "Deleted successfully"}
 
 
-# ─── Competition endpoints (read-only, auto-populated) ────────────────────────
-
 @competitions_router.get("/organizer/{user_id}")
 def get_organized_competitions(user_id: str):
     res = (
         supabase.table("competition_organizers")
-        .select("competition_id, competitions(id, title)")
+        .select("competition_id, competitions!inner(id, title)")
         .eq("user_id", user_id)
         .execute()
     )
@@ -218,7 +205,7 @@ def get_organized_competitions(user_id: str):
 def get_participated_competitions(user_id: str):
     res = (
         supabase.table("competition_participants")
-        .select("competition_id, competitions(id, title)")
+        .select("competition_id, competitions!inner(id, title)")
         .eq("user_id", user_id)
         .execute()
     )

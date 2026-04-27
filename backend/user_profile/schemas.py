@@ -56,11 +56,13 @@ class ProfileUpdate(BaseModel):
 # ─── Full profile response ────────────────────────────────────────────────────
 
 class UserProfileOut(BaseModel):
-    id: str                          # UUID string
+    id: Optional[str] = None   # ✅ make it optional
+    user_id: str               # ✅ this is your real column
+
     username: Optional[str] = None
     email: Optional[str] = None
     name: Optional[str] = None
-    profile_picture: Optional[str] = None   # renamed from avatar_url
+    profile_picture: Optional[str] = None
     created_at: Optional[datetime] = None
     bio: Optional[str] = None
     institution: Optional[str] = None

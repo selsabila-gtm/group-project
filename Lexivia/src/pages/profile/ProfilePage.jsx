@@ -37,7 +37,7 @@ const BuildingIcon = () => (
   </svg>
 )
 const EditIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M11 4H4"/>
   </svg>
 )
@@ -112,12 +112,15 @@ export default function ProfilePage() {
         setProfileData(data)
 
         // Competitions (public endpoints, no auth needed)
-        const [orgRes, partRes] = await Promise.all([
-          fetch(`${API}/competitions/organizer/${viewingUserId}`),
-          fetch(`${API}/competitions/participant/${viewingUserId}`),
-        ])
-        if (orgRes.ok)  setOrganizedComps(await orgRes.json())
-        if (partRes.ok) setParticipatedComps(await partRes.json())
+        fetch(`${API}/competitions/organizer/${viewingUserId}`)
+  .then(res => res.ok ? res.json() : [])
+  .then(data => setOrganizedComps(data))
+  .catch(() => setOrganizedComps([]))
+
+fetch(`${API}/competitions/participant/${viewingUserId}`)
+  .then(res => res.ok ? res.json() : [])
+  .then(data => setParticipatedComps(data))
+  .catch(() => setParticipatedComps([]))
       } catch (err) {
         setError('Failed to load profile.')
         console.error('[ProfilePage] load error:', err)
@@ -135,6 +138,7 @@ export default function ProfilePage() {
   const isOwnProfile = !paramUserId   // viewing own profile when there's no URL param
 
   const {
+    full_name,
     name,
     username,
     profile_picture,   // ← was avatar_url
@@ -146,6 +150,8 @@ export default function ProfilePage() {
     github_url,
     website_url,
   } = profileData
+
+  const displayName = full_name || name
 
   const links = [
     { url: linkedin_url, label: 'LinkedIn', icon: <LinkedInIcon /> },
@@ -176,14 +182,14 @@ export default function ProfilePage() {
           {/* ── LEFT SIDEBAR ── */}
           <aside className="p-sidebar-card">
             {profile_picture ? (
-              <img src={profile_picture} alt={name} className="p-avatar p-avatar--xl" />
+              <img src={profile_picture} alt={displayName} className="p-avatar p-avatar--xl" />
             ) : (
               <div className="p-avatar p-avatar--xl p-avatar--ph">
-                {name?.charAt(0).toUpperCase() || '?'}
+                {displayName?.charAt(0).toUpperCase() || '?'}
               </div>
             )}
 
-            <h2 className="p-sidebar-name">{name || username}</h2>
+            <h2 className="p-sidebar-name">{displayName || username}</h2>
 
             <div className="p-sidebar-meta">
               {institution && (
