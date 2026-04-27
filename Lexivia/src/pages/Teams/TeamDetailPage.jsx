@@ -9,8 +9,6 @@ function authHeaders() {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────────
-
 const ROLE_STYLES = {
   leader: { bg: '#fef0e6', fg: '#b85200' },
   admin:  { bg: '#e8edfb', fg: '#2547c0' },
@@ -18,8 +16,6 @@ const ROLE_STYLES = {
 };
 
 const AVATAR_COLORS = ['#3b5bdb', '#7048e8', '#0c8599', '#2f9e44', '#e8590c', '#c2255c'];
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function RoleBadge({ role }) {
   const s = ROLE_STYLES[role] || ROLE_STYLES.member;
@@ -36,8 +32,8 @@ function timeAgo(dateStr) {
   const mins = Math.floor(diff / 60000);
   const hrs  = Math.floor(mins / 60);
   const days = Math.floor(hrs / 24);
-  if (mins < 60) return `${mins}m ago`;
-  if (hrs < 24)  return `${hrs}h ago`;
+  if (mins < 60)  return `${mins}m ago`;
+  if (hrs < 24)   return `${hrs}h ago`;
   if (days === 1) return 'Yesterday';
   return `${days} days ago`;
 }
@@ -62,7 +58,7 @@ function SkeletonBlock({ w = '100%', h = 14, mb = 10, radius = 6 }) {
 function RemoveMemberBtn({ teamId, userId, username, onRemoved }) {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]       = useState(false);
 
   async function handleRemove() {
     setLoading(true);
@@ -113,35 +109,199 @@ function RemoveMemberBtn({ teamId, userId, username, onRemoved }) {
   );
 }
 
+// ── Join Request panel (non-members only) ──────────────────────────────────────
+
+function JoinRequestPanel({ teamId }) {
+  const navigate = useNavigate();
+  const [message, setMessage]   = useState('');
+  const [sending, setSending]   = useState(false);
+  const [result, setResult]     = useState(null); // { type, text }
+  const [requested, setRequested] = useState(false);
+
+  async function handleRequest() {
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await fetch(`${API}/teams/${teamId}/request-join`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ message: message.trim() }),
+      });
+      if (res.status === 401) { navigate('/login'); return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setResult({ type: 'error', text: data.detail || 'Failed to send request.' });
+      } else {
+        setResult({ type: 'success', text: data.message || 'Request sent!' });
+        setRequested(true);
+        setMessage('');
+      }
+    } catch (err) {
+      setResult({ type: 'error', text: err.message || 'Failed to send request.' });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="invite-panel">
+      <h3 className="panel-title">Request to Join</h3>
+      <p className="panel-desc">
+        Send a join request to the team leaders. They'll be notified and can accept or decline.
+      </p>
+
+      {!requested && (
+        <>
+          <div className="form-field">
+            <label className="field-label">MESSAGE (OPTIONAL)</label>
+            <textarea
+              id="join-request-msg"
+              className="field-input"
+              placeholder="Introduce yourself or explain why you'd like to join…"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              style={{ resize: 'vertical', minHeight: 72, fontSize: 13 }}
+            />
+          </div>
+        </>
+      )}
+
+      {result && (
+        <div style={{
+          padding: '9px 12px', borderRadius: 7, fontSize: 12.5, marginBottom: 10,
+          background: result.type === 'success' ? '#e6f9ef' : '#fff0f0',
+          color: result.type === 'success' ? '#1a7a44' : '#c33',
+          border: `1px solid ${result.type === 'success' ? '#b2e4c8' : '#fcc'}`,
+        }}>
+          {result.text}
+        </div>
+      )}
+
+      {!requested && (
+        <button
+          className="send-invite-btn"
+          onClick={handleRequest}
+          disabled={sending}
+        >
+          {sending ? 'Sending…' : 'Send Join Request'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Invite panel (leader / admin only) ────────────────────────────────────────
+
+function InvitePanel({ teamId, onInvited }) {
+  const navigate = useNavigate();
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole]   = useState('member');
+  const [inviting, setInviting]       = useState(false);
+  const [inviteMsg, setInviteMsg]     = useState(null);
+
+  async function handleInvite() {
+    if (!inviteEmail.trim()) return;
+    setInviting(true);
+    setInviteMsg(null);
+    try {
+      const res = await fetch(`${API}/teams/${teamId}/invite`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+      });
+      if (res.status === 401) { navigate('/login'); return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setInviteMsg({ type: 'error', text: data.detail || 'Failed to send invitation.' });
+      } else {
+        setInviteMsg({ type: 'success', text: data.message || 'Invitation sent!' });
+        setInviteEmail('');
+        setInviteRole('member');
+        onInvited?.();
+      }
+    } catch (err) {
+      setInviteMsg({ type: 'error', text: err.message || 'Failed to send invitation.' });
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  return (
+    <div className="invite-panel">
+      <h3 className="panel-title">Invite New Member</h3>
+      <p className="panel-desc">Add a registered user to this team by their email address.</p>
+
+      <div className="form-field">
+        <label className="field-label">EMAIL ADDRESS</label>
+        <input
+          id="invite-email"
+          type="email"
+          className="field-input"
+          placeholder="colleague@lab04.ai"
+          value={inviteEmail}
+          onChange={(e) => setInviteEmail(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
+        />
+      </div>
+
+      <div className="form-field">
+        <label className="field-label">TEAM ROLE</label>
+        <div className="select-wrap">
+          <select className="field-select" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+            <option value="member">Member</option>
+            <option value="admin">Admin</option>
+            <option value="leader">Leader</option>
+          </select>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="select-arrow">
+            <path d="M3 4.5L6 7.5L9 4.5" stroke="#888" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      </div>
+
+      {inviteMsg && (
+        <div style={{
+          padding: '9px 12px', borderRadius: 7, fontSize: 12.5, marginBottom: 10,
+          background: inviteMsg.type === 'success' ? '#e6f9ef' : '#fff0f0',
+          color: inviteMsg.type === 'success' ? '#1a7a44' : '#c33',
+          border: `1px solid ${inviteMsg.type === 'success' ? '#b2e4c8' : '#fcc'}`,
+        }}>
+          {inviteMsg.text}
+        </div>
+      )}
+
+      <button
+        className="send-invite-btn"
+        onClick={handleInvite}
+        disabled={inviting || !inviteEmail.trim()}
+      >
+        {inviting ? 'Sending…' : 'Send Invitation'}
+      </button>
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function TeamDetailPage() {
   const { teamId } = useParams();
-  const navigate = useNavigate();
+  const navigate   = useNavigate();
 
-  // Get the logged-in user's ID from localStorage
   const currentUser = (() => {
     try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
   })();
   const currentUserId = currentUser.id ?? null;
 
-  const [team, setTeam] = useState(null);
-  const [members, setMembers] = useState([]);
-  const [currentUserRole, setCurrentUserRole] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [team, setTeam]                       = useState(null);
+  const [members, setMembers]                 = useState([]);
+  const [currentUserRole, setCurrentUserRole] = useState(null); // null = not a member
+  const [loading, setLoading]                 = useState(true);
+  const [error, setError]                     = useState(null);
 
-  // Invite panel
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('member');
-  const [inviting, setInviting] = useState(false);
-  const [inviteMsg, setInviteMsg] = useState(null); // { type: 'success'|'error', text }
-
-  // Edit mode (leaders only)
+  // Edit mode
   const [editMode, setEditMode] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]     = useState(false);
 
   const [activeTab, setActiveTab] = useState('members');
 
@@ -151,10 +311,8 @@ export default function TeamDetailPage() {
     if (!teamId) return;
     setLoading(true);
     setError(null);
-
     try {
       const res = await fetch(`${API}/teams/${teamId}`, { headers: authHeaders() });
-
       if (res.status === 401) { navigate('/login'); return; }
       if (res.status === 404) { setError('Team not found.'); return; }
       if (!res.ok) throw new Error('Failed to load team');
@@ -164,7 +322,7 @@ export default function TeamDetailPage() {
       setEditName(data.name);
       setEditDesc(data.description || '');
       setMembers(data.members ?? []);
-      setCurrentUserRole(data.current_user_role ?? null);
+      setCurrentUserRole(data.current_user_role ?? null); // null if not a member
     } catch (err) {
       console.error(err);
       setError('Could not load team data.');
@@ -174,6 +332,14 @@ export default function TeamDetailPage() {
   }, [teamId, navigate]);
 
   useEffect(() => { fetchTeamData(); }, [fetchTeamData]);
+
+useEffect(() => {
+  if (team) {
+    console.log("ROLE:", currentUserRole);
+    console.log("USER:", currentUserId);
+    console.log("TEAM DATA:", team);
+  }
+}, [team, currentUserRole, currentUserId]);
 
   // ── Save edit ──────────────────────────────────────────────────────────────
 
@@ -192,45 +358,19 @@ export default function TeamDetailPage() {
       setEditMode(false);
     } else {
       const data = await res.json().catch(() => ({}));
-      alert('Failed to save changes: ' + (data.detail || 'Unknown error'));
+      alert('Failed to save: ' + (data.detail || 'Unknown error'));
     }
   }
 
-  // ── Invite member ──────────────────────────────────────────────────────────
+  // ── Derived ────────────────────────────────────────────────────────────────
 
-  async function handleInvite() {
-    if (!inviteEmail.trim()) return;
-    setInviting(true);
-    setInviteMsg(null);
+  const isLeader    = currentUserRole === 'leader';
+  const isAdmin     = currentUserRole === 'admin';
+  const canInvite   = isLeader || isAdmin;   // leaders AND admins can invite
+  const isMember    = currentUserRole !== null; // any role = is a member
+  const isOutsider  = !isMember;              // not in the team at all
 
-    try {
-      const res = await fetch(`${API}/teams/${teamId}/invite`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
-      });
-
-      if (res.status === 401) { navigate('/login'); return; }
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setInviteMsg({ type: 'error', text: data.detail || 'Failed to send invitation.' });
-        return;
-      }
-
-      setInviteMsg({ type: 'success', text: data.message || 'Invitation sent!' });
-      setInviteEmail('');
-      setInviteRole('member');
-    } catch (err) {
-      setInviteMsg({ type: 'error', text: err.message || 'Failed to send invitation.' });
-    } finally {
-      setInviting(false);
-    }
-  }
-
-  // ── Render guards ──────────────────────────────────────────────────────────
-
-  const isLeader = currentUserRole === 'leader';
+  // ── Loading skeleton ───────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -251,7 +391,7 @@ export default function TeamDetailPage() {
           <SkeletonBlock w="320px" h={36} mb={12} radius={8} />
           <SkeletonBlock w="480px" h={14} mb={32} />
           <div className="stats-row">
-            {[1, 2, 3, 4].map((i) => (
+            {[1, 2, 3, 4].map(i => (
               <div key={i} className="stat-card">
                 <SkeletonBlock w="80px" h={10} mb={10} />
                 <SkeletonBlock w="60px" h={28} mb={6} />
@@ -288,6 +428,7 @@ export default function TeamDetailPage() {
   return (
     <div className="detail-root">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+
       <header className="detail-topbar">
         <div className="detail-topbar-left">
           <Link to="/teams" className="back-link">
@@ -323,6 +464,12 @@ export default function TeamDetailPage() {
                 <>
                   <span className="tag-sep">•</span>
                   <span className="tag-chip" style={{ background: '#fff0e6', color: '#b85200' }}>LEADER</span>
+                </>
+              )}
+              {isAdmin && (
+                <>
+                  <span className="tag-sep">•</span>
+                  <span className="tag-chip" style={{ background: '#e8edfb', color: '#2547c0' }}>ADMIN</span>
                 </>
               )}
             </div>
@@ -367,7 +514,19 @@ export default function TeamDetailPage() {
                 <button className="btn-outline" onClick={() => setEditMode(true)}>Edit Team</button>
               )
             )}
-            {!editMode && (
+
+            {/* Not a member → Request to Join */}
+            {!editMode && isOutsider && (
+              <button className="btn-primary" onClick={() => document.getElementById('join-request-msg')?.focus()}>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M6.5 1v11M1 6.5h11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+                Request to Join
+              </button>
+            )}
+
+            {/* Leader or admin → Invite Member */}
+            {!editMode && canInvite && (
               <button className="btn-primary" onClick={() => document.getElementById('invite-email')?.focus()}>
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                   <path d="M6.5 1v11M1 6.5h11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -375,10 +534,12 @@ export default function TeamDetailPage() {
                 Invite Member
               </button>
             )}
+
+            {/* Regular member (not leader/admin) → no CTA */}
           </div>
         </div>
 
-        {/* ── Stats row ── */}
+        {/* ── Stats ── */}
         <div className="stats-row">
           <div className="stat-card">
             <span className="stat-label">TOTAL MEMBERS</span>
@@ -413,7 +574,7 @@ export default function TeamDetailPage() {
         <div className="detail-grid">
           <div className="detail-col-main">
             <div className="detail-tabs">
-              {['members', 'activity', 'settings'].map((t) => (
+              {['members', 'activity', 'settings'].map(t => (
                 <button
                   key={t}
                   className={`detail-tab${activeTab === t ? ' active' : ''}`}
@@ -459,7 +620,6 @@ export default function TeamDetailPage() {
                                       </span>
                                     )}
                                   </div>
-                                  <div className="member-e">{m.email}</div>
                                 </div>
                               </div>
                             </td>
@@ -500,69 +660,22 @@ export default function TeamDetailPage() {
             )}
           </div>
 
-          {/* ── Right side ── */}
+          {/* ── Right side panel ── */}
           <div className="detail-col-side">
-            <div className="invite-panel">
-              <h3 className="panel-title">
-                {isLeader ? 'Invite New Member' : 'Request to Join'}
-              </h3>
-              <p className="panel-desc">
-                {isLeader
-                  ? 'Add a registered user to this team by their email address.'
-                  : 'Only team leaders can invite members.'}
-              </p>
+            {/*
+              canInvite (leader or admin)  → show invite form
+              isOutsider (not a member)    → show join request form
+              regular member               → show nothing (or team composition only)
+            */}
+            {canInvite && (
+              <InvitePanel teamId={teamId} onInvited={fetchTeamData} />
+            )}
 
-              {isLeader && (
-                <>
-                  <div className="form-field">
-                    <label className="field-label">EMAIL ADDRESS</label>
-                    <input
-                      id="invite-email"
-                      type="email"
-                      className="field-input"
-                      placeholder="colleague@lab04.ai"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
-                    />
-                  </div>
-                  <div className="form-field">
-                    <label className="field-label">TEAM ROLE</label>
-                    <div className="select-wrap">
-                      <select className="field-select" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
-                        <option value="member">Member</option>
-                        <option value="admin">Admin</option>
-                        <option value="leader">Leader</option>
-                      </select>
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="select-arrow">
-                        <path d="M3 4.5L6 7.5L9 4.5" stroke="#888" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </div>
-                  </div>
+            {isOutsider && (
+              <JoinRequestPanel teamId={teamId} />
+            )}
 
-                  {inviteMsg && (
-                    <div style={{
-                      padding: '9px 12px', borderRadius: 7, fontSize: 12.5, marginBottom: 10,
-                      background: inviteMsg.type === 'success' ? '#e6f9ef' : '#fff0f0',
-                      color: inviteMsg.type === 'success' ? '#1a7a44' : '#c33',
-                      border: `1px solid ${inviteMsg.type === 'success' ? '#b2e4c8' : '#fcc'}`,
-                    }}>
-                      {inviteMsg.text}
-                    </div>
-                  )}
-
-                  <button
-                    className="send-invite-btn"
-                    onClick={handleInvite}
-                    disabled={inviting || !inviteEmail.trim()}
-                  >
-                    {inviting ? 'Adding…' : 'Add Member'}
-                  </button>
-                </>
-              )}
-            </div>
-
-            {/* Member composition panel */}
+            {/* Team composition */}
             <div className="activity-panel">
               <h4 className="activity-title">TEAM COMPOSITION</h4>
               <div className="activity-list">

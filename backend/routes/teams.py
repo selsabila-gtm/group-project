@@ -1,29 +1,52 @@
 """
 Teams API routes — uses user_profiles (not users table).
 
-Key facts about the DB:
-  - user_profiles.user_id  → text (Supabase UUID), PRIMARY KEY
-  - user_profiles.full_name, username — available for display
-  - user_profiles has NO email column
-  - team_members.user_id   → text FK → user_profiles.user_id
-  - teams.created_by       → text (we store Supabase UUID)
+Tables:
+  - teams, team_members, team_invitations  (models_teams.py)
+  - team_join_requests                     (new — see SQL below)
+  - user_profiles                          (user_id text PK, full_name, email)
 
-Invite-by-email: user_profiles has no email, so we resolve
-email → UUID via supabase.auth.admin.list_users().
-Easier alternative: add `email` column to user_profiles and
-populate it in your /sync-user endpoint (recommended).
+SQL to create the new table:
+─────────────────────────────────────────────────────────────
+CREATE TABLE public.team_join_requests (
+  id          SERIAL PRIMARY KEY,
+  team_id     INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  user_id     TEXT    NOT NULL REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+  message     TEXT,
+  status      VARCHAR DEFAULT 'pending',  -- 'pending' | 'accepted' | 'declined'
+  created_at  TEXT,
+  updated_at  TEXT,
+  CONSTRAINT no_duplicate_request UNIQUE (team_id, user_id, status)
+);
+─────────────────────────────────────────────────────────────
 """
 
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.orm import Session
 
+from database import Base
 from models import UserProfile
 from models_teams import Team, TeamMember, TeamInvitation
 from .utils import get_db, get_current_user
 
 router = APIRouter(tags=["teams"])
+
+
+# ── Inline model for join requests ────────────────────────────────────────────
+
+class TeamJoinRequest(Base):
+    __tablename__ = "team_join_requests"
+
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    team_id    = Column(Integer, nullable=False)
+    user_id    = Column(String, nullable=False)
+    message    = Column(Text, nullable=True)
+    status     = Column(String, default="pending")  # pending | accepted | declined
+    created_at = Column(String, nullable=True)
+    updated_at = Column(String, nullable=True)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -33,11 +56,9 @@ def _now() -> str:
 
 
 def _profile(db: Session, user_id: str) -> dict:
-    """Return display name for a Supabase UUID from user_profiles."""
     p = db.query(UserProfile).filter(UserProfile.user_id == str(user_id)).first()
     if p:
-        name = p.full_name or getattr(p, "username", None) or "Unknown"
-        return {"username": name}
+        return {"username": p.full_name or getattr(p, "username", None) or "Unknown"}
     return {"username": "Unknown"}
 
 
@@ -48,6 +69,17 @@ def _require_leader(db: Session, team_id: int, user_id: str):
     ).first()
     if not m or m.role != "leader":
         raise HTTPException(status_code=403, detail="Only team leaders can perform this action")
+    return m
+
+
+def _require_can_invite(db: Session, team_id: int, user_id: str):
+    """Leaders and admins can invite."""
+    m = db.query(TeamMember).filter(
+        TeamMember.team_id == team_id,
+        TeamMember.user_id == str(user_id),
+    ).first()
+    if not m or m.role not in ("leader", "admin"):
+        raise HTTPException(status_code=403, detail="Only leaders and admins can invite members")
     return m
 
 
@@ -90,7 +122,7 @@ def list_teams(
     if not teams:
         return {"teams": [], "total": total}
 
-    team_ids = [t.id for t in teams]
+    team_ids    = [t.id for t in teams]
     member_rows = db.query(TeamMember).filter(TeamMember.team_id.in_(team_ids)).all()
 
     count_map: dict[int, int] = {}
@@ -103,12 +135,12 @@ def list_teams(
     return {
         "teams": [
             {
-                "id": t.id,
-                "name": t.name,
-                "description": t.description,
-                "created_at": t.created_at,
+                "id":           t.id,
+                "name":         t.name,
+                "description":  t.description,
+                "created_at":   t.created_at,
                 "member_count": count_map.get(t.id, 0),
-                "is_my_team": t.id in my_teams,
+                "is_my_team":   t.id in my_teams,
             }
             for t in teams
         ],
@@ -128,7 +160,7 @@ def create_team(
     if not name:
         raise HTTPException(status_code=400, detail="Team name is required")
 
-    now = _now()
+    now  = _now()
     team = Team(
         name=name,
         description=(body.get("description") or "").strip(),
@@ -169,7 +201,7 @@ def get_team(
         .all()
     )
 
-    members = []
+    members           = []
     current_user_role = None
     for m in member_rows:
         info = _profile(db, m.user_id)
@@ -189,7 +221,7 @@ def get_team(
         "created_at":        team.created_at,
         "created_by":        team.created_by,
         "members":           members,
-        "current_user_role": current_user_role,
+        "current_user_role": current_user_role,  # null = not a member
     }
 
 
@@ -219,14 +251,7 @@ def update_team(
     return {"message": "Team updated successfully"}
 
 
-# ── Invite by email (leaders only) ────────────────────────────────────────────
-#
-# user_profiles has no email column, so we resolve email → UUID via Supabase
-# Auth admin. This needs SUPABASE_SERVICE_ROLE_KEY in your supabase_client.py.
-#
-# EASIER ALTERNATIVE: add `email = Column(String, nullable=True)` to UserProfile
-# in models.py and store it in /sync-user. Then replace the admin lookup below
-# with: db.query(UserProfile).filter(UserProfile.email == email).first()
+# ── Invite by email (leaders + admins) ───────────────────────────────────────
 
 @router.post("/teams/{team_id}/invite")
 def invite_member(
@@ -235,7 +260,7 @@ def invite_member(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    _require_leader(db, team_id, str(current_user.id))
+    _require_can_invite(db, team_id, str(current_user.id))
 
     email = (body.get("email") or "").strip().lower()
     role  = body.get("role", "member")
@@ -245,12 +270,14 @@ def invite_member(
     if role not in ("member", "admin", "leader"):
         raise HTTPException(status_code=400, detail="Invalid role")
 
-    # Resolve email → user via local user_profiles table
+    # Resolve email → user_profiles (requires email column on user_profiles)
     receiver = db.query(UserProfile).filter(UserProfile.email == email).first()
     if not receiver:
         raise HTTPException(status_code=404, detail="No registered user found with that email")
+
     receiver_id   = receiver.user_id
     receiver_name = receiver.full_name or email
+
     existing_member = db.query(TeamMember).filter(
         TeamMember.team_id == team_id,
         TeamMember.user_id == receiver_id,
@@ -259,7 +286,7 @@ def invite_member(
         raise HTTPException(status_code=400, detail=f"{receiver_name} is already a member")
 
     existing_invite = db.query(TeamInvitation).filter(
-        TeamInvitation.team_id    == team_id,
+        TeamInvitation.team_id     == team_id,
         TeamInvitation.receiver_id == receiver_id,
         TeamInvitation.status      == "pending",
     ).first()
@@ -278,6 +305,131 @@ def invite_member(
     ))
     db.commit()
     return {"message": f"Invitation sent to {receiver_name}"}
+
+
+# ── Request to join (outsiders only) ─────────────────────────────────────────
+
+@router.post("/teams/{team_id}/request-join")
+def request_join(
+    team_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    # Already a member?
+    already = db.query(TeamMember).filter(
+        TeamMember.team_id == team_id,
+        TeamMember.user_id == str(current_user.id),
+    ).first()
+    if already:
+        raise HTTPException(status_code=400, detail="You are already a member of this team")
+
+    # Already has a pending request?
+    existing = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.team_id == team_id,
+        TeamJoinRequest.user_id == str(current_user.id),
+        TeamJoinRequest.status  == "pending",
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="You already have a pending request for this team")
+
+    now = _now()
+    db.add(TeamJoinRequest(
+        team_id=team_id,
+        user_id=str(current_user.id),
+        message=(body.get("message") or "").strip() or None,
+        status="pending",
+        created_at=now,
+        updated_at=now,
+    ))
+    db.commit()
+    return {"message": "Join request sent. A team leader will review it."}
+
+
+# ── List join requests (leaders only) ────────────────────────────────────────
+
+@router.get("/teams/{team_id}/join-requests")
+def list_join_requests(
+    team_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_leader(db, team_id, str(current_user.id))
+
+    requests = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.team_id == team_id,
+        TeamJoinRequest.status  == "pending",
+    ).all()
+
+    return [
+        {
+            "id":         r.id,
+            "user_id":    r.user_id,
+            "username":   _profile(db, r.user_id)["username"],
+            "message":    r.message,
+            "created_at": r.created_at,
+        }
+        for r in requests
+    ]
+
+
+# ── Accept / decline join request (leaders only) ─────────────────────────────
+
+@router.post("/teams/{team_id}/join-requests/{request_id}/accept")
+def accept_join_request(
+    team_id: int,
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_leader(db, team_id, str(current_user.id))
+
+    req = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.id      == request_id,
+        TeamJoinRequest.team_id == team_id,
+        TeamJoinRequest.status  == "pending",
+    ).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Join request not found")
+
+    req.status     = "accepted"
+    req.updated_at = _now()
+
+    db.add(TeamMember(
+        team_id=team_id,
+        user_id=req.user_id,
+        role="member",
+        joined_at=_now(),
+    ))
+    db.commit()
+    return {"message": "Join request accepted"}
+
+
+@router.post("/teams/{team_id}/join-requests/{request_id}/decline")
+def decline_join_request(
+    team_id: int,
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_leader(db, team_id, str(current_user.id))
+
+    req = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.id      == request_id,
+        TeamJoinRequest.team_id == team_id,
+        TeamJoinRequest.status  == "pending",
+    ).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Join request not found")
+
+    req.status     = "declined"
+    req.updated_at = _now()
+    db.commit()
+    return {"message": "Join request declined"}
 
 
 # ── Remove member (leaders only) ──────────────────────────────────────────────
@@ -318,22 +470,20 @@ def my_pending_invitations(
         TeamInvitation.status      == "pending",
     ).all()
 
-    result = []
-    for inv in invites:
-        team   = db.query(Team).filter(Team.id == inv.team_id).first()
-        sender = _profile(db, inv.sender_id)
-        result.append({
+    return [
+        {
             "id":         inv.id,
             "team_id":    inv.team_id,
-            "team_name":  team.name if team else "Unknown",
-            "sender":     sender["username"],
+            "team_name":  (db.query(Team).filter(Team.id == inv.team_id).first() or Team()).name or "Unknown",
+            "sender":     _profile(db, inv.sender_id)["username"],
             "role":       inv.role,
             "created_at": inv.created_at,
-        })
-    return result
+        }
+        for inv in invites
+    ]
 
 
-# ── Accept invitation ─────────────────────────────────────────────────────────
+# ── Accept / decline invitation ───────────────────────────────────────────────
 
 @router.post("/teams/invitations/{invitation_id}/accept")
 def accept_invitation(
@@ -360,8 +510,6 @@ def accept_invitation(
     db.commit()
     return {"message": "Invitation accepted"}
 
-
-# ── Decline invitation ────────────────────────────────────────────────────────
 
 @router.post("/teams/invitations/{invitation_id}/decline")
 def decline_invitation(
