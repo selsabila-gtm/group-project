@@ -2,13 +2,12 @@ from sqlalchemy import Column, String, Integer, Boolean, Text
 from database import Base
 import uuid
 
-
 class UserProfile(Base):
     __tablename__ = "user_profiles"
 
-    user_id = Column(String, primary_key=True)  # ✅ match DB  # same as Supabase user id
+    user_id   = Column(String, primary_key=True)
     full_name = Column(String)
-
+    email     = Column(String, nullable=True)  # ← add this
 
 class DashboardStat(Base):
     __tablename__ = "dashboard_stats"

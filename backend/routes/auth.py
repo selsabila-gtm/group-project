@@ -12,19 +12,18 @@ router = APIRouter(tags=["auth"])
 
 @router.post("/sync-user")
 def sync_user(data: dict, db: Session = Depends(get_db)):
-    user_id = data.get("user_id")
+    user_id   = data.get("user_id")
     full_name = data.get("full_name")
-    email = data.get("email", "")
-
-    if not user_id:
-        raise HTTPException(status_code=400, detail="Missing user_id")
+    email     = data.get("email", "")
 
     existing = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
     if existing:
+        if not existing.email and email:   # backfill if missing
+            existing.email = email
+            db.commit()
         return {"message": "User already exists"}
 
-    new_user = UserProfile(user_id=user_id, full_name=full_name, email=email)
-    db.add(new_user)
+    db.add(UserProfile(user_id=user_id, full_name=full_name, email=email))
     db.commit()
     return {"message": "User profile created"}
 
