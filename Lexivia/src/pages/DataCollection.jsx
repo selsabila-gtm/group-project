@@ -6,7 +6,7 @@ import "./DataCollection.css";
 const API = "http://127.0.0.1:8000";
 
 function authHeader() {
-    const token = localStorage.getItem("access_token");
+    const token = localStorage.getItem("token");
     return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -624,7 +624,9 @@ function Toast({ message, onDone }) {
 // Main DataCollection page
 // ─────────────────────────────────────────────────────────────
 function DataCollection() {
-    const { id: competitionId } = useParams();
+    // Works regardless of whether the route uses :id or :competitionId
+    const params = useParams();
+    const competitionId = params.id ?? params.competitionId;
 
     const [competition,  setCompetition]  = useState(null);
     const [myStats,      setMyStats]      = useState({ validated: 0, flagged: 0 });
