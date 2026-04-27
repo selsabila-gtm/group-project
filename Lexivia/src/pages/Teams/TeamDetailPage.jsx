@@ -333,14 +333,6 @@ export default function TeamDetailPage() {
 
   useEffect(() => { fetchTeamData(); }, [fetchTeamData]);
 
-useEffect(() => {
-  if (team) {
-    console.log("ROLE:", currentUserRole);
-    console.log("USER:", currentUserId);
-    console.log("TEAM DATA:", team);
-  }
-}, [team, currentUserRole, currentUserId]);
-
   // ── Save edit ──────────────────────────────────────────────────────────────
 
   async function handleSaveEdit() {
