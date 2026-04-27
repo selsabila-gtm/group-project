@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from httpx import RemoteProtocolError
 from supabase_client import supabase
 
 from routes.utils import get_current_user
@@ -190,23 +191,68 @@ def delete_experience(
     return {"message": "Deleted successfully"}
 
 
-@competitions_router.get("/organizer/{user_id}")
-def get_organized_competitions(user_id: str):
+def _fetch_competitions_by_ids(comp_ids: list) -> list:
+    """Given a list of competition IDs, return [{id, title}, ...] from the competitions table."""
+    if not comp_ids:
+        return []
     res = (
-        supabase.table("competition_organizers")
-        .select("competition_id, competitions!inner(id, title)")
-        .eq("user_id", user_id)
+        supabase.table("competitions")
+        .select("id, title")
+        .in_("id", comp_ids)
         .execute()
     )
-    return [row["competitions"] for row in (res.data or []) if row.get("competitions")]
+    return res.data or []
+
+
+@competitions_router.get("/organizer/{user_id}")
+def get_organized_competitions(user_id: str):
+    try:
+        # Step 1: get competition_ids for this organizer
+        res = (
+            supabase.table("competition_organizers")
+            .select("competition_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        rows = res.data or []
+        print(f"[organizer] user={user_id} rows={rows}")   # ← debug log
+
+        comp_ids = [row["competition_id"] for row in rows if row.get("competition_id")]
+        if not comp_ids:
+            return []
+
+        # Step 2: fetch competition details directly — no FK join needed
+        return _fetch_competitions_by_ids(comp_ids)
+
+    except RemoteProtocolError:
+        return []
+    except Exception as e:
+        print(f"[get_organized_competitions] error: {e}")
+        return []
 
 
 @competitions_router.get("/participant/{user_id}")
 def get_participated_competitions(user_id: str):
-    res = (
-        supabase.table("competition_participants")
-        .select("competition_id, competitions!inner(id, title)")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    return [row["competitions"] for row in (res.data or []) if row.get("competitions")]
+    try:
+        # Step 1: get competition_ids for this participant
+        res = (
+            supabase.table("competition_participants")
+            .select("competition_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        rows = res.data or []
+        print(f"[participant] user={user_id} rows={rows}")   # ← debug log
+
+        comp_ids = [row["competition_id"] for row in rows if row.get("competition_id")]
+        if not comp_ids:
+            return []
+
+        # Step 2: fetch competition details directly — no FK join needed
+        return _fetch_competitions_by_ids(comp_ids)
+
+    except RemoteProtocolError:
+        return []
+    except Exception as e:
+        print(f"[get_participated_competitions] error: {e}")
+        return []

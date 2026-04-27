@@ -16,6 +16,30 @@ const authHeaders = () => {
   };
 };
 
+// ── Sync updated fields into the "user" object in localStorage ────────────────
+const syncUserInStorage = (updates) => {
+  try {
+    const raw = localStorage.getItem("user");
+    if (!raw) return;
+    const user = JSON.parse(raw);
+
+    if (updates.full_name !== undefined) {
+      user.full_name = updates.full_name;
+      // Supabase stores it here too — keep it in sync
+      if (user.user_metadata) {
+        user.user_metadata.full_name = updates.full_name;
+      }
+    }
+    if (updates.email !== undefined) {
+      user.email = updates.email;
+    }
+
+    localStorage.setItem("user", JSON.stringify(user));
+  } catch {
+    // non-critical
+  }
+};
+
 function Settings() {
   const navigate = useNavigate();
 
@@ -86,25 +110,24 @@ function Settings() {
         body: JSON.stringify({
           full_name: accountInfo.full_name || null,
           email:     accountInfo.email     || null,
-          // username is intentionally omitted — backend ignores it
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Update failed");
 
-      if (data.warning) {
-        setErrorMsg(data.warning);
-        setSaveStatus("error");
-        return;
-      }
-
       // ✅ Re-sync state from what the server actually saved
+      const updatedName  = data.full_name ?? accountInfo.full_name;
+      const updatedEmail = data.email     ?? accountInfo.email;
+
       setAccountInfo((prev) => ({
         ...prev,
-        full_name: data.full_name ?? prev.full_name,
-        email:     data.email     ?? prev.email,
+        full_name: updatedName,
+        email:     updatedEmail,
       }));
+
+      // ✅ Keep localStorage in sync so Dashboard/other pages see the new name
+      syncUserInStorage({ full_name: updatedName, email: updatedEmail });
 
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus(null), 2500);
@@ -181,6 +204,7 @@ function Settings() {
 
   return (
     <div className="settings-page">
+      <div className="settings-container">
       <div className="settings-header">
         <h1 className="settings-title">Settings</h1>
         <p className="settings-subtitle">Manage your account and preferences</p>
@@ -338,6 +362,7 @@ function Settings() {
         </button>
       </div>
     </div>
+     </div> 
   );
 }
 
