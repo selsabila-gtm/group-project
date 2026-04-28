@@ -20,7 +20,8 @@ import ProfilePage from "./pages/profile/ProfilePage";
 import UpdateProfilePage from "./pages/profile/updateprofile";
 import SettingsPage from "./pages/profile/settings";
 import "./index.css";
-import OrganizerDashboard from "./pages/OrganizerDashboard";import AuthCallback from "./pages/AuthCallback";
+import OrganizerDashboard from "./pages/OrganizerDashboard";
+import AuthCallback from "./pages/AuthCallback";
 // ── Placeholder ───────────────────────────────────────────────────────────────
 function SimplePage({ title, subtitle }) {
   return (
