@@ -3,12 +3,19 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 import "./Dashboard.css";
+import { supabase } from "../config/supabase";
 
 function statusClass(status) {
-    if (status === "IN PROGRESS") return "in-progress";
-    if (status === "SUBMITTED") return "submitted";
-    if (status === "DRAFT") return "draft";
-    if (status === "OPEN") return "in-progress";
+    const s = status?.toLowerCase();
+
+    if (s === "open") return "open";
+    if (s === "closed") return "closed";
+    if (s === "ended") return "ended";
+    if (s === "upcoming") return "upcoming";
+    if (s === "in progress") return "in-progress";
+    if (s === "submitted") return "submitted";
+    if (s === "draft") return "draft";
+
     return "";
 }
 
@@ -16,7 +23,8 @@ function Dashboard() {
     const [userName, setUserName] = useState("User");
     const [userId, setUserId] = useState(null);
     const [stats, setStats] = useState({
-        total_competitions: 0,
+        organized_competitions: 0,
+        joined_competitions: 0,
         teams_joined: 0,
     });
     const [recentCompetitions, setRecentCompetitions] = useState([]);
@@ -25,43 +33,73 @@ function Dashboard() {
 
     // ✅ FIX: use localStorage instead of supabase
     useEffect(() => {
-        const savedUser = localStorage.getItem("user");
+        async function loadUser() {
+            const { data: { session } } = await supabase.auth.getSession();
 
-        if (!savedUser) {
-            navigate("/login");
-            return;
+            if (!session?.user) {
+                navigate("/login");
+                return;
+            }
+
+            const user = session.user;
+            const realUserId = user.id;
+
+            setUserId(realUserId);
+
+            let name =
+                user.user_metadata?.full_name ||
+                user.email?.split("@")[0] ||
+                "User";
+
+            try {
+                const profileRes = await fetch("http://127.0.0.1:8000/profile/me", {
+                    headers: {
+                        Authorization: `Bearer ${session.access_token}`,
+                    },
+                });
+
+                if (profileRes.ok) {
+                    const profile = await profileRes.json();
+                    name =
+                        profile.full_name ||
+                        profile.name ||
+                        profile.username ||
+                        name;
+                }
+            } catch (err) {
+                console.error("Profile name fetch failed:", err);
+            }
+
+            setUserName(name);
+
+            localStorage.setItem("token", session.access_token);
+            localStorage.setItem("user", JSON.stringify(user));
+
+            fetch("http://127.0.0.1:8000/sync-user", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    user_id: realUserId,
+                    full_name: name,
+                    email: user.email,
+                }),
+            }).catch(console.error);
         }
 
-        const user = JSON.parse(savedUser);
-
-        setUserId(user.id);
-
-        const name =
-            user.user_metadata?.full_name ||   // ✅ Supabase stores it here
-            user.full_name ||
-            user.name ||
-            user.email?.split("@")[0] ||
-            "User";
-
-        setUserName(name);
-
-        // sync user to backend
-        fetch("http://127.0.0.1:8000/sync-user", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                user_id: user.id,
-                full_name: name,
-            }),
-        });
+        loadUser();
     }, [navigate]);
 
     const fetchRecent = () => {
         if (!userId) return;
 
-        fetch(`http://127.0.0.1:8000/dashboard/recent/${userId}`)
+        const token = localStorage.getItem("token");
+
+        fetch(`http://127.0.0.1:8000/dashboard/recent/${userId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
             .then((res) => res.json())
             .then((data) => {
                 const safeData = Array.isArray(data) ? data : [];
@@ -75,15 +113,17 @@ function Dashboard() {
     useEffect(() => {
         if (!userId) return;
 
-        // ✅ fetch stats
-        fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`)
+        const token = localStorage.getItem("token");
+
+        fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
             .then((res) => res.json())
             .then((data) => setStats(data))
             .catch((err) => console.error("Stats fetch error:", err));
 
         fetchRecent();
     }, [userId]);
-
     return (
         <div className="dashboard-shell">
             <Sidebar />
@@ -105,23 +145,23 @@ function Dashboard() {
                                     <span className="stat-icon">🏆</span>
                                     <span className="today-badge">Organized</span>
                                 </div>
-                                <h3>{String(stats.total_competitions || 0).padStart(2, "0")}</h3>
-                                <p>TOTAL COMPETITIONS</p>
+                                <h3>{String(stats.organized_competitions || 0).padStart(2, "0")}</h3>
+                                <p>ORGANIZED COMPETITIONS</p>
                             </div>
 
                             <div className="stat-card">
                                 <div className="stat-card-top">
                                     <span className="stat-icon">🤝</span>
                                 </div>
-                                <h3>{String(stats.teams_joined || 0).padStart(2, "0")}</h3>
-                                <p>COMPETITIONS JOINED</p>
+                                <h3>{String(stats.joined_competitions || 0).padStart(2, "0")}</h3>
+                                <p>JOINED COMPETITIONS</p>
                             </div>
 
                             <div className="stat-card">
                                 <div className="stat-card-top">
                                     <span className="stat-icon">👥</span>
                                 </div>
-                                <h3>00</h3>
+                                <h3>{String(stats.teams_joined || 0).padStart(2, "0")}</h3>
                                 <p>TEAMS JOINED</p>
                             </div>
                         </div>

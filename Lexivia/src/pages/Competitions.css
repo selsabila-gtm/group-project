@@ -205,15 +205,64 @@
     font-size: 12px;
 }
 
+/* Base button (shared style) */
 .go-btn {
-    width: 100px;
-    height: 40px;
+    min-width: 110px;
+    height: 42px;
     border: none;
     border-radius: 999px;
-    background: #1359db;
-    color: #ffffff;
-    font-size: 15px;
+    font-size: 14px;
+    font-weight: 700;
     cursor: pointer;
+    transition: all 0.25s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+/* 🔵 JOIN */
+.go-btn--join {
+    background: linear-gradient(135deg, #1a73e8, #0d57d8);
+    color: #ffffff;
+    box-shadow: 0 6px 14px rgba(13, 87, 216, 0.25);
+}
+
+.go-btn--join:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(13, 87, 216, 0.35);
+}
+
+/* 🟢 PARTICIPANT (Contribute) */
+.go-btn--participant {
+    background: linear-gradient(135deg, #1f9d66, #167a52);
+    color: #ffffff;
+    box-shadow: 0 6px 14px rgba(31, 157, 102, 0.25);
+}
+
+.go-btn--participant:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(31, 157, 102, 0.35);
+}
+
+/* 🟣 ORGANIZER */
+.go-btn--organizer {
+    background: linear-gradient(135deg, #6c5ce7, #4b3fd1);
+    color: #ffffff;
+    box-shadow: 0 6px 14px rgba(108, 92, 231, 0.25);
+}
+
+.go-btn--organizer:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(108, 92, 231, 0.35);
+}
+
+/* Disabled (for closed competitions) */
+.go-btn:disabled {
+    background: #dfe3ee;
+    color: #8a92a6;
+    cursor: not-allowed;
+    box-shadow: none;
 }
 
 .load-more-box {
@@ -282,4 +331,53 @@
 .grid-list-switch button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+.sort-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sort-control span {
+    font-size: 13px;
+    font-weight: 800;
+    color: #667085;
+}
+
+.sort-control select {
+    height: 42px;
+    border: 1px solid #dde4f6;
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 0 14px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1e2743;
+    outline: none;
+    cursor: pointer;
+}
+
+.go-btn--disabled {
+    background: #e5e9f2;
+    color: #8a92a6;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.go-btn:active {
+    transform: scale(0.96);
+}
+
+.go-btn--closed-view {
+    background: #ffffff;
+    color: #6b7280;
+    border: 1px solid #d8deea;
+    box-shadow: none;
+}
+
+.go-btn--closed-view:hover {
+    background: #f3f5fb;
+    color: #1e2743;
+    transform: translateY(-2px);
 }

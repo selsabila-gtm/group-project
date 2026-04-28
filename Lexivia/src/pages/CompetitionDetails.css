@@ -516,3 +516,7 @@
     align-items: center;
     justify-content: center;
 }
+
+.clickable {
+    cursor: pointer;
+}

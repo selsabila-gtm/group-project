@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./CreateCompetition.css";
 
@@ -49,19 +49,28 @@ const complexityLevels = [
     },
 ];
 
-const skillsList = [
-    "Python Programming",
-    "Machine Learning",
-    "Deep Learning",
+const PREDEFINED_SKILLS = [
     "Natural Language Processing",
-    "Data Analysis",
-    "Statistics",
+    "Computer Vision",
     "PyTorch",
     "TensorFlow",
-    "Transformers",
-    "Data Preprocessing",
-    "Model Evaluation",
-    "Research Skills",
+    "Transformer Architecture",
+    "Vector Databases",
+    "Python",
+    "CUDA",
+    "Rust",
+    "Go",
+    "Docker",
+    "Kubernetes",
+    "FastAPI",
+    "React",
+    "Named Entity Recognition",
+    "Automatic Speech Recognition",
+    "Text Classification",
+    "Data Annotation",
+    "MLOps",
+    "Fine-tuning",
+    "Prompt Engineering",
 ];
 
 const initialForm = {
@@ -94,24 +103,134 @@ const initialForm = {
     freezeDate: "",
 };
 
-function CreateCompetition() {
+function safeArrayJson(value) {
+    try {
+        if (!value) return [];
+        if (Array.isArray(value)) return value;
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+function mapCompetitionToForm(c) {
+    return {
+        competitionName: c.title || "",
+        taskType: c.task_type || c.category || "",
+        description: c.description || "",
+        startDate: c.start_date || "",
+        endDate: c.end_date || "",
+        prizePool: c.prize_pool ?? "",
+
+        primaryMetric: c.primary_metric || "",
+        secondaryMetric: c.secondary_metric || "",
+
+        maxTeams: c.max_teams ?? "",
+        minMembers: c.min_members ?? "",
+        maxMembers: c.max_members ?? "",
+        mergeDeadline: c.merge_deadline || "",
+        requiredSkills: safeArrayJson(c.required_skills),
+        maxSubmissionsPerDay: c.max_submissions_per_day ?? "",
+        allowExternalData: c.allow_external_data ?? true,
+        allowPretrainedModels: c.allow_pretrained_models ?? true,
+        requireCodeSharing: c.require_code_sharing ?? false,
+        additionalRules: c.additional_rules || "",
+
+        complexityLevel: c.complexity_level ?? 0,
+
+        datasets: safeArrayJson(c.datasets_json),
+        milestones: safeArrayJson(c.milestones_json),
+        validationDate: c.validation_date || "",
+        freezeDate: c.freeze_date || "",
+    };
+}
+
+function CreateCompetition({ editMode = false }) {
     const navigate = useNavigate();
+    const location = useLocation();
+    const { competitionId } = useParams();
+
+    const isEditMode = editMode || Boolean(competitionId);
+
     const [currentStep, setCurrentStep] = useState(0);
     const [submitting, setSubmitting] = useState(false);
+    const [loadingEditData, setLoadingEditData] = useState(isEditMode);
     const [form, setForm] = useState(initialForm);
+    const [errors, setErrors] = useState({});
+    const [skillsOpen, setSkillsOpen] = useState(false);
 
     const progressPercent = ((currentStep + 1) / steps.length) * 100;
+
+    useEffect(() => {
+        if (!isEditMode) return;
+
+        const competitionFromState = location.state?.competition;
+
+        if (competitionFromState) {
+            setForm(mapCompetitionToForm(competitionFromState));
+            setLoadingEditData(false);
+            return;
+        }
+
+        async function loadCompetitionForEdit() {
+            try {
+                const token = localStorage.getItem("token");
+
+                if (!token) {
+                    navigate("/login");
+                    return;
+                }
+
+                const res = await fetch(
+                    `http://127.0.0.1:8000/competitions/${competitionId}`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    }
+                );
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.detail || "Could not load competition");
+                }
+
+                setForm(mapCompetitionToForm(data));
+            } catch (error) {
+                console.error(error);
+                alert(error.message);
+                navigate("/competitions");
+            } finally {
+                setLoadingEditData(false);
+            }
+        }
+
+        loadCompetitionForEdit();
+    }, [isEditMode, location.state, competitionId, navigate]);
+
+    const clearFieldError = (field) => {
+        setErrors((prev) => {
+            const copy = { ...prev };
+            delete copy[field];
+            return copy;
+        });
+    };
 
     const updateField = (field, value) => {
         setForm((prev) => ({
             ...prev,
             [field]: value,
         }));
+
+        clearFieldError(field);
     };
 
     const toggleSkill = (skill) => {
         setForm((prev) => {
             const exists = prev.requiredSkills.includes(skill);
+
             return {
                 ...prev,
                 requiredSkills: exists
@@ -142,6 +261,9 @@ function CreateCompetition() {
                 item.id === id ? { ...item, [field]: value } : item
             ),
         }));
+
+        clearFieldError(`datasetName-${id}`);
+        clearFieldError(`datasetType-${id}`);
     };
 
     const removeDataset = (id) => {
@@ -180,6 +302,149 @@ function CreateCompetition() {
         }));
     };
 
+    const validateStep = (step = currentStep) => {
+        const nextErrors = {};
+
+        if (step === 0) {
+            if (!form.competitionName.trim()) {
+                nextErrors.competitionName = "Competition name is required.";
+            }
+
+            if (!form.taskType) {
+                nextErrors.taskType = "Task type is required.";
+            }
+
+            if (!form.description.trim()) {
+                nextErrors.description = "Description is required.";
+            }
+
+            if (
+                form.startDate &&
+                form.endDate &&
+                new Date(form.endDate) < new Date(form.startDate)
+            ) {
+                nextErrors.endDate = "End date must be after start date.";
+            }
+
+            if (form.prizePool !== "" && Number(form.prizePool) < 0) {
+                nextErrors.prizePool = "Prize pool cannot be negative.";
+            }
+        }
+
+        if (step === 1) {
+            if (!form.primaryMetric) {
+                nextErrors.primaryMetric = "Primary metric is required.";
+            }
+        }
+
+        if (step === 2) {
+            if (form.maxTeams !== "" && Number(form.maxTeams) < 0) {
+                nextErrors.maxTeams = "Maximum teams cannot be negative.";
+            }
+
+            if (form.minMembers !== "" && Number(form.minMembers) <= 0) {
+                nextErrors.minMembers = "Minimum members must be greater than 0.";
+            }
+
+            if (form.maxMembers !== "" && Number(form.maxMembers) <= 0) {
+                nextErrors.maxMembers = "Maximum members must be greater than 0.";
+            }
+
+            if (
+                form.minMembers !== "" &&
+                form.maxMembers !== "" &&
+                Number(form.minMembers) > Number(form.maxMembers)
+            ) {
+                nextErrors.maxMembers = "Max members must be greater than min members.";
+            }
+
+            if (
+                form.maxSubmissionsPerDay !== "" &&
+                Number(form.maxSubmissionsPerDay) <= 0
+            ) {
+                nextErrors.maxSubmissionsPerDay =
+                    "Max submissions per day must be greater than 0.";
+            }
+
+            if (
+                form.mergeDeadline &&
+                form.startDate &&
+                new Date(form.mergeDeadline) < new Date(form.startDate)
+            ) {
+                nextErrors.mergeDeadline = "Merge deadline cannot be before start date.";
+            }
+
+            if (
+                form.mergeDeadline &&
+                form.endDate &&
+                new Date(form.mergeDeadline) > new Date(form.endDate)
+            ) {
+                nextErrors.mergeDeadline = "Merge deadline cannot be after end date.";
+            }
+        }
+
+        if (step === 4) {
+            form.datasets.forEach((dataset, index) => {
+                if (!dataset.name.trim()) {
+                    nextErrors[`datasetName-${dataset.id}`] =
+                        `Dataset ${index + 1} name is required.`;
+                }
+
+                if (!dataset.type.trim()) {
+                    nextErrors[`datasetType-${dataset.id}`] =
+                        `Dataset ${index + 1} type is required.`;
+                }
+            });
+        }
+
+        if (step === 5) {
+            if (
+                form.validationDate &&
+                form.startDate &&
+                new Date(form.validationDate) < new Date(form.startDate)
+            ) {
+                nextErrors.validationDate =
+                    "Validation date cannot be before start date.";
+            }
+
+            if (
+                form.validationDate &&
+                form.endDate &&
+                new Date(form.validationDate) > new Date(form.endDate)
+            ) {
+                nextErrors.validationDate =
+                    "Validation date cannot be after competition end date.";
+            }
+
+            if (
+                form.freezeDate &&
+                form.startDate &&
+                new Date(form.freezeDate) < new Date(form.startDate)
+            ) {
+                nextErrors.freezeDate = "Freeze date cannot be before start date.";
+            }
+
+            if (
+                form.freezeDate &&
+                form.validationDate &&
+                new Date(form.freezeDate) < new Date(form.validationDate)
+            ) {
+                nextErrors.freezeDate = "Freeze date cannot be before validation date.";
+            }
+
+            if (
+                form.freezeDate &&
+                form.endDate &&
+                new Date(form.freezeDate) > new Date(form.endDate)
+            ) {
+                nextErrors.freezeDate = "Freeze date cannot be after competition end date.";
+            }
+        }
+
+        setErrors(nextErrors);
+        return Object.keys(nextErrors).length === 0;
+    };
+
     const buildPayload = () => ({
         competition_name: form.competitionName,
         task_type: form.taskType,
@@ -214,6 +479,8 @@ function CreateCompetition() {
     });
 
     const saveDraft = async () => {
+        if (isEditMode) return;
+
         try {
             setSubmitting(true);
 
@@ -253,72 +520,12 @@ function CreateCompetition() {
         }
     };
 
-    const createCompetition = async () => {
-        if (!form.competitionName.trim()) {
-            alert("Competition Name is required.");
-            setCurrentStep(0);
-            return;
-        }
-
-        if (!form.taskType) {
-            alert("Task Type is required.");
-            setCurrentStep(0);
-            return;
-        }
-
-        if (!form.description.trim()) {
-            alert("Description is required.");
-            setCurrentStep(0);
-            return;
-        }
-
-        if (!form.startDate) {
-            alert("Start Date is required.");
-            setCurrentStep(0);
-            return;
-        }
-
-        if (!form.endDate) {
-            alert("End Date is required.");
-            setCurrentStep(0);
-            return;
-        }
-
-        if (new Date(form.endDate) < new Date(form.startDate)) {
-            alert("End Date must be after Start Date.");
-            setCurrentStep(0);
-            return;
-        }
-
-        if (!form.primaryMetric) {
-            alert("Primary Metric is required.");
-            setCurrentStep(1);
-            return;
-        }
-
-        if (form.prizePool !== "" && Number(form.prizePool) < 0) {
-            alert("Prize Pool cannot be negative.");
-            setCurrentStep(0);
-            return;
-        }
-
-        if (
-            form.minMembers !== "" &&
-            form.maxMembers !== "" &&
-            Number(form.minMembers) > Number(form.maxMembers)
-        ) {
-            alert("Min Team Members cannot be greater than Max Team Members.");
-            setCurrentStep(2);
-            return;
-        }
-
-        if (
-            form.maxSubmissionsPerDay !== "" &&
-            Number(form.maxSubmissionsPerDay) <= 0
-        ) {
-            alert("Maximum Submissions Per Day must be greater than 0.");
-            setCurrentStep(2);
-            return;
+    const submitCompetition = async () => {
+        for (let step = 0; step < steps.length; step++) {
+            if (!validateStep(step)) {
+                setCurrentStep(step);
+                return;
+            }
         }
 
         try {
@@ -332,8 +539,14 @@ function CreateCompetition() {
                 return;
             }
 
-            const res = await fetch("http://127.0.0.1:8000/competitions/create", {
-                method: "POST",
+            const url = isEditMode
+                ? `http://127.0.0.1:8000/competitions/${competitionId}/update`
+                : "http://127.0.0.1:8000/competitions/create";
+
+            const method = isEditMode ? "PUT" : "POST";
+
+            const res = await fetch(url, {
+                method,
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,
@@ -351,8 +564,19 @@ function CreateCompetition() {
                 );
             }
 
-            alert("Competition created successfully");
-            navigate("/competitions", { state: { refreshAll: true } });
+            alert(
+                isEditMode
+                    ? "Competition updated successfully"
+                    : "Competition created successfully"
+            );
+
+            if (isEditMode) {
+                navigate(`/competitions/${competitionId}/organizer`, {
+                    state: { refreshed: true },
+                });
+            } else {
+                navigate("/competitions", { state: { refreshAll: true } });
+            }
         } catch (error) {
             console.error(error);
             alert(error.message);
@@ -361,7 +585,17 @@ function CreateCompetition() {
         }
     };
 
+    const handleCancel = () => {
+        if (isEditMode) {
+            navigate(`/competitions/${competitionId}/organizer`);
+        } else {
+            navigate("/competitions");
+        }
+    };
+
     const handleNext = () => {
+        if (!validateStep(currentStep)) return;
+
         if (currentStep < steps.length - 1) {
             setCurrentStep((prev) => prev + 1);
         }
@@ -373,21 +607,29 @@ function CreateCompetition() {
         }
     };
 
+    const ErrorMessage = ({ name }) => {
+        if (!errors[name]) return null;
+        return <span className="field-error">{errors[name]}</span>;
+    };
+
     const renderBasicInfo = () => (
         <div className="create-card">
             <div className="create-section">
-                <label>Competition Name</label>
+                <label>Competition Name <span className="required-star">*</span></label>
                 <input
+                    className={errors.competitionName ? "input-error" : ""}
                     type="text"
                     placeholder="e.g., Semantic Drift v4.2"
                     value={form.competitionName}
                     onChange={(e) => updateField("competitionName", e.target.value)}
                 />
+                <ErrorMessage name="competitionName" />
             </div>
 
             <div className="create-section">
-                <label>Task Type</label>
+                <label>Task Type <span className="required-star">*</span></label>
                 <select
+                    className={errors.taskType ? "input-error" : ""}
                     value={form.taskType}
                     onChange={(e) => updateField("taskType", e.target.value)}
                 >
@@ -398,46 +640,56 @@ function CreateCompetition() {
                         </option>
                     ))}
                 </select>
+                <ErrorMessage name="taskType" />
             </div>
 
             <div className="create-section">
-                <label>Description</label>
+                <label>Description <span className="required-star">*</span></label>
                 <textarea
+                    className={errors.description ? "input-error" : ""}
                     rows="3"
-                    placeholder="Detect subtle shifts in contextual meaning across long-form legal documents..."
+                    placeholder="Describe the competition goal, task, and expected output..."
                     value={form.description}
                     onChange={(e) => updateField("description", e.target.value)}
                 />
+                <ErrorMessage name="description" />
             </div>
 
             <div className="create-two-col">
                 <div className="create-section">
                     <label>Start Date</label>
                     <input
+                        className={errors.startDate ? "input-error" : ""}
                         type="date"
                         value={form.startDate}
                         onChange={(e) => updateField("startDate", e.target.value)}
                     />
+                    <ErrorMessage name="startDate" />
                 </div>
 
                 <div className="create-section">
                     <label>End Date</label>
                     <input
+                        className={errors.endDate ? "input-error" : ""}
                         type="date"
                         value={form.endDate}
                         onChange={(e) => updateField("endDate", e.target.value)}
                     />
+                    <ErrorMessage name="endDate" />
                 </div>
             </div>
 
             <div className="create-section">
                 <label>Prize Pool (USD)</label>
                 <input
+                    className={errors.prizePool ? "input-error" : ""}
                     type="number"
                     placeholder="e.g., 12500"
                     value={form.prizePool}
                     onChange={(e) => updateField("prizePool", e.target.value)}
                 />
+                <small>Optional. Leave empty if there is no prize.</small>
+                <ErrorMessage name="prizePool" />
             </div>
         </div>
     );
@@ -446,12 +698,13 @@ function CreateCompetition() {
         <div className="create-card">
             <h3 className="create-card-title">Evaluation Metrics</h3>
             <p className="create-card-subtitle">
-                Define how submissions will be evaluated and ranked
+                Define how submissions will be evaluated and ranked.
             </p>
 
             <div className="create-section">
-                <label>Primary Metric</label>
+                <label>Primary Metric <span className="required-star">*</span></label>
                 <select
+                    className={errors.primaryMetric ? "input-error" : ""}
                     value={form.primaryMetric}
                     onChange={(e) => updateField("primaryMetric", e.target.value)}
                 >
@@ -462,11 +715,12 @@ function CreateCompetition() {
                         </option>
                     ))}
                 </select>
-                <small>Main metric used for leaderboard ranking</small>
+                <small>Main metric used for leaderboard ranking.</small>
+                <ErrorMessage name="primaryMetric" />
             </div>
 
             <div className="create-section">
-                <label>Secondary Metric (Optional)</label>
+                <label>Secondary Metric</label>
                 <select
                     value={form.secondaryMetric}
                     onChange={(e) => updateField("secondaryMetric", e.target.value)}
@@ -478,13 +732,14 @@ function CreateCompetition() {
                         </option>
                     ))}
                 </select>
-                <small>Additional metric for comparison (tie-breaker)</small>
+                <small>Optional tie-breaker metric.</small>
             </div>
 
             <div className="metric-preview">
                 <div>
                     <h4>Metric Preview</h4>
                     <p>Primary: {form.primaryMetric || "Not selected"}</p>
+                    <p>Secondary: {form.secondaryMetric || "Not selected"}</p>
                 </div>
                 <span className="metric-badge">Primary</span>
             </div>
@@ -495,7 +750,7 @@ function CreateCompetition() {
         <div className="create-card">
             <h3 className="create-card-title">Competition Rules & Requirements</h3>
             <p className="create-card-subtitle">
-                Define team structure, participant requirements, and submission rules
+                Optional settings for team limits, skills, and submission rules.
             </p>
 
             <div className="inner-panel">
@@ -505,61 +760,104 @@ function CreateCompetition() {
                     <div className="create-section">
                         <label>Maximum Number of Teams</label>
                         <input
+                            className={errors.maxTeams ? "input-error" : ""}
                             type="number"
-                            placeholder="e.g., 100 (0 for unlimited)"
+                            placeholder="e.g., 100"
                             value={form.maxTeams}
                             onChange={(e) => updateField("maxTeams", e.target.value)}
                         />
-                        <small>Set to 0 for unlimited teams</small>
+                        <small>Leave empty or set 0 for unlimited teams.</small>
+                        <ErrorMessage name="maxTeams" />
                     </div>
 
                     <div className="create-section">
                         <label>Min Team Members</label>
                         <input
+                            className={errors.minMembers ? "input-error" : ""}
                             type="number"
                             placeholder="e.g., 1"
                             value={form.minMembers}
                             onChange={(e) => updateField("minMembers", e.target.value)}
                         />
+                        <ErrorMessage name="minMembers" />
                     </div>
 
                     <div className="create-section">
                         <label>Max Team Members</label>
                         <input
+                            className={errors.maxMembers ? "input-error" : ""}
                             type="number"
                             placeholder="e.g., 5"
                             value={form.maxMembers}
                             onChange={(e) => updateField("maxMembers", e.target.value)}
                         />
+                        <ErrorMessage name="maxMembers" />
                     </div>
                 </div>
 
                 <div className="create-section">
                     <label>Team Merger Deadline</label>
                     <input
+                        className={errors.mergeDeadline ? "input-error" : ""}
                         type="date"
                         value={form.mergeDeadline}
                         onChange={(e) => updateField("mergeDeadline", e.target.value)}
                     />
-                    <small>Last date when teams can merge together</small>
+                    <small>Optional. Must be between start and end date.</small>
+                    <ErrorMessage name="mergeDeadline" />
                 </div>
             </div>
 
             <div className="create-section">
                 <label>Required Skills</label>
-                <small>Select the skills participants should have</small>
-                <div className="skills-grid">
-                    {skillsList.map((skill) => (
-                        <label key={skill} className="checkbox-row">
-                            <input
-                                type="checkbox"
-                                checked={form.requiredSkills.includes(skill)}
-                                onChange={() => toggleSkill(skill)}
-                            />
-                            <span>{skill}</span>
-                        </label>
-                    ))}
+                <small>Optional. Pick skills from the predefined list.</small>
+
+                <div className="skills-select">
+                    <button
+                        type="button"
+                        className="skills-select-btn"
+                        onClick={() => setSkillsOpen((prev) => !prev)}
+                    >
+                        {form.requiredSkills.length === 0
+                            ? "Select required skills"
+                            : `${form.requiredSkills.length} skill(s) selected`}
+                        <span>⌄</span>
+                    </button>
+
+                    {skillsOpen && (
+                        <div className="skills-dropdown">
+                            {PREDEFINED_SKILLS.map((skill) => {
+                                const selected = form.requiredSkills.includes(skill);
+
+                                return (
+                                    <button
+                                        key={skill}
+                                        type="button"
+                                        className={selected ? "skill-option selected" : "skill-option"}
+                                        onClick={() => toggleSkill(skill)}
+                                    >
+                                        <span>{skill}</span>
+                                        {selected && <strong>✓</strong>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
+
+                {form.requiredSkills.length > 0 && (
+                    <div className="selected-skills">
+                        {form.requiredSkills.map((skill) => (
+                            <button
+                                key={skill}
+                                type="button"
+                                onClick={() => toggleSkill(skill)}
+                            >
+                                {skill} ×
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
 
             <div className="inner-panel">
@@ -568,6 +866,7 @@ function CreateCompetition() {
                 <div className="create-section">
                     <label>Maximum Submissions Per Day</label>
                     <input
+                        className={errors.maxSubmissionsPerDay ? "input-error" : ""}
                         type="number"
                         placeholder="e.g., 5"
                         value={form.maxSubmissionsPerDay}
@@ -575,7 +874,8 @@ function CreateCompetition() {
                             updateField("maxSubmissionsPerDay", e.target.value)
                         }
                     />
-                    <small>Limit daily submissions to prevent overfitting</small>
+                    <small>Optional. Leave empty for no daily limit.</small>
+                    <ErrorMessage name="maxSubmissionsPerDay" />
                 </div>
 
                 <div className="toggle-row">
@@ -598,7 +898,7 @@ function CreateCompetition() {
                 <div className="toggle-row">
                     <div>
                         <strong>Allow Pre-trained Models</strong>
-                        <p>Can participants use pre-trained models (e.g., BERT, GPT)?</p>
+                        <p>Can participants use pre-trained models such as BERT or GPT?</p>
                     </div>
                     <label className="switch">
                         <input
@@ -634,14 +934,10 @@ function CreateCompetition() {
                 <label>Additional Rules & Guidelines</label>
                 <textarea
                     rows="3"
-                    placeholder="Specify any additional competition rules, ethical guidelines, or terms and conditions..."
+                    placeholder="Specify extra rules, ethics requirements, prize distribution terms..."
                     value={form.additionalRules}
                     onChange={(e) => updateField("additionalRules", e.target.value)}
                 />
-                <small>
-                    Include any other important rules like plagiarism policy, code of
-                    conduct, prize distribution terms, etc.
-                </small>
             </div>
         </div>
     );
@@ -650,7 +946,7 @@ function CreateCompetition() {
         <div className="create-card">
             <h3 className="create-card-title">Challenge Complexity</h3>
             <p className="create-card-subtitle">
-                Set the difficulty level and technical requirements
+                Choose the difficulty level of this competition.
             </p>
 
             <div className="create-section">
@@ -682,7 +978,7 @@ function CreateCompetition() {
                 <div>
                     <h3 className="create-card-title">Dataset Configuration</h3>
                     <p className="create-card-subtitle">
-                        Define datasets and collection rules for participants
+                        Optional. Define dataset requirements for participants.
                     </p>
                 </div>
 
@@ -694,9 +990,8 @@ function CreateCompetition() {
             <div className="dataset-guidelines-box">
                 <h4>Dataset Collection Guidelines</h4>
                 <p>
-                    Participants will collect data based on the rules and formats you
-                    specify below. Test datasets marked as private will only be visible to
-                    organizers for evaluation purposes.
+                    Add datasets only if this competition requires specific public or
+                    private dataset resources.
                 </p>
             </div>
 
@@ -704,7 +999,7 @@ function CreateCompetition() {
                 <div className="empty-datasets-box">
                     <div className="upload-icon">⇪</div>
                     <h4>No datasets added</h4>
-                    <p>Add dataset requirements for participant data collection</p>
+                    <p>You can skip this step if datasets are not needed yet.</p>
                     <button type="button" className="dark-action-btn" onClick={addDataset}>
                         + Add Your First Dataset
                     </button>
@@ -715,8 +1010,9 @@ function CreateCompetition() {
                         <div key={dataset.id} className="dataset-editor">
                             <div className="create-three-col">
                                 <div className="create-section">
-                                    <label>Dataset Name</label>
+                                    <label>Dataset Name <span className="required-star">*</span></label>
                                     <input
+                                        className={errors[`datasetName-${dataset.id}`] ? "input-error" : ""}
                                         type="text"
                                         value={dataset.name}
                                         placeholder="Dataset name"
@@ -724,11 +1020,13 @@ function CreateCompetition() {
                                             updateDataset(dataset.id, "name", e.target.value)
                                         }
                                     />
+                                    <ErrorMessage name={`datasetName-${dataset.id}`} />
                                 </div>
 
                                 <div className="create-section">
-                                    <label>Type</label>
+                                    <label>Type <span className="required-star">*</span></label>
                                     <input
+                                        className={errors[`datasetType-${dataset.id}`] ? "input-error" : ""}
                                         type="text"
                                         value={dataset.type}
                                         placeholder="Text / Audio / Mixed"
@@ -736,6 +1034,7 @@ function CreateCompetition() {
                                             updateDataset(dataset.id, "type", e.target.value)
                                         }
                                     />
+                                    <ErrorMessage name={`datasetType-${dataset.id}`} />
                                 </div>
 
                                 <div className="create-section">
@@ -772,15 +1071,11 @@ function CreateCompetition() {
                 <div>
                     <h3 className="create-card-title">Key Milestones</h3>
                     <p className="create-card-subtitle">
-                        Set important dates and deadlines
+                        Optional. Add validation and leaderboard dates.
                     </p>
                 </div>
 
-                <button
-                    type="button"
-                    className="soft-action-btn"
-                    onClick={addMilestone}
-                >
+                <button type="button" className="soft-action-btn" onClick={addMilestone}>
                     + Add Milestone
                 </button>
             </div>
@@ -788,27 +1083,29 @@ function CreateCompetition() {
             <div className="milestone-grid">
                 <div className="milestone-box">
                     <strong>Submission Open</strong>
-                    <span>
-                        {form.startDate ? form.startDate : "Set start date in Step 1"}
-                    </span>
+                    <span>{form.startDate ? form.startDate : "Set start date in Step 1"}</span>
                 </div>
 
                 <div className="milestone-box">
                     <strong>Model Validation Phase</strong>
                     <input
+                        className={errors.validationDate ? "input-error" : ""}
                         type="date"
                         value={form.validationDate}
                         onChange={(e) => updateField("validationDate", e.target.value)}
                     />
+                    <ErrorMessage name="validationDate" />
                 </div>
 
                 <div className="milestone-box">
                     <strong>Final Leaderboard Freeze</strong>
                     <input
+                        className={errors.freezeDate ? "input-error" : ""}
                         type="date"
                         value={form.freezeDate}
                         onChange={(e) => updateField("freezeDate", e.target.value)}
                     />
+                    <ErrorMessage name="freezeDate" />
                 </div>
 
                 <div className="milestone-box">
@@ -869,36 +1166,45 @@ function CreateCompetition() {
         }
     };
 
+    if (loadingEditData) {
+        return (
+            <div className="create-page">
+                <Sidebar />
+                <div className="create-main">
+                    <div className="create-content">
+                        <div className="create-card">
+                            <h3>Loading competition data...</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="create-page">
             <Sidebar />
 
             <div className="create-main">
                 <div className="create-topbar">
-                    <h1>Create New Competition</h1>
+                    <h1>{isEditMode ? "Edit Competition" : "Create New Competition"}</h1>
+
                     <div className="topbar-actions">
                         <button
                             type="button"
                             className="topbar-text-btn"
-                            onClick={() => navigate("/competitions")}
+                            onClick={handleCancel}
                         >
                             Cancel
                         </button>
-                        <button
-                            type="button"
-                            className="topbar-primary-btn"
-                            onClick={saveDraft}
-                            disabled={submitting}
-                        >
-                            Save Draft
-                        </button>
+
                     </div>
                 </div>
 
                 <div className="create-content">
                     <div className="wizard-head">
                         <div className="wizard-title-row">
-                            <h2>Create Competition</h2>
+                            <h2>{isEditMode ? "Update Competition" : "Create Competition"}</h2>
                             <span>Step {currentStep + 1} of 6</span>
                         </div>
 
@@ -914,8 +1220,19 @@ function CreateCompetition() {
                                 <button
                                     key={step}
                                     type="button"
-                                    className={currentStep === index ? "wizard-tab active" : "wizard-tab"}
-                                    onClick={() => setCurrentStep(index)}
+                                    className={
+                                        currentStep === index ? "wizard-tab active" : "wizard-tab"
+                                    }
+                                    onClick={() => {
+                                        if (index <= currentStep) {
+                                            setCurrentStep(index);
+                                            return;
+                                        }
+
+                                        if (validateStep(currentStep)) {
+                                            setCurrentStep(index);
+                                        }
+                                    }}
                                 >
                                     {step}
                                 </button>
@@ -948,10 +1265,16 @@ function CreateCompetition() {
                             <button
                                 type="button"
                                 className="footer-success-btn"
-                                onClick={createCompetition}
+                                onClick={submitCompetition}
                                 disabled={submitting}
                             >
-                                {submitting ? "Creating..." : "Create Competition"}
+                                {submitting
+                                    ? isEditMode
+                                        ? "Updating..."
+                                        : "Creating..."
+                                    : isEditMode
+                                        ? "Update Competition"
+                                        : "Create Competition"}
                             </button>
                         )}
                     </div>
