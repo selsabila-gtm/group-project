@@ -117,7 +117,11 @@ function CompetitionDetails() {
 
             setIsJoined(true);
             alert("Joined competition successfully");
-            navigate("/competitions");
+            setIsJoined(true);
+            alert("Joined competition successfully");
+
+            // go directly to data collection
+            navigate(`/competitions/${competitionId}/data-collection`);
         } catch (error) {
             console.error(error);
             alert("Backend error while joining competition");
@@ -145,7 +149,13 @@ function CompetitionDetails() {
                     <button
                         type="button"
                         className="back-button"
-                        onClick={() => navigate("/competitions")}
+                        onClick={() => {
+                            if (window.history.length > 1) {
+                                navigate(-1);
+                            } else {
+                                navigate("/competitions");
+                            }
+                        }}
                     >
                         ← Back to Competitions
                     </button>
@@ -175,13 +185,19 @@ function CompetitionDetails() {
                         </div>
 
                         {monitoring && monitoring.is_organizer === true ? (
-                            <div className="organizer-badge">
-                                You are the organizer
-                            </div>
+                            <button
+                                className="organizer-badge clickable"
+                                onClick={() => navigate(`/competitions/${competitionId}/organizer`)}
+                            >
+                                Check Dashboard →
+                            </button>
                         ) : isJoined ? (
-                            <div className="organizer-badge">
-                                Already Joined
-                            </div>
+                            <button
+                                className="organizer-badge clickable"
+                                onClick={() => navigate(`/competitions/${competitionId}/data-collection`)}
+                            >
+                                Check Competition →
+                            </button>
                         ) : (
                             <button
                                 type="button"
