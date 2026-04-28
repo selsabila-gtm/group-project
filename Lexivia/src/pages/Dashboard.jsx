@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 import "./Dashboard.css";
+import { supabase } from "../config/supabase";
 
 function statusClass(status) {
     const s = status?.toLowerCase();
@@ -32,47 +33,63 @@ function Dashboard() {
 
     // ✅ FIX: use localStorage instead of supabase
     useEffect(() => {
-        const savedUser = localStorage.getItem("user");
+        async function loadUser() {
+            const { data: { session } } = await supabase.auth.getSession();
 
-        if (!savedUser) {
-            navigate("/login");
-            return;
+            if (!session?.user) {
+                navigate("/login");
+                return;
+            }
+
+            const user = session.user;
+            const realUserId = user.id;
+
+            setUserId(realUserId);
+
+            let name =
+                user.user_metadata?.full_name ||
+                user.email?.split("@")[0] ||
+                "User";
+
+            try {
+                const profileRes = await fetch("http://127.0.0.1:8000/profile/me", {
+                    headers: {
+                        Authorization: `Bearer ${session.access_token}`,
+                    },
+                });
+
+                if (profileRes.ok) {
+                    const profile = await profileRes.json();
+                    name =
+                        profile.full_name ||
+                        profile.name ||
+                        profile.username ||
+                        name;
+                }
+            } catch (err) {
+                console.error("Profile name fetch failed:", err);
+            }
+
+            setUserName(name);
+
+            localStorage.setItem("token", session.access_token);
+            localStorage.setItem("user", JSON.stringify(user));
+
+            fetch("http://127.0.0.1:8000/sync-user", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    user_id: realUserId,
+                    full_name: name,
+                    email: user.email,
+                }),
+            }).catch(console.error);
         }
 
-        const user = JSON.parse(savedUser);
-        const realUserId = user.id || user.user_id || user.sub;
-
-        if (!realUserId) {
-            console.error("No user id found:", user);
-            navigate("/login");
-            return;
-        }
-
-        setUserId(realUserId);
-
-        const name =
-            user.user_metadata?.full_name ||
-            user.full_name ||
-            user.name ||
-            user.email?.split("@")[0] ||
-            "User";
-
-        setUserName(name);
-
-        const token = localStorage.getItem("token");
-
-        fetch("http://127.0.0.1:8000/sync-user", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-                user_id: realUserId,
-                full_name: name,
-                email: user.email,
-            }),
-        }).catch(console.error);
+        loadUser();
     }, [navigate]);
 
     const fetchRecent = () => {

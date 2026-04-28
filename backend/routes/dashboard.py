@@ -65,29 +65,32 @@ def time_ago(value):
 @router.get("/dashboard/stats/{user_id}")
 def get_dashboard_stats(user_id: str, db: Session = Depends(get_db)):
     organized_competitions = (
-        db.query(CompetitionOrganizer)
-        .join(Competition, CompetitionOrganizer.competition_id == Competition.id)
-        .filter(
-            CompetitionOrganizer.user_id == user_id,
-            Competition.is_draft == False,
-        )
-        .count()
+    db.query(CompetitionOrganizer.competition_id)
+    .join(Competition, CompetitionOrganizer.competition_id == Competition.id)
+    .filter(
+        CompetitionOrganizer.user_id == user_id,
+        Competition.is_draft == False,
+    )
+    .distinct()
+    .count()
     )
 
     joined_competitions = (
-        db.query(CompetitionParticipant)
-        .join(Competition, CompetitionParticipant.competition_id == Competition.id)
-        .filter(
-            CompetitionParticipant.user_id == user_id,
-            Competition.is_draft == False,
-        )
-        .count()
+    db.query(CompetitionParticipant.competition_id)
+    .join(Competition, CompetitionParticipant.competition_id == Competition.id)
+    .filter(
+        CompetitionParticipant.user_id == user_id,
+        Competition.is_draft == False,
+    )
+    .distinct()
+    .count()
     )
 
     teams_joined = (
-        db.query(TeamMember)
-        .filter(TeamMember.user_id == user_id)
-        .count()
+    db.query(TeamMember.team_id)
+    .filter(TeamMember.user_id == user_id)
+    .distinct()
+    .count()
     )
 
     return {
