@@ -4,7 +4,7 @@ import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 import "./Competitions.css";
 
-const PAGE_SIZE = 4;
+const PAGE_SIZE = 10;
 
 // ── Role-based button config ───────────────────────────────────────────────────
 //
@@ -13,6 +13,16 @@ const PAGE_SIZE = 4;
 //  user_role === "none"        → "Join →"        → /competitions/:id  (detail / join page)
 //
 function getCardAction(item, navigate) {
+  const status = item.status?.toLowerCase();
+
+  if (status === "closed" || status === "ended") {
+    return {
+      label: "See Details →",
+      className: "go-btn go-btn--closed-view",
+      onClick: () => navigate(`/competitions/${item.id}`),
+    };
+  }
+
   switch (item.user_role) {
     case "organizer":
       return {
@@ -41,6 +51,9 @@ function Competitions() {
 
   const urlParams = new URLSearchParams(location.search);
   const urlSearch = urlParams.get("search") || "";
+  const [sortOrder, setSortOrder] = useState(
+    localStorage.getItem("competitions_sortOrder") || "newest"
+  );
 
   const [competitions, setCompetitions] = useState([]);
   const [search, setSearch] = useState(urlSearch);
@@ -123,6 +136,7 @@ function Competitions() {
       limit: String(PAGE_SIZE),
       offset: String(offset),
       tab,
+      sort: sortOrder,
     });
     if (search) params.append("search", search);
     if (category !== "ALL TASKS") params.append("category", category);
@@ -152,7 +166,7 @@ function Competitions() {
         if (offset === 0) setCompetitions([]);
       })
       .finally(() => setLoading(false));
-  }, [search, category, tab, offset]);
+  }, [search, category, tab, offset, sortOrder]);
 
   // ── Fetch count ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -175,6 +189,11 @@ function Competitions() {
     setOffset(0);
     setCategory(sel);
     localStorage.setItem("competitions_category", sel);
+  };
+  const handleSortChange = (value) => {
+    setOffset(0);
+    setSortOrder(value);
+    localStorage.setItem("competitions_sortOrder", value);
   };
 
   const handleTabChange = (sel) => {
@@ -200,7 +219,7 @@ function Competitions() {
   function RoleChip({ role }) {
     if (!role || role === "none") return null;
     const styles = {
-      organizer:   { background: "#fff0e6", color: "#b85200" },
+      organizer: { background: "#fff0e6", color: "#b85200" },
       participant: { background: "#e8f5e9", color: "#2e7d32" },
     };
     const labels = { organizer: "ORGANIZING", participant: "PARTICIPATING" };
@@ -228,7 +247,18 @@ function Competitions() {
 
         <div className="competitions-body">
           <div className="view-switch-row">
-            <div />
+            <div className="sort-control">
+              <span>Sort by</span>
+              <select
+                value={sortOrder}
+                onChange={(e) => handleSortChange(e.target.value)}
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="unknown_dates">Unknown dates only</option>
+              </select>
+            </div>
+
             <div className="grid-list-switch">
               <button
                 type="button"
@@ -341,7 +371,7 @@ function Competitions() {
           )}
 
           <div className="load-more-box">
-            <p>VIEWING {competitions.length} OF {totalCount} ACTIVE EVENTS</p>
+            VIEWING {competitions.length} OF {totalCount} COMPETITIONS
             <button
               type="button"
               onClick={handleLoadMore}

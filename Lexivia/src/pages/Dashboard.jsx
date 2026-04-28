@@ -5,10 +5,16 @@ import Topbar from "../components/Topbar";
 import "./Dashboard.css";
 
 function statusClass(status) {
-    if (status === "IN PROGRESS") return "in-progress";
-    if (status === "SUBMITTED") return "submitted";
-    if (status === "DRAFT") return "draft";
-    if (status === "OPEN") return "in-progress";
+    const s = status?.toLowerCase();
+
+    if (s === "open") return "open";
+    if (s === "closed") return "closed";
+    if (s === "ended") return "ended";
+    if (s === "upcoming") return "upcoming";
+    if (s === "in progress") return "in-progress";
+    if (s === "submitted") return "submitted";
+    if (s === "draft") return "draft";
+
     return "";
 }
 
@@ -16,7 +22,8 @@ function Dashboard() {
     const [userName, setUserName] = useState("User");
     const [userId, setUserId] = useState(null);
     const [stats, setStats] = useState({
-        total_competitions: 0,
+        organized_competitions: 0,
+        joined_competitions: 0,
         teams_joined: 0,
     });
     const [recentCompetitions, setRecentCompetitions] = useState([]);
@@ -33,11 +40,18 @@ function Dashboard() {
         }
 
         const user = JSON.parse(savedUser);
+        const realUserId = user.id || user.user_id || user.sub;
 
-        setUserId(user.id);
+        if (!realUserId) {
+            console.error("No user id found:", user);
+            navigate("/login");
+            return;
+        }
+
+        setUserId(realUserId);
 
         const name =
-            user.user_metadata?.full_name ||   // ✅ Supabase stores it here
+            user.user_metadata?.full_name ||
             user.full_name ||
             user.name ||
             user.email?.split("@")[0] ||
@@ -45,23 +59,30 @@ function Dashboard() {
 
         setUserName(name);
 
-        // sync user to backend
+        const token = localStorage.getItem("token");
+
         fetch("http://127.0.0.1:8000/sync-user", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
-                user_id: user.id,
+                user_id: realUserId,
                 full_name: name,
+                email: user.email,
             }),
-        });
+        }).catch(console.error);
     }, [navigate]);
 
     const fetchRecent = () => {
         if (!userId) return;
 
-        fetch(`http://127.0.0.1:8000/dashboard/recent/${userId}`)
+        const token = localStorage.getItem("token");
+
+        fetch(`http://127.0.0.1:8000/dashboard/recent/${userId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
             .then((res) => res.json())
             .then((data) => {
                 const safeData = Array.isArray(data) ? data : [];
@@ -75,15 +96,17 @@ function Dashboard() {
     useEffect(() => {
         if (!userId) return;
 
-        // ✅ fetch stats
-        fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`)
+        const token = localStorage.getItem("token");
+
+        fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
             .then((res) => res.json())
             .then((data) => setStats(data))
             .catch((err) => console.error("Stats fetch error:", err));
 
         fetchRecent();
     }, [userId]);
-
     return (
         <div className="dashboard-shell">
             <Sidebar />
@@ -105,23 +128,23 @@ function Dashboard() {
                                     <span className="stat-icon">🏆</span>
                                     <span className="today-badge">Organized</span>
                                 </div>
-                                <h3>{String(stats.total_competitions || 0).padStart(2, "0")}</h3>
-                                <p>TOTAL COMPETITIONS</p>
+                                <h3>{String(stats.organized_competitions || 0).padStart(2, "0")}</h3>
+                                <p>ORGANIZED COMPETITIONS</p>
                             </div>
 
                             <div className="stat-card">
                                 <div className="stat-card-top">
                                     <span className="stat-icon">🤝</span>
                                 </div>
-                                <h3>{String(stats.teams_joined || 0).padStart(2, "0")}</h3>
-                                <p>COMPETITIONS JOINED</p>
+                                <h3>{String(stats.joined_competitions || 0).padStart(2, "0")}</h3>
+                                <p>JOINED COMPETITIONS</p>
                             </div>
 
                             <div className="stat-card">
                                 <div className="stat-card-top">
                                     <span className="stat-icon">👥</span>
                                 </div>
-                                <h3>00</h3>
+                                <h3>{String(stats.teams_joined || 0).padStart(2, "0")}</h3>
                                 <p>TEAMS JOINED</p>
                             </div>
                         </div>

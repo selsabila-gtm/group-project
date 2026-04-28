@@ -20,7 +20,7 @@ import ProfilePage from "./pages/profile/ProfilePage";
 import UpdateProfilePage from "./pages/profile/updateprofile";
 import SettingsPage from "./pages/profile/settings";
 import "./index.css";
-
+import OrganizerDashboard from "./pages/OrganizerDashboard";
 // ── Placeholder ───────────────────────────────────────────────────────────────
 function SimplePage({ title, subtitle }) {
   return (
@@ -57,8 +57,8 @@ function App() {
       <Routes>
 
         {/* Public */}
-        <Route path="/"       element={<Landing />} />
-        <Route path="/login"  element={<Login />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
         {/* Protected */}
@@ -75,12 +75,11 @@ function App() {
 
           <Route
             path="/competitions/:competitionId/organizer"
-            element={
-              <SimplePage
-                title="Organizer Dashboard"
-                subtitle="Manage your competition, review submissions, and track progress."
-              />
-            }
+            element={<OrganizerDashboard />}
+          />
+          <Route
+            path="/edit-competition/:competitionId"
+            element={<CreateCompetition editMode={true} />}
           />
 
           {/* Teams */}
