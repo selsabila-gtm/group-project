@@ -56,7 +56,6 @@ export default function UpdateProfilePage() {
   const [errorMsg, setErrorMsg]  = useState('')
 
   // ── Form state ───────────────────────────────────────────────────────────────
-  const [name, setName]                     = useState('')
   const [profilePicture, setProfilePicture] = useState('')   // renamed from avatarUrl
   const [picturePreview, setPicturePreview] = useState('')   // renamed from avatarPreview
   const [bio, setBio]                       = useState('')
@@ -126,7 +125,6 @@ export default function UpdateProfilePage() {
         if (!profileRes.ok) throw new Error(`Server error: ${profileRes.status}`)
         const data = await profileRes.json()
 
-        setName(data.full_name || data.name || '')
         setProfilePicture(data.profile_picture || '')   // ← was data.avatar_url
         setPicturePreview(data.profile_picture || '')
         setBio(data.bio || '')
@@ -209,7 +207,6 @@ export default function UpdateProfilePage() {
         method: 'PUT',
         headers: authHeaders(),
         body: JSON.stringify({
-          full_name: name,
           profile_picture: profilePicture,   // ← was avatar_url
           bio,
           institution,
@@ -361,7 +358,7 @@ export default function UpdateProfilePage() {
                 <img src={picturePreview} alt="profile" className="p-avatar p-avatar--xl" />
               ) : (
                 <div className="p-avatar p-avatar--xl p-avatar--ph">
-                  {name?.charAt(0)?.toUpperCase() || '?'}
+                  {'?'}
                 </div>
               )}
               <button
@@ -390,16 +387,6 @@ export default function UpdateProfilePage() {
                   value={institution}
                   onChange={e => setInstitution(e.target.value)}
                   placeholder="Stanford University"
-                />
-              </label>
-              <label className="p-label">
-                Full Name
-                <input
-                  type="text"
-                  className="p-input"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="Dr. Jane Doe"
                 />
               </label>
               <label className="p-label">
