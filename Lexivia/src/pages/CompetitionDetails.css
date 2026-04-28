@@ -520,3 +520,14 @@
 .clickable {
     cursor: pointer;
 }
+
+.details-shell {
+    display: flex;
+    min-height: 100vh;
+    background: #f7f8fc;
+}
+
+.details-shell .details-page {
+    flex: 1;
+    min-width: 0;
+}

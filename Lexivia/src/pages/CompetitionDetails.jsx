@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import "./CompetitionDetails.css";
 import Topbar from "../components/Topbar";
+import Sidebar from "../components/Sidebar";
 
 function safeJson(value, fallback = []) {
     try {
@@ -141,319 +142,323 @@ function CompetitionDetails() {
                 : "TBD";
 
     return (
-        <div className="details-page">
-            <Topbar />
+        <div className="details-shell">
+            <Sidebar />
 
-            <main className="details-main">
-                <section className="details-hero">
-                    <button
-                        type="button"
-                        className="back-button"
-                        onClick={() => {
-                            if (window.history.length > 1) {
-                                navigate(-1);
-                            } else {
-                                navigate("/competitions");
-                            }
-                        }}
-                    >
-                        ← Back to Competitions
-                    </button>
+            <div className="details-page">
+                <Topbar />
 
-                    <div>
-                        <div className="details-meta">
-                            <span className="requirement-badge">
-                                {competition.status === "OPEN"
-                                    ? "HIGH PRECISION REQUIRED"
-                                    : competition.status}
-                            </span>
-                            <span>Competition ID: {competition.id}</span>
-                        </div>
-
-                        <h1>{competition.title}</h1>
-
-                        <div className="details-dates">
-                            <span>▣ Started {competition.start_date || "Not set"}</span>
-                            <span>▣ Ends {competition.end_date || "Not set"}</span>
-                        </div>
-                    </div>
-
-                    <div className="details-hero-actions">
-                        <div className="prize-card">
-                            <span>TOTAL PRIZE POOL</span>
-                            <strong>{prize}</strong>
-                        </div>
-
-                        {monitoring && monitoring.is_organizer === true ? (
-                            <button
-                                className="organizer-badge clickable"
-                                onClick={() => navigate(`/competitions/${competitionId}/organizer`)}
-                            >
-                                Check Dashboard →
-                            </button>
-                        ) : isJoined ? (
-                            <button
-                                className="organizer-badge clickable"
-                                onClick={() => navigate(`/competitions/${competitionId}/data-collection`)}
-                            >
-                                Check Competition →
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                className="join-btn"
-                                onClick={joinCompetition}
-                                disabled={joining || competition.status !== "OPEN"}
-                            >
-                                {joining ? "Joining..." : "Join Competition →"}
-                            </button>
-                        )}
-                    </div>
-                </section>
-
-                <nav className="details-tabs">
-                    <button className={activeTab === "overview" ? "active" : ""} onClick={() => setActiveTab("overview")}>Overview</button>
-                    <button className={activeTab === "rules" ? "active" : ""} onClick={() => setActiveTab("rules")}>Rules</button>
-                    <button className={activeTab === "datasets" ? "active" : ""} onClick={() => setActiveTab("datasets")}>Datasets</button>
-                    <button className={activeTab === "leaderboard" ? "active" : ""} onClick={() => setActiveTab("leaderboard")}>Leaderboard</button>
-                    <button className={activeTab === "teams" ? "active" : ""} onClick={() => setActiveTab("teams")}>Teams</button>
-                    {monitoring && monitoring.is_organizer === true && (
+                <main className="details-main">
+                    <section className="details-hero">
                         <button
-                            className={activeTab === "monitoring" ? "active" : ""}
-                            onClick={() => setActiveTab("monitoring")}
+                            type="button"
+                            className="back-button"
+                            onClick={() => {
+                                if (window.history.length > 1) {
+                                    navigate(-1);
+                                } else {
+                                    navigate("/competitions");
+                                }
+                            }}
                         >
-                            Monitoring
+                            ← Back to Competitions
                         </button>
-                    )}
-                </nav>
 
-                {activeTab === "overview" && (
-                    <div className="details-layout">
-                        <div className="details-left">
-                            <section className="overview-card">
-                                <h2>▣ Overview</h2>
-                                <p className="overview-text">{competition.description}</p>
+                        <div>
+                            <div className="details-meta">
+                                <span className="requirement-badge">
+                                    {competition.status === "OPEN"
+                                        ? "HIGH PRECISION REQUIRED"
+                                        : competition.status}
+                                </span>
+                                <span>Competition ID: {competition.id}</span>
+                            </div>
 
-                                <div className="info-grid">
-                                    <div className="info-box">
-                                        <h3>EVALUATION METRICS</h3>
+                            <h1>{competition.title}</h1>
 
-                                        <div className="metric-row">
-                                            <span>Primary: {competition.primary_metric || "Not selected"}</span>
-                                            <div className="metric-bar">
-                                                <div style={{ width: competition.primary_metric ? "82%" : "20%" }}></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="metric-row">
-                                            <span>Secondary: {competition.secondary_metric || "Not selected"}</span>
-                                            <div className="metric-bar small">
-                                                <div style={{ width: competition.secondary_metric ? "48%" : "20%" }}></div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="info-box">
-                                        <h3>CHALLENGE COMPLEXITY</h3>
-
-                                        <div className="complexity-bars">
-                                            {[0, 1, 2, 3].map((bar) => (
-                                                <span
-                                                    key={bar}
-                                                    className={bar <= (competition.complexity_level || 0) ? "" : "muted"}
-                                                ></span>
-                                            ))}
-                                        </div>
-
-                                        <strong>{complexityText(competition.complexity_level)}</strong>
-
-                                        <p>
-                                            Task type: {competition.task_type || competition.category}.{" "}
-                                            {requiredSkills.length > 0
-                                                ? `Required skills: ${requiredSkills.join(", ")}.`
-                                                : "No required skills specified."}
-                                        </p>
-                                    </div>
-                                </div>
-                            </section>
+                            <div className="details-dates">
+                                <span>▣ Started {competition.start_date || "Not set"}</span>
+                                <span>▣ Ends {competition.end_date || "Not set"}</span>
+                            </div>
                         </div>
 
-                        <aside className="details-right">
-                            <section className="side-card performers-card">
-                                <h3>TOP PERFORMERS</h3>
-
-                                <div className="performer first">
-                                    <strong>01</strong>
-                                    <div>
-                                        <b>No submissions yet</b>
-                                        <p>{competition.primary_metric || "Metric"}: pending</p>
-                                    </div>
-                                    <span>BEST</span>
-                                </div>
-
-                                <button type="button">Full Leaderboard</button>
-                            </section>
-
-                            <section className="side-card milestones-card">
-                                <h3>KEY MILESTONES</h3>
-
-                                <div className="milestone active">
-                                    <span></span>
-                                    <div>
-                                        <b>Submissions Open</b>
-                                        <p>{competition.start_date || "Not set"}</p>
-                                    </div>
-                                </div>
-
-                                <div className="milestone">
-                                    <span></span>
-                                    <div>
-                                        <b>Model Validation Phase</b>
-                                        <p>{competition.validation_date || "Not set"}</p>
-                                    </div>
-                                </div>
-
-                                <div className="milestone">
-                                    <span></span>
-                                    <div>
-                                        <b>Final Leaderboard Freeze</b>
-                                        <p>{competition.freeze_date || "Not set"}</p>
-                                    </div>
-                                </div>
-
-                                <div className="milestone">
-                                    <span></span>
-                                    <div>
-                                        <b>Competition End</b>
-                                        <p>{competition.end_date || "Not set"}</p>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <section className="teams-card">
-                                <span>♙</span>
-                                <div>
-                                    <strong>{competition.max_teams || "∞"}</strong>
-                                    <p>Max Teams</p>
-                                </div>
-                            </section>
-                        </aside>
-                    </div>
-                )}
-
-                {activeTab === "rules" && (
-                    <section className="overview-card">
-                        <h2>▣ Rules</h2>
-                        <p className="overview-text">
-                            {competition.additional_rules || "No additional rules configured."}
-                        </p>
-
-                        <div className="info-grid">
-                            <div className="info-box">
-                                <h3>TEAM RULES</h3>
-                                <p>Max teams: {competition.max_teams || "Unlimited"}</p>
-                                <p>Min members: {competition.min_members || "Not set"}</p>
-                                <p>Max members: {competition.max_members || "Not set"}</p>
+                        <div className="details-hero-actions">
+                            <div className="prize-card">
+                                <span>TOTAL PRIZE POOL</span>
+                                <strong>{prize}</strong>
                             </div>
 
-                            <div className="info-box">
-                                <h3>SUBMISSION RULES</h3>
-                                <p>Max submissions/day: {competition.max_submissions_per_day || "Not set"}</p>
-                                <p>External data: {competition.allow_external_data ? "Allowed" : "Not allowed"}</p>
-                                <p>Pretrained models: {competition.allow_pretrained_models ? "Allowed" : "Not allowed"}</p>
-                                <p>Code sharing: {competition.require_code_sharing ? "Required" : "Not required"}</p>
-                            </div>
+                            {monitoring && monitoring.is_organizer === true ? (
+                                <button
+                                    className="organizer-badge clickable"
+                                    onClick={() => navigate(`/competitions/${competitionId}/organizer`)}
+                                >
+                                    Check Dashboard →
+                                </button>
+                            ) : isJoined ? (
+                                <button
+                                    className="organizer-badge clickable"
+                                    onClick={() => navigate(`/competitions/${competitionId}/data-collection`)}
+                                >
+                                    Check Competition →
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="join-btn"
+                                    onClick={joinCompetition}
+                                    disabled={joining || competition.status !== "OPEN"}
+                                >
+                                    {joining ? "Joining..." : "Join Competition →"}
+                                </button>
+                            )}
                         </div>
                     </section>
-                )}
 
-                {activeTab === "datasets" && (
-                    <section className="datasets-card">
-                        <div className="datasets-head">
-                            <h2>▣ Available Datasets</h2>
-                            <button type="button">View File Documentation</button>
-                        </div>
-
-                        {datasets.length === 0 ? (
-                            <div className="dataset-row">
-                                <div>
-                                    <strong>No datasets configured</strong>
-                                    <p>The organizer did not add dataset requirements yet.</p>
-                                </div>
-                            </div>
-                        ) : (
-                            datasets.map((dataset, index) => (
-                                <div className="dataset-row" key={index}>
-                                    <div>
-                                        <strong>{dataset.name || `Dataset ${index + 1}`}</strong>
-                                        <p>
-                                            {dataset.type || dataset.format || "Unknown format"} •{" "}
-                                            {dataset.visibility || "Visibility not specified"} •{" "}
-                                            {dataset.description || "No description"}
-                                        </p>
-                                    </div>
-                                    <span>⇩</span>
-                                </div>
-                            ))
+                    <nav className="details-tabs">
+                        <button className={activeTab === "overview" ? "active" : ""} onClick={() => setActiveTab("overview")}>Overview</button>
+                        <button className={activeTab === "rules" ? "active" : ""} onClick={() => setActiveTab("rules")}>Rules</button>
+                        <button className={activeTab === "datasets" ? "active" : ""} onClick={() => setActiveTab("datasets")}>Datasets</button>
+                        <button className={activeTab === "leaderboard" ? "active" : ""} onClick={() => setActiveTab("leaderboard")}>Leaderboard</button>
+                        <button className={activeTab === "teams" ? "active" : ""} onClick={() => setActiveTab("teams")}>Teams</button>
+                        {monitoring && monitoring.is_organizer === true && (
+                            <button
+                                className={activeTab === "monitoring" ? "active" : ""}
+                                onClick={() => setActiveTab("monitoring")}
+                            >
+                                Monitoring
+                            </button>
                         )}
-                    </section>
-                )}
+                    </nav>
 
-                {activeTab === "leaderboard" && (
-                    <section className="overview-card">
-                        <h2>▣ Leaderboard</h2>
-                        <p className="overview-text">No model submissions yet.</p>
-                    </section>
-                )}
+                    {activeTab === "overview" && (
+                        <div className="details-layout">
+                            <div className="details-left">
+                                <section className="overview-card">
+                                    <h2>▣ Overview</h2>
+                                    <p className="overview-text">{competition.description}</p>
 
-                {activeTab === "teams" && (
-                    <section className="overview-card">
-                        <h2>▣ Teams</h2>
-                        <p className="overview-text">
-                            Maximum teams: {competition.max_teams || "Unlimited"}
-                        </p>
-                    </section>
-                )}
+                                    <div className="info-grid">
+                                        <div className="info-box">
+                                            <h3>EVALUATION METRICS</h3>
 
-                {activeTab === "monitoring" && monitoring && monitoring.is_organizer === true && (
-                    <section className="monitoring-card">
-                        <h2>▣ Organizer Monitoring</h2>
-                        <p>Track participation, data collection, and model performance.</p>
+                                            <div className="metric-row">
+                                                <span>Primary: {competition.primary_metric || "Not selected"}</span>
+                                                <div className="metric-bar">
+                                                    <div style={{ width: competition.primary_metric ? "82%" : "20%" }}></div>
+                                                </div>
+                                            </div>
 
-                        <div className="monitoring-grid">
-                            <div className="monitoring-box">
-                                <span>PARTICIPATION</span>
-                                <strong>{monitoring?.participants_count ?? 0}</strong>
-                                <p>Participants joined</p>
+                                            <div className="metric-row">
+                                                <span>Secondary: {competition.secondary_metric || "Not selected"}</span>
+                                                <div className="metric-bar small">
+                                                    <div style={{ width: competition.secondary_metric ? "48%" : "20%" }}></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="info-box">
+                                            <h3>CHALLENGE COMPLEXITY</h3>
+
+                                            <div className="complexity-bars">
+                                                {[0, 1, 2, 3].map((bar) => (
+                                                    <span
+                                                        key={bar}
+                                                        className={bar <= (competition.complexity_level || 0) ? "" : "muted"}
+                                                    ></span>
+                                                ))}
+                                            </div>
+
+                                            <strong>{complexityText(competition.complexity_level)}</strong>
+
+                                            <p>
+                                                Task type: {competition.task_type || competition.category}.{" "}
+                                                {requiredSkills.length > 0
+                                                    ? `Required skills: ${requiredSkills.join(", ")}.`
+                                                    : "No required skills specified."}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </section>
                             </div>
 
-                            <div className="monitoring-box">
-                                <span>TEAMS</span>
-                                <strong>{monitoring?.teams_count ?? 0}</strong>
-                                <p>Max teams: {monitoring?.max_teams || "Unlimited"}</p>
-                            </div>
+                            <aside className="details-right">
+                                <section className="side-card performers-card">
+                                    <h3>TOP PERFORMERS</h3>
 
-                            <div className="monitoring-box">
-                                <span>DATA COLLECTION</span>
-                                <strong>{monitoring?.datasets_count ?? 0}</strong>
-                                <p>{monitoring?.data_collection_status || "Pending"}</p>
-                            </div>
+                                    <div className="performer first">
+                                        <strong>01</strong>
+                                        <div>
+                                            <b>No submissions yet</b>
+                                            <p>{competition.primary_metric || "Metric"}: pending</p>
+                                        </div>
+                                        <span>BEST</span>
+                                    </div>
 
-                            <div className="monitoring-box">
-                                <span>MODEL PERFORMANCE</span>
-                                <strong>{monitoring?.best_score || "Pending"}</strong>
-                                <p>{monitoring?.primary_metric || "Metric not selected"}</p>
-                            </div>
+                                    <button type="button">Full Leaderboard</button>
+                                </section>
 
-                            <div className="monitoring-box">
-                                <span>SUBMISSIONS</span>
-                                <strong>{monitoring?.submissions_count ?? 0}</strong>
-                                <p>{monitoring?.leaderboard_status || "Waiting"}</p>
-                            </div>
+                                <section className="side-card milestones-card">
+                                    <h3>KEY MILESTONES</h3>
+
+                                    <div className="milestone active">
+                                        <span></span>
+                                        <div>
+                                            <b>Submissions Open</b>
+                                            <p>{competition.start_date || "Not set"}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="milestone">
+                                        <span></span>
+                                        <div>
+                                            <b>Model Validation Phase</b>
+                                            <p>{competition.validation_date || "Not set"}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="milestone">
+                                        <span></span>
+                                        <div>
+                                            <b>Final Leaderboard Freeze</b>
+                                            <p>{competition.freeze_date || "Not set"}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="milestone">
+                                        <span></span>
+                                        <div>
+                                            <b>Competition End</b>
+                                            <p>{competition.end_date || "Not set"}</p>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <section className="teams-card">
+                                    <span>♙</span>
+                                    <div>
+                                        <strong>{competition.max_teams || "∞"}</strong>
+                                        <p>Max Teams</p>
+                                    </div>
+                                </section>
+                            </aside>
                         </div>
-                    </section>
-                )}
-            </main>
+                    )}
+
+                    {activeTab === "rules" && (
+                        <section className="overview-card">
+                            <h2>▣ Rules</h2>
+                            <p className="overview-text">
+                                {competition.additional_rules || "No additional rules configured."}
+                            </p>
+
+                            <div className="info-grid">
+                                <div className="info-box">
+                                    <h3>TEAM RULES</h3>
+                                    <p>Max teams: {competition.max_teams || "Unlimited"}</p>
+                                    <p>Min members: {competition.min_members || "Not set"}</p>
+                                    <p>Max members: {competition.max_members || "Not set"}</p>
+                                </div>
+
+                                <div className="info-box">
+                                    <h3>SUBMISSION RULES</h3>
+                                    <p>Max submissions/day: {competition.max_submissions_per_day || "Not set"}</p>
+                                    <p>External data: {competition.allow_external_data ? "Allowed" : "Not allowed"}</p>
+                                    <p>Pretrained models: {competition.allow_pretrained_models ? "Allowed" : "Not allowed"}</p>
+                                    <p>Code sharing: {competition.require_code_sharing ? "Required" : "Not required"}</p>
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
+                    {activeTab === "datasets" && (
+                        <section className="datasets-card">
+                            <div className="datasets-head">
+                                <h2>▣ Available Datasets</h2>
+                                <button type="button">View File Documentation</button>
+                            </div>
+
+                            {datasets.length === 0 ? (
+                                <div className="dataset-row">
+                                    <div>
+                                        <strong>No datasets configured</strong>
+                                        <p>The organizer did not add dataset requirements yet.</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                datasets.map((dataset, index) => (
+                                    <div className="dataset-row" key={index}>
+                                        <div>
+                                            <strong>{dataset.name || `Dataset ${index + 1}`}</strong>
+                                            <p>
+                                                {dataset.type || dataset.format || "Unknown format"} •{" "}
+                                                {dataset.visibility || "Visibility not specified"} •{" "}
+                                                {dataset.description || "No description"}
+                                            </p>
+                                        </div>
+                                        <span>⇩</span>
+                                    </div>
+                                ))
+                            )}
+                        </section>
+                    )}
+
+                    {activeTab === "leaderboard" && (
+                        <section className="overview-card">
+                            <h2>▣ Leaderboard</h2>
+                            <p className="overview-text">No model submissions yet.</p>
+                        </section>
+                    )}
+
+                    {activeTab === "teams" && (
+                        <section className="overview-card">
+                            <h2>▣ Teams</h2>
+                            <p className="overview-text">
+                                Maximum teams: {competition.max_teams || "Unlimited"}
+                            </p>
+                        </section>
+                    )}
+
+                    {activeTab === "monitoring" && monitoring && monitoring.is_organizer === true && (
+                        <section className="monitoring-card">
+                            <h2>▣ Organizer Monitoring</h2>
+                            <p>Track participation, data collection, and model performance.</p>
+
+                            <div className="monitoring-grid">
+                                <div className="monitoring-box">
+                                    <span>PARTICIPATION</span>
+                                    <strong>{monitoring?.participants_count ?? 0}</strong>
+                                    <p>Participants joined</p>
+                                </div>
+
+                                <div className="monitoring-box">
+                                    <span>TEAMS</span>
+                                    <strong>{monitoring?.teams_count ?? 0}</strong>
+                                    <p>Max teams: {monitoring?.max_teams || "Unlimited"}</p>
+                                </div>
+
+                                <div className="monitoring-box">
+                                    <span>DATA COLLECTION</span>
+                                    <strong>{monitoring?.datasets_count ?? 0}</strong>
+                                    <p>{monitoring?.data_collection_status || "Pending"}</p>
+                                </div>
+
+                                <div className="monitoring-box">
+                                    <span>MODEL PERFORMANCE</span>
+                                    <strong>{monitoring?.best_score || "Pending"}</strong>
+                                    <p>{monitoring?.primary_metric || "Metric not selected"}</p>
+                                </div>
+
+                                <div className="monitoring-box">
+                                    <span>SUBMISSIONS</span>
+                                    <strong>{monitoring?.submissions_count ?? 0}</strong>
+                                    <p>{monitoring?.leaderboard_status || "Waiting"}</p>
+                                </div>
+                            </div>
+                        </section>
+                    )}
+                </main>
+            </div>
         </div>
     );
 }
