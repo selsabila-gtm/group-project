@@ -7,7 +7,7 @@ import CompetitionDetails from "./pages/CompetitionDetails";
 import TeamsPage from "./pages/teams/TeamsPage";
 import TeamDetailPage from "./pages/teams/TeamDetailPage";
 import DataCollection from "./pages/DataCollection";
-
+import DatasetHub from "./pages/Datasethub";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import SearchResults from "./pages/SearchResults";
@@ -105,7 +105,7 @@ function App() {
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
-
+        <Route path="/competitions/:id/dataset-hub" element={<DatasetHub />} />
       </Routes>
     </BrowserRouter>
   );

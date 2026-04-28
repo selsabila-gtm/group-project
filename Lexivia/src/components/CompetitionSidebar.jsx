@@ -14,6 +14,18 @@ const NAV_ITEMS = [
         ),
     },
     {
+    key: "dataset-hub",
+    label: "Dataset Hub",
+    icon: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <ellipse cx="12" cy="5" rx="9" ry="3"/>
+            <path d="M3 5v14a9 3 0 0 0 18 0V5"/>
+            <path d="M3 12a9 3 0 0 0 18 0"/>
+            <path d="M9 12l2 2 4-4"/>
+        </svg>
+    ),
+},
+    {
         key: "annotation",
         label: "Annotation",
         icon: (
@@ -65,7 +77,7 @@ function CompetitionSidebar({ competitionId, competitionTitle, taskType }) {
     // derive active step from URL: /competitions/:id/data-collection → "data-collection"
     const pathParts = location.pathname.split("/");
     const activeKey = pathParts[pathParts.length - 1] || "data-collection";
-
+    
     return (
         <aside className="csidebar">
             <button
