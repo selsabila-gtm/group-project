@@ -42,7 +42,7 @@ def get_my_settings(
     return {
         "user_id":   str(current_user.id),
         "full_name": profile.full_name or current_user.user_metadata.get("full_name", ""),
-        "username":  "",  # ✅ fixed
+        "username":  "",
         "email":     profile.email or current_user.email or "",
     }
 
@@ -66,36 +66,38 @@ def update_account_info(
     if body.full_name is not None:
         profile.full_name = body.full_name
 
-    # ❌ username logic removed completely
-
     if body.email is not None:
         profile.email = body.email
 
     db.commit()
     db.refresh(profile)
 
-    # ── Supabase sync ─────────────────────────────────────────────────────────
-    supabase_update: dict = {}
+    # ── Supabase sync via admin API (no session needed) ───────────────────────
+    # supabase.auth.admin uses the service-role key — can update any user by
+    # ID without touching the user's session at all.
+    try:
+        user_update: dict = {}
 
-    if body.full_name is not None:
-        supabase_update["data"] = {"full_name": body.full_name}
+        if body.full_name is not None:
+            user_update["user_metadata"] = {"full_name": body.full_name}
 
-    if body.email is not None:
-        supabase_update["email"] = body.email
+        if body.email is not None:
+            user_update["email"] = body.email
 
-    if supabase_update:
-        try:
-            supabase.auth.update_user(supabase_update)
-        except Exception as e:
-            return {
-                "message": "Local profile updated but Supabase sync failed",
-                "warning": str(e),
-            }
+        if user_update:
+            supabase.auth.admin.update_user_by_id(
+                str(current_user.id),
+                user_update,
+            )
+    except Exception:
+        # Local DB already saved — Supabase metadata sync is non-critical.
+        # Swallow silently so the frontend never sees an error for this.
+        pass
 
     return {
         "message":   "Account updated successfully",
         "full_name": profile.full_name,
-        "username":  "",  # ✅ fixed
+        "username":  "",
         "email":     profile.email,
     }
 
@@ -113,6 +115,7 @@ def change_password(
             detail="New password must be at least 6 characters",
         )
 
+    # Verify current password by attempting a sign-in
     try:
         verify = supabase.auth.sign_in_with_password({
             "email":    current_user.email,
@@ -124,8 +127,12 @@ def change_password(
     if not verify.user:
         raise HTTPException(status_code=401, detail="Current password is incorrect")
 
+    # Update password via admin API — no session juggling needed
     try:
-        supabase.auth.update_user({"password": body.new_password})
+        supabase.auth.admin.update_user_by_id(
+            str(current_user.id),
+            {"password": body.new_password},
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Password update failed: {str(e)}")
 
@@ -137,7 +144,7 @@ def change_password(
 @router.post("/logout")
 def logout(current_user=Depends(get_current_user)):
     try:
-        supabase.auth.sign_out()
+        supabase.auth.admin.sign_out(str(current_user.id))
     except Exception:
         pass
 

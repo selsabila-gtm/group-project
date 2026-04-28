@@ -3,13 +3,16 @@
 .settings-page {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  justify-content: center;   /* ✅ center horizontally */
+  align-items: flex-start;   /* keep top spacing */
   min-height: 100vh;
   background: #f5f6fa;
-  padding: 36px 40px 100px;
-  max-width: 760px;
+  padding: 36px 20px 100px;
 }
-
+.settings-container {
+  width: 100%;
+  max-width: 760px;   /* keeps your original width */
+}
 /* ── Header ───────────────────────────────────────── */
 .settings-header {
   margin-bottom: 28px;
