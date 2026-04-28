@@ -94,10 +94,6 @@ def update_my_profile(
     if not updates:
         raise HTTPException(status_code=400, detail="No fields provided")
 
-    # Frontend sends "name"; DB column is "full_name" — remap if needed
-    if "name" in updates:
-        updates["full_name"] = updates.pop("name")
-
     supabase.table("user_profiles").upsert({"user_id": user_id, **updates}).execute()
 
     updated = _get_profile_or_404(user_id)

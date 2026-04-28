@@ -3,19 +3,40 @@
 .settings-page {
   flex: 1;
   display: flex;
-  justify-content: center;   /* ✅ center horizontally */
-  align-items: flex-start;   /* keep top spacing */
+  justify-content: center;
+  align-items: flex-start;
   min-height: 100vh;
   background: #f5f6fa;
   padding: 36px 20px 100px;
 }
 .settings-container {
   width: 100%;
-  max-width: 760px;   /* keeps your original width */
+  max-width: 760px;
 }
+
 /* ── Header ───────────────────────────────────────── */
 .settings-header {
   margin-bottom: 28px;
+}
+
+/* ── Back button (only new addition) ─────────────── */
+.settings-btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #1158da;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 14px;
+  transition: opacity 0.15s;
+}
+
+.settings-btn-back:hover {
+  opacity: 0.7;
 }
 
 .settings-title {
@@ -202,6 +223,7 @@
 .settings-btn-save.saved {
   background: #16a34a;
 }
+
 .settings-layout {
   display: flex;
 }

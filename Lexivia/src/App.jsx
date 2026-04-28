@@ -20,7 +20,7 @@ import ProfilePage from "./pages/profile/ProfilePage";
 import UpdateProfilePage from "./pages/profile/updateprofile";
 import SettingsPage from "./pages/profile/settings";
 import "./index.css";
-
+import AuthCallback from "./pages/AuthCallback";
 // ── Placeholder ───────────────────────────────────────────────────────────────
 function SimplePage({ title, subtitle }) {
   return (
@@ -60,6 +60,7 @@ function App() {
         <Route path="/"       element={<Landing />} />
         <Route path="/login"  element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
 
         {/* Protected */}
         <Route element={<ProtectedRoute />}>

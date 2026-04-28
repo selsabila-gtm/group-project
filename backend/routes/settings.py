@@ -1,6 +1,6 @@
 # backend/routes/settings.py
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -14,10 +14,12 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
-class AccountInfoUpdate(BaseModel):
+class ProfileUpdate(BaseModel):
     full_name: Optional[str] = None
-    username:  Optional[str] = None  # kept but ignored
-    email:     Optional[str] = None
+
+
+class EmailUpdate(BaseModel):
+    email: str
 
 
 class PasswordUpdate(BaseModel):
@@ -42,16 +44,16 @@ def get_my_settings(
     return {
         "user_id":   str(current_user.id),
         "full_name": profile.full_name or current_user.user_metadata.get("full_name", ""),
-        "username":  "",
-        "email":     profile.email or current_user.email or "",
+        # Email always comes from Supabase Auth — not from user_profiles
+        "email":     current_user.email or "",
     }
 
 
-# ── PATCH account info ────────────────────────────────────────────────────────
+# ── PATCH profile (full_name only) ────────────────────────────────────────────
 
 @router.patch("/account")
-def update_account_info(
-    body: AccountInfoUpdate,
+def update_profile(
+    body: ProfileUpdate,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -62,43 +64,68 @@ def update_account_info(
     if not profile:
         raise HTTPException(status_code=404, detail="User profile not found")
 
-    # ── Local DB updates ──────────────────────────────────────────────────────
     if body.full_name is not None:
         profile.full_name = body.full_name
+        db.commit()
+        db.refresh(profile)
 
-    if body.email is not None:
-        profile.email = body.email
-
-    db.commit()
-    db.refresh(profile)
-
-    # ── Supabase sync via admin API (no session needed) ───────────────────────
-    # supabase.auth.admin uses the service-role key — can update any user by
-    # ID without touching the user's session at all.
-    try:
-        user_update: dict = {}
-
-        if body.full_name is not None:
-            user_update["user_metadata"] = {"full_name": body.full_name}
-
-        if body.email is not None:
-            user_update["email"] = body.email
-
-        if user_update:
+        # Sync into Supabase user_metadata (non-critical)
+        try:
             supabase.auth.admin.update_user_by_id(
                 str(current_user.id),
-                user_update,
+                {"user_metadata": {"full_name": body.full_name}},
             )
-    except Exception:
-        # Local DB already saved — Supabase metadata sync is non-critical.
-        # Swallow silently so the frontend never sees an error for this.
-        pass
+        except Exception:
+            pass
 
     return {
-        "message":   "Account updated successfully",
+        "message":   "Profile updated successfully",
         "full_name": profile.full_name,
-        "username":  "",
-        "email":     profile.email,
+    }
+
+
+# ── POST change email ─────────────────────────────────────────────────────────
+#
+# IMPORTANT: We must use supabase.auth.update_user() with the USER's own token,
+# NOT the admin API. The admin API (update_user_by_id) silently changes the
+# email with zero verification. The user-facing API sends a confirmation link
+# to the new address; the email only changes after they click it.
+
+@router.post("/change-email")
+def change_email(
+    body: EmailUpdate,
+    current_user=Depends(get_current_user),
+    authorization: str = Header(...),
+):
+    if not body.email or "@" not in body.email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
+
+    if body.email == current_user.email:
+        raise HTTPException(status_code=400, detail="This is already your current email")
+
+    # Extract raw token — already validated by get_current_user, we just need
+    # to pass it to set_session so the SDK acts as this user (not service-role).
+    token = authorization.split(" ", 1)[1].strip()
+
+    try:
+        # set_session tells the Supabase client to act as this user for the
+        # next call. Pass empty string for refresh_token — we only need one call.
+        supabase.auth.set_session(token, "")
+        supabase.auth.update_user({
+            "email": body.email,
+            "email_redirect_to": "http://localhost:5173/auth/callback",
+        })
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Email change request failed: {str(e)}",
+        )
+
+    return {
+        "message": (
+            f"A confirmation link has been sent to {body.email}. "
+            "Your email address will be updated once you click the link."
+        )
     }
 
 
@@ -115,7 +142,7 @@ def change_password(
             detail="New password must be at least 6 characters",
         )
 
-    # Verify current password by attempting a sign-in
+    # Verify current password by re-authenticating
     try:
         verify = supabase.auth.sign_in_with_password({
             "email":    current_user.email,
@@ -127,7 +154,7 @@ def change_password(
     if not verify.user:
         raise HTTPException(status_code=401, detail="Current password is incorrect")
 
-    # Update password via admin API — no session juggling needed
+    # Admin API is fine for password — no verification email needed
     try:
         supabase.auth.admin.update_user_by_id(
             str(current_user.id),
