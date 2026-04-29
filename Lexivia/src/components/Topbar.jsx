@@ -1,9 +1,16 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 function Topbar({ title = "", subtitle = "", showBrowseButton = false }) {
     const navigate = useNavigate();
-    const [search, setSearch] = useState("");
+    const location = useLocation();
+
+    const currentQuery = new URLSearchParams(location.search).get("q") || "";
+    const [search, setSearch] = useState(currentQuery);
+
+    useEffect(() => {
+        setSearch(currentQuery);
+    }, [currentQuery]);
 
     function handleSearch(e) {
         e.preventDefault();
@@ -14,49 +21,48 @@ function Topbar({ title = "", subtitle = "", showBrowseButton = false }) {
         navigate(`/search?q=${encodeURIComponent(q)}`);
     }
 
+    function handleClear() {
+        setSearch("");
+        navigate("/search");
+    }
+
     return (
         <>
-            <div
-                style={{
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 1000,
-                    background: "#ffffff",
-                    padding: "18px 22px 0",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-                }}
-            >
-                <div
-                    style={{
-                        height: "56px",
-                        background: "#ffffff",
-                        borderBottom: "1px solid #ececf3",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "flex-end",
-                        padding: "0 22px",
-                        gap: "16px",
-                    }}
-                >
-                    <form onSubmit={handleSearch}>
+            <div style={topbarWrapper}>
+                <div style={topbarInner}>
+
+                    {/* SEARCH */}
+                    <form onSubmit={handleSearch} style={searchWrapper}>
                         <input
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search competitions, datasets, teams..."
-                            style={{
-                                width: "360px",
-                                height: "38px",
-                                border: "1px solid #e6e9f2",
-                                background: "#f7f8fc",
-                                borderRadius: "12px",
-                                padding: "0 16px",
-                                fontSize: "13px",
-                                outline: "none",
-                                color: "#475069",
+                            onChange={(e) => {
+                                const value = e.target.value;
+                                setSearch(value);
+
+                                // live search
+                                if (location.pathname === "/search") {
+                                    if (value.trim()) {
+                                        navigate(`/search?q=${encodeURIComponent(value)}`);
+                                    } else {
+                                        navigate("/search");
+                                    }
+                                }
                             }}
+                            placeholder="Search competitions, datasets, teams..."
+                            style={searchInput}
                         />
+
+                        {/* ✅ CLEAR BUTTON (always visible) */}
+                        <button
+                            type="button"
+                            onClick={handleClear}
+                            style={clearBtn}
+                        >
+                            ✕
+                        </button>
                     </form>
 
+                    {/* ICONS */}
                     <button onClick={() => navigate("/notifications")} style={iconBtn}>
                         🔔
                     </button>
@@ -72,58 +78,16 @@ function Topbar({ title = "", subtitle = "", showBrowseButton = false }) {
             </div>
 
             {(title || subtitle || showBrowseButton) && (
-                <div
-                    style={{
-                        padding: "24px 30px 0",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        gap: "18px",
-                    }}
-                >
+                <div style={headerWrapper}>
                     <div>
-                        <h1
-                            style={{
-                                margin: 0,
-                                fontSize: "34px",
-                                lineHeight: 1.08,
-                                color: "#19233c",
-                                fontWeight: 800,
-                            }}
-                        >
-                            {title}
-                        </h1>
-
-                        <p
-                            style={{
-                                margin: "8px 0 0",
-                                maxWidth: "620px",
-                                color: "#677086",
-                                fontSize: "14px",
-                                lineHeight: 1.35,
-                            }}
-                        >
-                            {subtitle}
-                        </p>
+                        <h1 style={titleStyle}>{title}</h1>
+                        <p style={subtitleStyle}>{subtitle}</p>
                     </div>
 
                     {showBrowseButton && (
                         <button
-                            type="button"
                             onClick={() => navigate("/competitions")}
-                            style={{
-                                height: "50px",
-                                minWidth: "190px",
-                                padding: "0 24px",
-                                border: "none",
-                                borderRadius: "14px",
-                                background: "#0d57d8",
-                                color: "#ffffff",
-                                fontSize: "15px",
-                                fontWeight: 700,
-                                boxShadow: "0 10px 18px rgba(13,87,216,0.18)",
-                                cursor: "pointer",
-                            }}
+                            style={browseBtn}
                         >
                             Browse Competitions
                         </button>
@@ -134,6 +98,68 @@ function Topbar({ title = "", subtitle = "", showBrowseButton = false }) {
     );
 }
 
+/* ---------------- STYLES ---------------- */
+
+const topbarWrapper = {
+    position: "sticky",
+    top: 0,
+    zIndex: 1000,
+    background: "#ffffff",
+    padding: "18px 22px 0",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+};
+
+const topbarInner = {
+    height: "56px",
+    borderBottom: "1px solid #ececf3",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "16px",
+};
+
+const searchWrapper = {
+    position: "relative",
+};
+
+const searchInput = {
+    width: "360px",
+    height: "38px",
+    border: "1px solid #e6e9f2",
+    background: "#f7f8fc",
+    borderRadius: "20px",
+    padding: "0 40px 0 16px",
+    fontSize: "13px",
+    outline: "none",
+    color: "#475069",
+};
+
+/* ✅ CLEAN CLEAR BUTTON */
+const clearBtn = {
+    position: "absolute",
+    right: "8px",
+    top: "50%",
+    transform: "translateY(-50%)",
+
+    width: "26px",
+    height: "26px",
+    borderRadius: "50%",
+    border: "none",
+
+    background: "#eef2ff",
+    color: "#6f778d",
+    fontSize: "14px",
+
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+};
+
+/* hover effect */
+clearBtn[":hover"] = {
+    background: "#ff4d4f",
+    color: "#ffffff",
+};
+
 const iconBtn = {
     width: "34px",
     height: "34px",
@@ -142,6 +168,37 @@ const iconBtn = {
     cursor: "pointer",
     fontSize: "18px",
     color: "#6f778d",
+};
+
+const headerWrapper = {
+    padding: "24px 30px 0",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+};
+
+const titleStyle = {
+    margin: 0,
+    fontSize: "34px",
+    color: "#19233c",
+    fontWeight: 800,
+};
+
+const subtitleStyle = {
+    margin: "8px 0 0",
+    color: "#677086",
+    fontSize: "14px",
+};
+
+const browseBtn = {
+    height: "50px",
+    minWidth: "190px",
+    border: "none",
+    borderRadius: "14px",
+    background: "#0d57d8",
+    color: "#ffffff",
+    fontWeight: 700,
+    cursor: "pointer",
 };
 
 export default Topbar;

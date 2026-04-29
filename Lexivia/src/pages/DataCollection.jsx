@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import CompetitionSidebar from "../components/CompetitionSidebar";
 import "./DataCollection.css";
-
+import { useNavigate } from "react-router-dom";
 const API = "http://127.0.0.1:8000";
 
 function authHeader() {
@@ -627,7 +627,7 @@ function DataCollection() {
     // Works regardless of whether the route uses :id or :competitionId
     const params = useParams();
     const competitionId = params.id ?? params.competitionId;
-
+    const navigate = useNavigate(); 
     const [competition,  setCompetition]  = useState(null);
     const [myStats,      setMyStats]      = useState({ validated: 0, flagged: 0 });
     const [teamStats,    setTeamStats]    = useState({ total: 0, members: [] });
@@ -730,20 +730,33 @@ function DataCollection() {
                 <div className="dc-body">
                     {/* Page header */}
                     <div className="dc-header">
-                        <div>
-                            <h1 className="dc-title">Data Collection</h1>
-                            <p className="dc-subtitle">
-                                Assemble the primary linguistic corpus for the Sentiment Analysis
-                                challenge. Quality exceeds quantity—ensure diversity in syntactic
-                                structure and lexical richness.
-                            </p>
-                        </div>
-                        <div className="dc-total-badge">
-                            <span className="dc-total-num">{totalSamples.toLocaleString()}</span>
-                            <span className="dc-total-lbl">Total Samples</span>
-                        </div>
-                    </div>
-
+    <div>
+        <h1 className="dc-title">Data Collection</h1>
+        <p className="dc-subtitle">
+            Assemble the primary linguistic corpus for the Sentiment Analysis
+            challenge. Quality exceeds quantity—ensure diversity in syntactic
+            structure and lexical richness.
+        </p>
+    </div>
+    <div className="dc-header-right">
+        <button
+            className="dc-dataset-hub-btn"
+            onClick={() => navigate(`/competitions/${competitionId}/dataset-hub`)}
+        >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                <path d="M3 5v14a9 3 0 0 0 18 0V5"/>
+                <path d="M3 12a9 3 0 0 0 18 0"/>
+                <path d="M9 12l2 2 4-4"/>
+            </svg>
+            Dataset Hub
+        </button>
+        <div className="dc-total-badge">
+            <span className="dc-total-num">{totalSamples.toLocaleString()}</span>
+            <span className="dc-total-lbl">Total Samples</span>
+        </div>
+    </div>
+</div>
                     {/* Two-column layout */}
                     <div className="dc-content">
                         <div className="dc-left">

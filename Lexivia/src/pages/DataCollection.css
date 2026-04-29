@@ -768,3 +768,52 @@
     .translation-divider { display: none; }
     .comp-topbar-tabs { display: none; }
 }
+.dc-header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.dc-dataset-hub-btn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 34px;
+    padding: 0 14px;
+    background: #1359db;
+    border: none;
+    border-radius: 9px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+    box-shadow: 0 4px 12px rgba(19,89,219,.2);
+}
+
+.dc-dataset-hub-btn:hover { background: #0f4bc4; }
+.dh-download-group {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.dh-format-select {
+    height: 36px;
+    padding: 0 10px;
+    border: 1.5px solid #d8e3f8;
+    border-right: none;
+    border-radius: 9px 0 0 9px;
+    background: #f4f7ff;
+    font-size: 12px;
+    font-weight: 700;
+    color: #4f586f;
+    cursor: pointer;
+    outline: none;
+}
+
+.dh-download-btn {
+    border-radius: 0 9px 9px 0;  /* override the existing radius */
+}
