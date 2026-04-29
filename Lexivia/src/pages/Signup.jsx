@@ -1,11 +1,17 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
 import Navbar from "../components/Navbar"
-import { signUp, signInWithGoogle, signInWithGithub } from "../lib/auth"
+import { signInWithGoogle, signInWithGithub } from "../lib/auth"
+import { supabase } from "../config/supabase.js"
+
+// The URL Supabase will redirect to after the user clicks the confirmation link.
+// Must be added to "Redirect URLs" in your Supabase dashboard → Authentication → URL Configuration.
+const REDIRECT_URL = `${window.location.origin}/auth/callback`;
 
 export default function Signup() {
   const [form, setForm]       = useState({ full_name: "", email: "", password: "", confirm: "" })
   const [error, setError]     = useState("")
+  const [success, setSuccess] = useState("")
   const [loading, setLoading] = useState(false)
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
@@ -13,23 +19,31 @@ export default function Signup() {
   const handleSignup = async (e) => {
     e.preventDefault()
     setError("")
+    setSuccess("")
 
-    if (!form.full_name)                  { setError("Please enter your full name"); return }
-    if (!form.email)                      { setError("Please enter your email"); return }
-    if (form.password !== form.confirm)   { setError("Passwords do not match"); return }
-    if (form.password.length < 6)        { setError("Password must be at least 6 characters"); return }
+    if (!form.full_name)                { setError("Please enter your full name"); return }
+    if (!form.email)                    { setError("Please enter your email"); return }
+    if (form.password !== form.confirm) { setError("Passwords do not match"); return }
+    if (form.password.length < 6)       { setError("Password must be at least 6 characters"); return }
 
     setLoading(true)
     try {
-      // signUp() talks directly to Supabase
-      const { user, session } = await signUp({
-        fullName: form.full_name,
+      // Sign up directly with Supabase, passing the redirect URL for email confirmation.
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email:    form.email,
         password: form.password,
+        options: {
+          data: { full_name: form.full_name },
+          emailRedirectTo: REDIRECT_URL,
+        },
       })
 
+      if (signUpError) throw signUpError
+
+      const { user, session } = data
+
       if (session) {
-        // Email confirmation not required — log straight in
+        // Email confirmation is disabled in Supabase — log straight in.
         localStorage.setItem("token", session.access_token)
         localStorage.setItem("user", JSON.stringify(user))
 
@@ -49,8 +63,8 @@ export default function Signup() {
 
         window.location.href = "/dashboard"
       } else {
-        // Supabase requires email confirmation — session is null until confirmed
-        setError("Please check your email to confirm your account, then log in.")
+        // Supabase requires email confirmation — session is null until confirmed.
+        setSuccess("Account created! Please check your email and click the confirmation link to activate your account.")
       }
     } catch (err) {
       setError(err.message || "Signup failed")
@@ -97,6 +111,12 @@ export default function Signup() {
               </div>
             )}
 
+            {success && (
+              <div style={{ background: "#e6f9f0", color: "#0a7c45", padding: "10px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", textAlign: "center" }}>
+                {success}
+              </div>
+            )}
+
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>FULL NAME</label>
               <div style={{ position: 'relative' }}>
@@ -130,13 +150,14 @@ export default function Signup() {
               </div>
             </div>
 
-            <button onClick={handleSignup} disabled={loading} style={{
+            <button onClick={handleSignup} disabled={loading || !!success} style={{
               width: '100%', padding: '13px',
               background: loading ? '#8899ff' : '#1a2fff',
               color: '#fff', border: 'none', borderRadius: '8px',
               fontSize: '14px', fontWeight: 600,
-              cursor: loading ? 'not-allowed' : 'pointer',
+              cursor: (loading || success) ? 'not-allowed' : 'pointer',
               letterSpacing: '0.3px', marginBottom: '20px',
+              opacity: success ? 0.6 : 1,
             }}>
               {loading ? 'Creating Account…' : 'Join the Laboratory ↗'}
             </button>

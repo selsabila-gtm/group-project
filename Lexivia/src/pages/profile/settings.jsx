@@ -1,19 +1,33 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import "../../styles/settings.css";
 import Sidebar from "../../components/Sidebar.jsx";
+import { supabase } from "../../config/supabase.js";
 
 const API = "http://127.0.0.1:8000";
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 const getToken = () => localStorage.getItem("token");
 
-const authHeaders = () => {
-  const token = getToken();
-  if (!token) return { "Content-Type": "application/json" };
+// Refresh the Supabase session and return a fresh access token.
+// Falls back to whatever is in localStorage if the refresh fails.
+const getFreshToken = async () => {
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (!error && data?.session?.access_token) {
+      localStorage.setItem("token", data.session.access_token);
+      return data.session.access_token;
+    }
+  } catch { /* fall through */ }
+  return getToken();
+};
+
+const authHeaders = (token) => {
+  const t = token || getToken();
+  if (!t) return { "Content-Type": "application/json" };
   return {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${t}`,
   };
 };
 
@@ -34,6 +48,7 @@ const syncUserInStorage = (updates) => {
 
 function Settings() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [fullName,      setFullName]      = useState("");
   const [email,         setEmail]         = useState("");
@@ -53,13 +68,18 @@ function Settings() {
   const [emailSuccessMsg, setEmailSuccessMsg] = useState("");
   const [pwErrorMsg,      setPwErrorMsg]      = useState("");
 
+  // Show a banner when redirected back from an email-change confirmation link
+  const emailConfirmed = searchParams.get("email_confirmed") === "1";
+
   useEffect(() => {
     const token = getToken();
     if (!token) { navigate("/login"); return; }
 
     let cancelled = false;
 
-    fetch(`${API}/settings/me`, { headers: authHeaders() })
+    // Refresh the session first so we always have a valid token for subsequent calls
+    getFreshToken().then((freshToken) => {
+      fetch(`${API}/settings/me`, { headers: authHeaders(freshToken) })
       .then((r) => {
         if (r.status === 401) { navigate("/login"); return null; }
         if (!r.ok) throw new Error("Failed to load settings");
@@ -73,6 +93,7 @@ function Settings() {
       })
       .catch((e) => { if (!cancelled) setErrorMsg(e.message); })
       .finally(() => { if (!cancelled) setLoadingUser(false); });
+    });
 
     return () => { cancelled = true; };
   }, [navigate]);
@@ -82,9 +103,10 @@ function Settings() {
     setSaveStatus("saving");
 
     try {
+      const token = await getFreshToken();
       const res = await fetch(`${API}/settings/account`, {
         method:  "PATCH",
-        headers: authHeaders(),
+        headers: authHeaders(token),
         body: JSON.stringify({ full_name: fullName || null }),
       });
 
@@ -111,20 +133,40 @@ function Settings() {
       setEmailErrorMsg("Please enter a valid email address.");
       return;
     }
-    if (email === originalEmail) {
+    if (email.toLowerCase() === originalEmail.toLowerCase()) {
       setEmailErrorMsg("This is already your current email.");
       return;
     }
 
     setEmailStatus("saving");
     try {
-      const res = await fetch(`${API}/settings/change-email`, {
-        method:  "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ email }),
-      });
+      // ✅ ALWAYS use Supabase session (fixes 401)
+const { data: { session } } = await supabase.auth.getSession();
+
+if (!session) {
+  setEmailErrorMsg("You are not logged in.");
+  setEmailStatus(null);
+  return;
+}
+
+const res = await fetch(`${API}/settings/change-email`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session.access_token}`,
+  },
+  body: JSON.stringify({ email }),
+});
 
       const data = await res.json();
+
+      // Handle rate-limit specifically — don't treat as a generic error
+      if (res.status === 429) {
+        setEmailErrorMsg(data.detail || "Too many requests. Please wait a few minutes before trying again.");
+        setEmailStatus(null);
+        return;
+      }
+
       if (!res.ok) throw new Error(data.detail || "Email change failed");
 
       setEmailSuccessMsg(data.message);
@@ -153,9 +195,10 @@ function Settings() {
 
     setPwStatus("saving");
     try {
+      const token = await getFreshToken();
       const res = await fetch(`${API}/settings/change-password`, {
         method:  "POST",
-        headers: authHeaders(),
+        headers: authHeaders(token),
         body: JSON.stringify({
           current_password: passwords.current,
           new_password:     passwords.newPassword,
@@ -178,8 +221,9 @@ function Settings() {
     if (!window.confirm("Are you sure you want to log out?")) return;
 
     try {
+      const token = await getFreshToken();
       await fetch(`${API}/settings/logout`, {
-        method: "POST", headers: authHeaders(),
+        method: "POST", headers: authHeaders(token),
       });
     } catch { /* best-effort */ }
 
@@ -201,7 +245,6 @@ function Settings() {
       <div className="settings-container">
 
         <div className="settings-header">
-          {/* ── ONLY NEW THING: Back button ── */}
           <button className="settings-btn-back" onClick={() => navigate(-1)}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6"/>
@@ -213,6 +256,13 @@ function Settings() {
         </div>
 
         <div className="settings-content">
+
+          {/* ── Email confirmed banner (redirected from AuthCallback) ── */}
+          {emailConfirmed && (
+            <div style={{ background: "#e6f9f0", color: "#0a7c45", padding: "12px 16px", borderRadius: "8px", fontSize: "13px", marginBottom: "8px" }}>
+              ✓ Your email address has been updated successfully.
+            </div>
+          )}
 
           {/* ── Account Information ── */}
           <section className="settings-card">
@@ -261,6 +311,8 @@ function Settings() {
                   setEmailErrorMsg("");
                 }}
                 placeholder="you@example.com"
+                // Disable after a successful send to prevent re-triggering rate limits
+                disabled={emailStatus === "sent"}
               />
             </div>
 
@@ -278,8 +330,14 @@ function Settings() {
             <button
               className="settings-btn-primary"
               onClick={handleChangeEmail}
-              disabled={emailStatus === "saving" || email === originalEmail}
-              style={{ opacity: email === originalEmail ? 0.5 : 1 }}
+              disabled={
+                emailStatus === "saving" ||
+                emailStatus === "sent" ||
+                email.toLowerCase() === originalEmail.toLowerCase()
+              }
+              style={{
+                opacity: (emailStatus === "sent" || email.toLowerCase() === originalEmail.toLowerCase()) ? 0.5 : 1,
+              }}
             >
               {emailStatus === "saving"
                 ? "Sending…"
@@ -287,6 +345,23 @@ function Settings() {
                 ? "Verification sent ✓"
                 : "Update Email"}
             </button>
+
+            {emailStatus === "sent" && (
+              <p style={{ fontSize: "12px", color: "#8892a4", marginTop: "10px" }}>
+                Didn't receive it? Check your spam folder, or{" "}
+                <button
+                  style={{ background: "none", border: "none", color: "#4f6ef7", cursor: "pointer", fontSize: "12px", padding: 0 }}
+                  onClick={() => {
+                    setEmailStatus(null);
+                    setEmailSuccessMsg("");
+                    setEmail(originalEmail);
+                  }}
+                >
+                  reset and try again
+                </button>
+                .
+              </p>
+            )}
           </section>
 
           {/* ── Change Password ── */}
@@ -362,7 +437,7 @@ function Settings() {
 
         </div>
 
-        {/* ── Footer save bar (original, unchanged) ── */}
+        {/* ── Footer save bar ── */}
         <div className="settings-footer">
           <button className="settings-btn-cancel" onClick={() => navigate(-1)}>
             Cancel
