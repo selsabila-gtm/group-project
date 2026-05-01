@@ -750,3 +750,50 @@ def update_competition(
     db.commit()
 
     return {"message": "Competition updated successfully"}
+
+@router.delete("/competitions/{competition_id}")
+def delete_competition(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    competition = (
+        db.query(Competition)
+        .filter(Competition.id == competition_id)
+        .first()
+    )
+
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    is_organizer = (
+        db.query(CompetitionOrganizer)
+        .filter(
+            CompetitionOrganizer.competition_id == competition_id,
+            CompetitionOrganizer.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not is_organizer:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.competition_id == competition_id
+    ).delete()
+
+    db.query(CompetitionOrganizer).filter(
+        CompetitionOrganizer.competition_id == competition_id
+    ).delete()
+
+    db.query(RecentCompetition).filter(
+        RecentCompetition.competition_id == competition_id
+    ).delete()
+
+    db.delete(competition)
+
+    update_dashboard_stat_for_user(db, current_user.id)
+
+    db.commit()
+
+    return {"message": "Competition deleted successfully"}
