@@ -111,24 +111,23 @@ class CompetitionPrompt(Base):
     domain         = Column(String, nullable=True)
     used_count     = Column(Integer, default=0)
     created_at     = Column(String, nullable=True)
-
 class DataSample(Base):
     __tablename__ = "data_samples"
+ 
     id             = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     competition_id = Column(String, nullable=False, index=True)
     contributor_id = Column(String, nullable=False, index=True)
-    status         = Column(String, default="pending")
+    status         = Column(String, default="pending")   # validated | flagged | rejected | pending
     text_content   = Column(Text, nullable=True)
-    annotation     = Column(Text, nullable=True)   # JSON string
+    annotation     = Column(Text, nullable=True)          # JSON string
     audio_url      = Column(String, nullable=True)
     audio_duration = Column(String, nullable=True)
-    quality_score  = Column(String, nullable=True)
+    quality_score  = Column(String, nullable=True)        # float stored as string for compatibility
     flags          = Column(Text, default="[]")
     meta_data      = Column(Text, default="{}")
     submitted_at   = Column(String, nullable=True)
-    version_tag    = Column(String, nullable=True, index=True)  # dataset snapshot tag e.g. "v1.2"
-
-
+    # Version tag assigned when a dataset snapshot is created
+    version_tag    = Column(String, nullable=True, index=True)
     # ── Add this class to models.py ───────────────────────────────────────────────
 # Make sure these are at the top of models.py:
 #   import uuid
