@@ -8,7 +8,7 @@ All other models are unchanged.
 import uuid
 from sqlalchemy import Column, String, Integer, Boolean, Text
 from database import Base
-
+from sqlalchemy.orm import relationship
 
 class UserProfile(Base):
     __tablename__ = "user_profiles"
@@ -104,17 +104,6 @@ class RecentCompetition(Base):
     sync           = Column(String, nullable=False)
     icon           = Column(String, nullable=False)
 
-
-class Notification(Base):
-    __tablename__ = "notifications"
-
-    id          = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id     = Column(String, index=True, nullable=False)
-    title       = Column(String, nullable=False)
-    message     = Column(String, nullable=False)
-    time        = Column(String, nullable=False)
-    highlighted = Column(Boolean, default=False)
-    actions     = Column(Boolean, default=False)
 
 
 class CompetitionPrompt(Base):
