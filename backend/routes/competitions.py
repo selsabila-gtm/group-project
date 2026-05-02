@@ -3,7 +3,7 @@ from datetime import datetime, date
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 
 from models import (
     Competition,
@@ -33,9 +33,6 @@ def compute_competition_status(competition: Competition):
     today = date.today()
     start = parse_date(competition.start_date)
     end = parse_date(competition.end_date)
-
-    # is_draft is a DB-only guard — all public queries filter it out already
-    # so we never return "DRAFT" as a status here
 
     if start and today < start:
         return "UPCOMING"
@@ -75,6 +72,14 @@ def refresh_competition_display_fields(competition: Competition):
         competition.footer = real_status
 
     return competition
+
+
+def delete_competition_related_rows(db: Session, competition_id: str):
+    """Delete all child rows for a competition using raw SQL to avoid ORM cascade issues."""
+    db.execute(text("DELETE FROM competition_datasets WHERE competition_id = :cid"), {"cid": competition_id})
+    db.execute(text("DELETE FROM competition_participants WHERE competition_id = :cid"), {"cid": competition_id})
+    db.execute(text("DELETE FROM competition_organizers WHERE competition_id = :cid"), {"cid": competition_id})
+    db.execute(text("DELETE FROM recent_competitions WHERE competition_id = :cid"), {"cid": competition_id})
 
 
 def validate_competition_payload(data: CompetitionCreateIn):
@@ -703,6 +708,10 @@ def update_competition(
     if not is_organizer:
         raise HTTPException(status_code=403, detail="Not allowed")
 
+    # Delete competition_datasets rows before updating — avoids NOT NULL violation
+    db.execute(text("DELETE FROM competition_datasets WHERE competition_id = :cid"), {"cid": competition_id})
+    db.flush()
+
     competition.title = data.competition_name
     competition.task_type = data.task_type
     competition.category = data.task_type.upper()
@@ -750,7 +759,6 @@ def update_competition(
             row.status = competition.status
             row.icon = get_icon_for_task(competition.task_type)
     else:
-        # Draft had no RecentCompetition row — create one now that it's published
         db.add(
             RecentCompetition(
                 user_id=current_user.id,
@@ -769,6 +777,7 @@ def update_competition(
     db.commit()
 
     return {"message": "Competition updated successfully"}
+
 
 @router.delete("/competitions/{competition_id}")
 def delete_competition(
@@ -797,17 +806,12 @@ def delete_competition(
     if not is_organizer:
         raise HTTPException(status_code=403, detail="Not allowed")
 
-    db.query(CompetitionParticipant).filter(
-        CompetitionParticipant.competition_id == competition_id
-    ).delete()
-
-    db.query(CompetitionOrganizer).filter(
-        CompetitionOrganizer.competition_id == competition_id
-    ).delete()
-
-    db.query(RecentCompetition).filter(
-        RecentCompetition.competition_id == competition_id
-    ).delete()
+    # Delete all child rows with raw SQL to avoid ORM cascade/null issues
+    db.execute(text("DELETE FROM competition_datasets WHERE competition_id = :cid"), {"cid": competition_id})
+    db.execute(text("DELETE FROM competition_participants WHERE competition_id = :cid"), {"cid": competition_id})
+    db.execute(text("DELETE FROM competition_organizers WHERE competition_id = :cid"), {"cid": competition_id})
+    db.execute(text("DELETE FROM recent_competitions WHERE competition_id = :cid"), {"cid": competition_id})
+    db.flush()
 
     db.delete(competition)
 
