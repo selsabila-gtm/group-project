@@ -154,3 +154,42 @@ class CompetitionDataset(Base):
 
 # ── Inside the existing Competition class add: ────────────────────────────────
 #   datasets = relationship("CompetitionDataset", back_populates="competition", cascade="all, delete-orphan")
+class ExperimentWorkspace(Base):
+    __tablename__ = "experiment_workspaces"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    competition_id = Column(String, ForeignKey("competitions.id"), nullable=False, index=True)
+    user_id = Column(String, ForeignKey("user_profiles.user_id"), nullable=False, index=True)
+
+    name = Column(String, nullable=False, default="Notebook Workspace")
+    status = Column(String, default="stopped")  # stopped | starting | running | failed
+    container_id = Column(String, nullable=True)
+    docker_image = Column(String, default="lexivia/notebook-gpu:latest")
+    resource_tier = Column(String, default="GPU Basic")
+
+    cpu_limit = Column(String, default="2 cores")
+    ram_limit = Column(String, default="8 GB")
+    gpu_limit = Column(String, default="1 shared GPU")
+    storage_limit = Column(String, default="20 GB")
+
+    notebook_url = Column(String, nullable=True)
+    last_started_at = Column(String, nullable=True)
+    created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
+
+
+class ExperimentRun(Base):
+    __tablename__ = "experiment_runs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    workspace_id = Column(String, ForeignKey("experiment_workspaces.id"), nullable=False, index=True)
+    competition_id = Column(String, ForeignKey("competitions.id"), nullable=False, index=True)
+    user_id = Column(String, ForeignKey("user_profiles.user_id"), nullable=False, index=True)
+
+    name = Column(String, nullable=False)
+    notes = Column(Text, default="")
+    metric_name = Column(String, default="accuracy")
+    metric_value = Column(String, default="0.00")
+    parameters_json = Column(Text, default="{}")
+    artifact_path = Column(String, nullable=True)
+
+    created_at = Column(String, default=lambda: datetime.utcnow().isoformat())

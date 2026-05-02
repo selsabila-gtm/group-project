@@ -1,0 +1,1077 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+import CompetitionSidebar from "../components/CompetitionSidebar";
+import "./Experiments.css";
+
+const API = "http://127.0.0.1:8000";
+
+function getToken() {
+    return (
+        localStorage.getItem("token") ||
+        localStorage.getItem("access_token") ||
+        localStorage.getItem("jwt")
+    );
+}
+
+function authHeader() {
+    const token = getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function clearAuthAndGoLogin() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("jwt");
+    window.location.href = "/login";
+}
+
+const RESOURCE_TIERS = {
+    "CPU Basic": {
+        cpuLabel: "2 cores",
+        ramLabel: "4 GB",
+        gpuLabel: "No GPU",
+        diskLabel: "10 GB",
+        cpuPct: 40,
+        ramPct: 45,
+        gpuPct: 0,
+    },
+    "GPU Basic": {
+        cpuLabel: "4 cores",
+        ramLabel: "16 GB",
+        gpuLabel: "1 shared GPU",
+        diskLabel: "40 GB",
+        cpuPct: 55,
+        ramPct: 65,
+        gpuPct: 35,
+    },
+    "GPU Pro": {
+        cpuLabel: "8 cores",
+        ramLabel: "32 GB",
+        gpuLabel: "1 dedicated GPU",
+        diskLabel: "80 GB",
+        cpuPct: 70,
+        ramPct: 75,
+        gpuPct: 80,
+    },
+};
+
+const DEFAULT_CODE = `# Start your experiment here
+print("Hello from Lexivia workspace")
+`;
+
+function ResBar({ label, value, pct }) {
+    const color = pct > 75 ? "#f59e0b" : "#22c55e";
+
+    return (
+        <div className="ws-resbar">
+            <span className="ws-resbar-label">{label}</span>
+            <div className="ws-resbar-track">
+                <div
+                    className="ws-resbar-fill"
+                    style={{ width: `${pct}%`, background: color }}
+                />
+            </div>
+            <span className="ws-resbar-val">{value}</span>
+        </div>
+    );
+}
+
+function SaveModal({ saving, onClose, onSave, lastMetric }) {
+    const [form, setForm] = useState({
+        name: "",
+        notes: "",
+        metric_name: lastMetric?.name || "accuracy",
+        metric_value: lastMetric?.value || "",
+        learning_rate: "0.0001",
+        batch_size: "16",
+        epochs: "5",
+    });
+
+    const update = (key) => (e) => {
+        setForm((prev) => ({ ...prev, [key]: e.target.value }));
+    };
+
+    return (
+        <div className="ws-modal-overlay" onClick={onClose}>
+            <div className="ws-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="ws-modal-header">
+                    <span>Save Experiment Run</span>
+                    <button className="ws-modal-close" onClick={onClose}>
+                        ×
+                    </button>
+                </div>
+
+                <div className="ws-modal-body">
+                    <label className="ws-modal-label">Experiment Name *</label>
+                    <input
+                        className="ws-modal-input"
+                        value={form.name}
+                        onChange={update("name")}
+                        placeholder="bert-baseline-v1"
+                    />
+
+                    <label className="ws-modal-label">Notes</label>
+                    <textarea
+                        className="ws-modal-input ws-modal-textarea"
+                        value={form.notes}
+                        onChange={update("notes")}
+                        placeholder="What changed in this run?"
+                    />
+
+                    <div className="ws-modal-row2">
+                        <div>
+                            <label className="ws-modal-label">Metric Name</label>
+                            <input
+                                className="ws-modal-input"
+                                value={form.metric_name}
+                                onChange={update("metric_name")}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="ws-modal-label">Metric Value</label>
+                            <input
+                                className="ws-modal-input"
+                                value={form.metric_value}
+                                onChange={update("metric_value")}
+                                placeholder="0.94"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="ws-modal-row3">
+                        <div>
+                            <label className="ws-modal-label">LR</label>
+                            <input
+                                className="ws-modal-input"
+                                value={form.learning_rate}
+                                onChange={update("learning_rate")}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="ws-modal-label">Batch</label>
+                            <input
+                                className="ws-modal-input"
+                                value={form.batch_size}
+                                onChange={update("batch_size")}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="ws-modal-label">Epochs</label>
+                            <input
+                                className="ws-modal-input"
+                                value={form.epochs}
+                                onChange={update("epochs")}
+                            />
+                        </div>
+                    </div>
+
+                    <button
+                        className="ws-modal-save"
+                        disabled={saving || !form.name.trim()}
+                        onClick={() => onSave(form)}
+                    >
+                        {saving ? "Saving..." : "Save Run"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default function Experiments() {
+    const { competitionId } = useParams();
+
+    const [competition, setCompetition] = useState(null);
+    const [workspace, setWorkspace] = useState(null);
+    const [experiments, setExperiments] = useState([]);
+    const [files, setFiles] = useState([]);
+    const [activeFile, setActiveFile] = useState("");
+    const [openTabs, setOpenTabs] = useState([]);
+    const [fileContent, setFileContent] = useState(DEFAULT_CODE);
+
+    const [resourceTier, setResourceTier] = useState("GPU Basic");
+    const [loading, setLoading] = useState(true);
+    const [launching, setLaunching] = useState(false);
+    const [savingFile, setSavingFile] = useState(false);
+    const [running, setRunning] = useState(false);
+    const [runOutput, setRunOutput] = useState("");
+    const [kernelStatus, setKernelStatus] = useState("IDLE");
+    const [showSaveModal, setShowSaveModal] = useState(false);
+    const [savingRun, setSavingRun] = useState(false);
+    const [toast, setToast] = useState("");
+    const [pageError, setPageError] = useState("");
+    const [stdinByFile, setStdinByFile] = useState({});
+    const activeStdin = stdinByFile[activeFile] || "";
+    const [pushHistory, setPushHistory] = useState([]);
+    const fileInputRef = useRef(null);
+    const [lastMetric, setLastMetric] = useState(null);
+
+    const [uptime, setUptime] = useState(0);
+    const uptimeRef = useRef(null);
+
+    const isRunning = workspace?.status === "running";
+
+    const tier = useMemo(() => {
+        return RESOURCE_TIERS[resourceTier] || RESOURCE_TIERS["GPU Basic"];
+    }, [resourceTier]);
+
+    const showToast = (msg) => {
+        setToast(msg);
+        setTimeout(() => setToast(""), 2200);
+    };
+
+    const safeJson = async (res) => {
+        const text = await res.text();
+
+        try {
+            return text ? JSON.parse(text) : {};
+        } catch {
+            return { detail: text };
+        }
+    };
+
+    const request = async (url, options = {}) => {
+        const res = await fetch(url, {
+            ...options,
+            headers: {
+                ...(options.headers || {}),
+                ...authHeader(),
+            },
+        });
+
+        if (res.status === 401) {
+            clearAuthAndGoLogin();
+            throw new Error("Session expired. Please login again.");
+        }
+
+        const data = await safeJson(res);
+
+        if (!res.ok) {
+            throw new Error(data.detail || "Request failed");
+        }
+
+        return data;
+    };
+
+    const loadFile = useCallback(
+        async (filename) => {
+            if (!filename) return;
+
+            setActiveFile(filename);
+            setOpenTabs((prev) =>
+                prev.includes(filename) ? prev : [...prev, filename]
+            );
+
+            try {
+                const data = await request(
+                    `${API}/competitions/${competitionId}/workspace/file?filename=${encodeURIComponent(
+                        filename
+                    )}`
+                );
+
+                setFileContent(data.content ?? "");
+            } catch (err) {
+                setRunOutput(String(err.message || err));
+            }
+        },
+        [competitionId]
+    );
+
+    const loadPage = useCallback(async () => {
+        setLoading(true);
+        setPageError("");
+
+        try {
+            const [compData, wsData, expData, filesData] = await Promise.all([
+                request(`${API}/competitions/${competitionId}`),
+                request(`${API}/competitions/${competitionId}/workspace`),
+                request(`${API}/competitions/${competitionId}/experiments`),
+                request(`${API}/competitions/${competitionId}/workspace/files`),
+            ]);
+
+            const loadedFiles = filesData.files || [];
+
+            setCompetition(compData);
+            setWorkspace(wsData);
+            setResourceTier(wsData.resource_tier || "GPU Basic");
+            setExperiments(Array.isArray(expData) ? expData : []);
+            setFiles(loadedFiles);
+
+            const firstFile =
+                loadedFiles.find((f) => f === "main_modeling.py") ||
+                loadedFiles.find((f) => f.endsWith(".py")) ||
+                loadedFiles[0] ||
+                "";
+
+            if (firstFile) {
+                setActiveFile(firstFile);
+                setOpenTabs([firstFile]);
+                setTimeout(() => loadFile(firstFile), 0);
+            }
+
+            setKernelStatus(wsData.status === "running" ? "RUNNING" : "IDLE");
+        } catch (err) {
+            setPageError(String(err.message || err));
+        } finally {
+            setLoading(false);
+        }
+    }, [competitionId, loadFile]);
+
+    useEffect(() => {
+        loadPage();
+    }, [loadPage]);
+
+    useEffect(() => {
+        clearInterval(uptimeRef.current);
+
+        if (isRunning) {
+            uptimeRef.current = setInterval(() => setUptime((x) => x + 1), 1000);
+        } else {
+            setUptime(0);
+        }
+
+        return () => clearInterval(uptimeRef.current);
+    }, [isRunning]);
+
+    const fmtUptime = (seconds) => {
+        const h = String(Math.floor(seconds / 3600)).padStart(2, "0");
+        const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, "0");
+        const s = String(seconds % 60).padStart(2, "0");
+
+        return `${h}:${m}:${s}`;
+    };
+
+    const saveCurrentFile = async () => {
+        if (!activeFile) return;
+
+        setSavingFile(true);
+
+        try {
+            await request(`${API}/competitions/${competitionId}/workspace/file`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    filename: activeFile,
+                    content: fileContent,
+                }),
+            });
+
+            showToast("File saved");
+        } catch (err) {
+            setRunOutput(String(err.message || err));
+        } finally {
+            setSavingFile(false);
+        }
+    };
+    const downloadCurrentFile = async () => {
+        if (!activeFile) return;
+
+        try {
+            await saveCurrentFile();
+
+            const res = await fetch(
+                `${API}/competitions/${competitionId}/workspace/download?filename=${encodeURIComponent(activeFile)}`,
+                { headers: authHeader() }
+            );
+
+            if (res.status === 401) return clearAuthAndGoLogin();
+            if (!res.ok) throw new Error("Download failed");
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = activeFile;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            window.URL.revokeObjectURL(url);
+            showToast("File downloaded");
+        } catch (err) {
+            setRunOutput(String(err.message || err));
+        }
+    };
+
+    const launchWorkspace = async () => {
+        setLaunching(true);
+
+        try {
+            const data = await request(
+                `${API}/competitions/${competitionId}/workspace/launch`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ resource_tier: resourceTier }),
+                }
+            );
+
+            setWorkspace(data.workspace);
+            setKernelStatus("RUNNING");
+            showToast("Workspace launched");
+
+            const notebookUrl = data.notebook_url || data.workspace?.notebook_url;
+
+            if (notebookUrl && notebookUrl.startsWith("http")) {
+                window.open(notebookUrl, "_blank", "noopener,noreferrer");
+            }
+        } catch (err) {
+            setPageError(String(err.message || err));
+        } finally {
+            setLaunching(false);
+        }
+    };
+
+    const stopWorkspace = async () => {
+        try {
+            const data = await request(
+                `${API}/competitions/${competitionId}/workspace/stop`,
+                {
+                    method: "POST",
+                }
+            );
+
+            setWorkspace(data.workspace);
+            setKernelStatus("IDLE");
+            showToast("Workspace stopped");
+        } catch (err) {
+            setPageError(String(err.message || err));
+        }
+    };
+
+    const openJupyter = async () => {
+        if (workspace?.notebook_url && workspace.notebook_url.startsWith("http")) {
+            window.open(workspace.notebook_url, "_blank", "noopener,noreferrer");
+            return;
+        }
+
+        try {
+            const data = await request(
+                `${API}/competitions/${competitionId}/workspace/jupyter`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ resource_tier: resourceTier }),
+                }
+            );
+
+            const url = data.notebook_url || data.workspace?.notebook_url;
+
+            if (url) {
+                window.open(url, "_blank", "noopener,noreferrer");
+            }
+        } catch (err) {
+            setPageError(String(err.message || err));
+        }
+    };
+
+    const runCurrentFile = async () => {
+        if (!activeFile) return;
+
+        await saveCurrentFile();
+
+        setRunning(true);
+        setKernelStatus("BUSY");
+        setRunOutput("Running...");
+        setLastMetric(null);
+
+        try {
+            const data = await request(
+                `${API}/competitions/${competitionId}/workspace/run`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        filename: activeFile,
+                        content: fileContent,
+                        stdin: activeStdin
+                            ? activeStdin.endsWith("\n")
+                                ? activeStdin
+                                : `${activeStdin}\n`
+                            : "",
+                    }),
+                }
+            );
+
+            setRunOutput(
+                `${data.stdout || ""}${data.stderr ? `\nERROR:\n${data.stderr}` : ""}${data.exit_code !== undefined ? `\n\nExit code: ${data.exit_code}` : ""
+                }`
+            );
+
+            if (data.metric_name && data.metric_value) {
+                setLastMetric({
+                    name: data.metric_name,
+                    value: data.metric_value,
+                });
+                showToast(`Metric detected: ${data.metric_name}=${data.metric_value}`);
+            }
+        } catch (err) {
+            setRunOutput(String(err.message || err));
+        } finally {
+            setRunning(false);
+            setKernelStatus(isRunning ? "RUNNING" : "IDLE");
+        }
+    };
+
+    const runAll = async () => {
+        await runCurrentFile();
+    };
+
+    const createNewFile = async () => {
+        const filename = prompt("File name:", "experiment.py");
+        if (!filename) return;
+
+        try {
+            await request(`${API}/competitions/${competitionId}/workspace/file`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    filename,
+                    content: filename.endsWith(".txt") ? "" : "# New file\n",
+                }),
+            });
+
+            await loadPage();
+            await loadFile(filename);
+            showToast("File created");
+        } catch (err) {
+            setRunOutput(String(err.message || err));
+        }
+    };
+    const uploadWorkspaceFile = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            const res = await fetch(`${API}/competitions/${competitionId}/workspace/upload`, {
+                method: "POST",
+                headers: authHeader(),
+                body: formData,
+            });
+
+            const data = await safeJson(res);
+            if (res.status === 401) return clearAuthAndGoLogin();
+            if (!res.ok) throw new Error(data.detail || "Could not upload file");
+
+            await loadPage();
+            await loadFile(data.filename);
+            showToast("File uploaded");
+        } catch (err) {
+            setRunOutput(String(err.message || err));
+        } finally {
+            e.target.value = "";
+        }
+    };
+
+    const pushChanges = async () => {
+        await saveCurrentFile();
+
+        const message = prompt("Commit message:", "Update workspace files");
+        if (!message) return;
+
+        try {
+            const data = await request(`${API}/competitions/${competitionId}/workspace/push`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message }),
+            });
+
+            setPushHistory(data.history || []);
+            showToast("Changes pushed");
+        } catch (err) {
+            setRunOutput(String(err.message || err));
+        }
+    };
+
+    const closeTab = (filename, e) => {
+        e.stopPropagation();
+
+        const nextTabs = openTabs.filter((tab) => tab !== filename);
+        setOpenTabs(nextTabs);
+
+        if (activeFile === filename) {
+            const next = nextTabs[nextTabs.length - 1] || "";
+            setActiveFile(next);
+
+            if (next) loadFile(next);
+            else setFileContent("");
+        }
+    };
+
+    const saveExperiment = async (form) => {
+        setSavingRun(true);
+
+        try {
+            await saveCurrentFile();
+
+            const data = await request(
+                `${API}/competitions/${competitionId}/experiments`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        name: form.name,
+                        notes: form.notes,
+                        metric_name: form.metric_name,
+                        metric_value: form.metric_value,
+                        parameters: {
+                            learning_rate: form.learning_rate,
+                            batch_size: form.batch_size,
+                            epochs: form.epochs,
+                            resource_tier: resourceTier,
+                            active_file: activeFile,
+                        },
+                        artifact_path: activeFile,
+                    }),
+                }
+            );
+
+            setExperiments((prev) => [data, ...prev]);
+            setShowSaveModal(false);
+            showToast("Experiment saved");
+        } catch (err) {
+            setPageError(String(err.message || err));
+        } finally {
+            setSavingRun(false);
+        }
+    };
+
+    const displayCpu = workspace?.cpu_limit || tier.cpuLabel;
+    const displayRam = workspace?.ram_limit || tier.ramLabel;
+    const displayGpu = workspace?.gpu_limit || tier.gpuLabel;
+    const displayDisk = workspace?.storage_limit || tier.diskLabel;
+
+    const gitHash = workspace?.container_id
+        ? workspace.container_id.replace("ctr-", "").slice(0, 7)
+        : "local";
+
+    if (loading) {
+        return (
+            <div className="ws-boot">
+                <div className="ws-boot-spinner" />
+                <span>Initializing workspace...</span>
+            </div>
+        );
+    }
+
+    if (pageError) {
+        return (
+            <div className="ws-boot">
+                <span style={{ color: "#f85149" }}>{pageError}</span>
+                <button className="ws-btn ws-btn--launch" onClick={loadPage}>
+                    Retry
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="ws-shell">
+            <CompetitionSidebar
+                competitionId={competitionId}
+                competitionTitle={competition?.title}
+                taskType={competition?.task_type}
+            />
+
+            <div className="ws-ide">
+                <div className="ws-chrome">
+                    <div className="ws-chrome-logo">
+                        <div className="ws-logo-icon">⬡</div>
+                        <div>
+                            <div className="ws-logo-name">{competition?.title || "Workspace"}</div>
+                            <div className="ws-logo-sub">
+                                {resourceTier.toUpperCase()} ·{" "}
+                                {workspace?.docker_image || "lexivia/notebook-gpu:latest"}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="ws-chrome-res">
+                        <ResBar label="CPU" value={displayCpu} pct={tier.cpuPct} />
+                        <ResBar label="RAM" value={displayRam} pct={tier.ramPct} />
+                        {resourceTier !== "CPU Basic" && (
+                            <ResBar label="GPU" value={displayGpu} pct={tier.gpuPct} />
+                        )}
+                        <ResBar label="DISK" value={displayDisk} pct={35} />
+                    </div>
+
+                    <div className="ws-chrome-right">
+                        <div className="ws-tier-wrap">
+                            <span className="ws-tier-label">Resource Tier</span>
+                            <select
+                                className="ws-tier-select"
+                                value={resourceTier}
+                                disabled={isRunning}
+                                onChange={(e) => setResourceTier(e.target.value)}
+                            >
+                                <option>CPU Basic</option>
+                                <option>GPU Basic</option>
+                                <option>GPU Pro</option>
+                            </select>
+                        </div>
+
+                        <button className="ws-btn ws-btn--launch" onClick={openJupyter}>
+                            Open Jupyter
+                        </button>
+
+                        {isRunning ? (
+                            <button className="ws-btn ws-btn--stop" onClick={stopWorkspace}>
+                                ■ Stop Kernel
+                            </button>
+                        ) : (
+                            <button
+                                className="ws-btn ws-btn--launch"
+                                disabled={launching}
+                                onClick={launchWorkspace}
+                            >
+                                {launching ? "Starting..." : "▶ Launch Kernel"}
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                <div className="ws-tabbar">
+                    {openTabs.map((tab) => (
+                        <button
+                            key={tab}
+                            className={`ws-tab ${activeFile === tab ? "ws-tab--active" : ""}`}
+                            onClick={() => loadFile(tab)}
+                        >
+                            <span
+                                className={`ws-tab-dot ${tab.endsWith(".py")
+                                    ? "ws-tab-dot--py"
+                                    : tab.endsWith(".txt")
+                                        ? "ws-tab-dot--txt"
+                                        : "ws-tab-dot--nb"
+                                    }`}
+                            />
+                            {tab}
+                            <span className="ws-tab-x" onClick={(e) => closeTab(tab, e)}>
+                                ×
+                            </span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className="ws-body">
+                    <aside className="ws-explorer">
+                        <div className="ws-pane-title">
+                            EXPLORER
+                            <div className="ws-pane-actions">
+                                <button className="ws-icon-btn" onClick={createNewFile}>
+                                    +
+                                </button>
+                                <button className="ws-icon-btn" onClick={loadPage}>
+                                    ↻
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="ws-tree">
+                            <div className="ws-tree-folder">
+                                <span className="ws-arrow">▸</span>
+                                <span>data</span>
+                                <span className="ws-ro-badge">RO</span>
+                            </div>
+
+                            <div className="ws-tree-folder">
+                                <span className="ws-arrow">▸</span>
+                                <span>shared_models</span>
+                            </div>
+
+                            <div className="ws-tree-folder ws-tree-folder--open">
+                                <span className="ws-arrow">▾</span>
+                                <span>workspace</span>
+                            </div>
+
+                            {files.map((file) => (
+                                <button
+                                    key={file}
+                                    className={`ws-tree-file ${activeFile === file ? "ws-tree-file--active" : ""
+                                        }`}
+                                    onClick={() => loadFile(file)}
+                                >
+                                    <span
+                                        className={`ws-file-dot ${file.endsWith(".py")
+                                            ? "ws-file-dot--py"
+                                            : file.endsWith(".txt")
+                                                ? "ws-file-dot--txt"
+                                                : "ws-file-dot--nb"
+                                            }`}
+                                    />
+                                    {file}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="ws-pane-title ws-pane-title--mt">
+                            SAVED RUNS
+                            <span className="ws-run-count">{experiments.length}</span>
+                        </div>
+
+                        <div className="ws-runs-list">
+                            {experiments.length === 0 ? (
+                                <p className="ws-runs-empty">No runs yet</p>
+                            ) : (
+                                experiments.map((run) => (
+                                    <div key={run.id} className="ws-run-item">
+                                        <div className="ws-run-name">{run.name}</div>
+                                        <div className="ws-run-score">
+                                            {run.metric_name}: <b>{run.metric_value}</b>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </aside>
+
+                    <main className="ws-notebook">
+                        <div className="ws-nb-toolbar">
+                            <button className="ws-nb-btn" disabled={!isRunning || running} onClick={runAll}>
+                                ▶ Run Active File
+                            </button>
+
+                            <button className="ws-nb-btn" disabled={!isRunning || running} onClick={runCurrentFile}>
+                                ▶ Run
+                            </button>
+
+                            <button className="ws-nb-btn" onClick={createNewFile}>
+                                + File
+                            </button>
+                            <button className="ws-nb-btn" onClick={() => fileInputRef.current?.click()}>
+                                ↑ Upload
+                            </button>
+                            <button className="ws-nb-btn" onClick={downloadCurrentFile}>
+                                ↓ Download
+                            </button>
+
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                style={{ display: "none" }}
+                                accept=".py,.txt,.ipynb,.csv,.json,.md,.pkl"
+                                onChange={uploadWorkspaceFile}
+                            />
+
+                            <button className="ws-nb-btn" onClick={() => {
+                                setRunOutput("");
+                                setStdinByFile((prev) => ({
+                                    ...prev,
+                                    [activeFile]: "",
+                                }));
+                            }}>
+                                ⊘ Clear
+                            </button>
+
+                            <button className="ws-nb-btn" disabled={savingFile} onClick={saveCurrentFile}>
+                                {savingFile ? "Saving..." : "Save File"}
+                            </button>
+
+                            <button
+                                className="ws-nb-btn ws-nb-btn--save"
+                                disabled={!isRunning}
+                                onClick={() => setShowSaveModal(true)}
+                            >
+                                ↑ Save Experiment
+                            </button>
+                        </div>
+
+                        <div className="ws-nb-scroll">
+                            <div className="ws-code-editor">
+                                <div className="ws-code-editor-head">
+                                    <span>{activeFile || "No file selected"}</span>
+                                    <div style={{ display: "flex", gap: 8 }}>
+                                        <button onClick={saveCurrentFile}>Save</button>
+                                        <button onClick={runCurrentFile} disabled={!isRunning || running}>
+                                            {running ? "Running..." : "Run"}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <textarea
+                                    className="ws-code-textarea ws-code-textarea--main"
+                                    value={fileContent}
+                                    onChange={(e) => setFileContent(e.target.value)}
+                                    spellCheck="false"
+                                />
+                            </div>
+
+                            <div className="ws-code-editor ws-small-block">
+                                <div className="ws-code-editor-head">
+                                    <span>Input for input()</span>
+                                </div>
+
+                                <textarea
+                                    className="ws-code-textarea ws-code-textarea--stdin"
+                                    value={activeStdin}
+                                    onChange={(e) =>
+                                        setStdinByFile((prev) => ({
+                                            ...prev,
+                                            [activeFile]: e.target.value,
+                                        }))
+                                    }
+                                    placeholder={"Example:\nAla"}
+                                    spellCheck="false"
+                                />
+                            </div>
+
+                            <div className="ws-code-editor ws-small-block">
+                                <div className="ws-code-editor-head">
+                                    <span>Output</span>
+                                    <button onClick={() => {
+                                        setRunOutput("");
+                                        setStdinByFile((prev) => ({
+                                            ...prev,
+                                            [activeFile]: "",
+                                        }));
+                                    }}>Clear</button>
+                                </div>
+
+                                <pre className="ws-code-output">
+                                    {runOutput || "Run output will appear here."}
+                                </pre>
+                            </div>
+                        </div>
+
+                        <div className="ws-statusbar">
+                            <span
+                                className={`ws-status-led ${isRunning ? "ws-status-led--on" : "ws-status-led--off"
+                                    }`}
+                            />
+                            <span>STATUS: {kernelStatus}</span>
+                            <div className="ws-statusbar-sep" />
+                            <span>KERNEL: Python 3.10</span>
+                            <div className="ws-statusbar-sep" />
+                            <span>UPTIME: {fmtUptime(uptime)}</span>
+                            <div className="ws-statusbar-sep" />
+                            <span>SAVE: Manual</span>
+                        </div>
+                    </main>
+
+                    <aside className="ws-envpanel">
+                        <div className="ws-pane-title">
+                            ENVIRONMENT INFO
+                            <button className="ws-icon-btn" onClick={loadPage}>
+                                ↻
+                            </button>
+                        </div>
+
+                        <div className="ws-env-list">
+                            {[
+                                ["python", "3.10"],
+                                ["torch", "2.1.0"],
+                                ["transformers", "4.35.2"],
+                                ["pandas", "2.x"],
+                                ["numpy", "1.26"],
+                                ["scikit-learn", "1.3"],
+                            ].map(([pkg, ver]) => (
+                                <div key={pkg} className="ws-env-row">
+                                    <code className="ws-env-pkg">{pkg}</code>
+                                    <span className="ws-env-ver">{ver}</span>
+                                    <button className="ws-env-edit" onClick={() => loadFile("requirements.txt")}>
+                                        Edit
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="ws-pane-title ws-pane-title--mt">CONTAINER</div>
+
+                        <div className="ws-container-info">
+                            <div className="ws-ci-row">
+                                <span>Docker Image</span>
+                                <code>{workspace?.docker_image || "not launched"}</code>
+                            </div>
+
+                            <div className="ws-ci-row">
+                                <span>Container ID</span>
+                                <code>{workspace?.container_id || "not launched"}</code>
+                            </div>
+
+                            <div className="ws-ci-row">
+                                <span>Jupyter URL</span>
+                                <code>{workspace?.notebook_url || "not ready"}</code>
+                            </div>
+
+                            <div className="ws-ci-row">
+                                <span>CPU</span>
+                                <code>{displayCpu}</code>
+                            </div>
+
+                            <div className="ws-ci-row">
+                                <span>RAM</span>
+                                <code>{displayRam}</code>
+                            </div>
+
+                            <div className="ws-ci-row">
+                                <span>GPU</span>
+                                <code>{displayGpu}</code>
+                            </div>
+
+                            <div className="ws-ci-row">
+                                <span>Storage</span>
+                                <code>{displayDisk}</code>
+                            </div>
+                        </div>
+
+                        <div className="ws-pane-title ws-pane-title--mt">GIT COMMIT HISTORY</div>
+
+                        <div className="ws-git-list">
+                            <div className="ws-git-row">
+                                <span className="ws-git-dot ws-git-dot--active" />
+                                <div className="ws-git-info">
+                                    <p className="ws-git-msg">Workspace updated</p>
+                                    <p className="ws-git-sub">hash: {gitHash}</p>
+                                </div>
+                                <span className="ws-git-time">now</span>
+                            </div>
+
+                            <div className="ws-git-row">
+                                <span className="ws-git-dot" />
+                                <div className="ws-git-info">
+                                    <p className="ws-git-msg">Initial setup</p>
+                                    <p className="ws-git-sub">Project initialized</p>
+                                </div>
+                                <span className="ws-git-time">1h</span>
+                            </div>
+                        </div>
+
+                        <button className="ws-push-btn" disabled={savingFile} onClick={pushChanges}>
+                            {savingFile ? "Pushing..." : "↑ Push Changes"}
+                        </button>
+                    </aside>
+                </div>
+            </div>
+
+            {showSaveModal && (
+                <SaveModal
+                    saving={savingRun}
+                    onClose={() => setShowSaveModal(false)}
+                    onSave={saveExperiment}
+                    lastMetric={lastMetric}
+                />
+            )}
+
+            {toast && <div className="ws-toast">{toast}</div>}
+        </div>
+    );
+}

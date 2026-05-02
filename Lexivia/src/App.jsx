@@ -21,6 +21,7 @@ import UpdateProfilePage from "./pages/profile/updateprofile";
 import SettingsPage from "./pages/profile/settings";
 import OrganizerDashboard from "./pages/OrganizerDashboard";
 import AuthCallback from "./pages/AuthCallback";
+import Experiments from "./pages/Experiments";
 
 import "./index.css";
 
@@ -81,6 +82,7 @@ function App() {
           <Route path="/competitions/:competitionId" element={<CompetitionDetails />} />
           <Route path="/create-competition" element={<CreateCompetition />} />
           <Route path="/competitions/:competitionId/data-collection" element={<DataCollection />} />
+          <Route path="/competitions/:competitionId/experiments" element={<Experiments />} />
           <Route path="/competitions/:id/dataset-hub" element={<DatasetHub />} />
 
           <Route
