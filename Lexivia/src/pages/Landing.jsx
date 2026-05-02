@@ -128,7 +128,7 @@ export default function Landing() {
           </p>
 
           <div style={{ display: 'flex', gap: '12px', marginBottom: '48px', flexWrap: 'wrap' }}>
-            <Link to="/signup" style={{
+            <Link to={localStorage.getItem("token") ? "/dashboard" : "/signup"} style={{
               background: '#1a2fff',
               color: '#fff',
               padding: '12px 24px',
@@ -539,7 +539,7 @@ export default function Landing() {
           and evaluate submissions in one complete platform.
         </p>
 
-        <Link to="/signup" style={{
+        <Link to={localStorage.getItem("token") ? "/dashboard" : "/signup"} style={{
           display: 'inline-block',
           background: '#1a2fff',
           color: '#fff',
