@@ -61,10 +61,14 @@ def list_samples(
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
+    version: str | None = Query(None),
 ):
     _require_access(competition_id, str(current_user.id), db)
 
     q = db.query(DataSample).filter(DataSample.competition_id == competition_id)
+
+    if version:
+        q = q.filter(DataSample.version_tag == version)
 
     if status and status.lower() != "all":
         q = q.filter(DataSample.status == status.lower())
@@ -201,15 +205,13 @@ def list_versions(
     )
 
     # Keep versions sorted newest first; prepend a live entry
-    live = {
-        "tag": _next_version_tag(versions),
-        "label": "Active",
-        "date": datetime.utcnow().strftime("%b %d, %Y"),
-        "total_samples": total,
-        "validated_samples": validated,
-        "is_current": True,
-    }
-    return [live] + versions
+    versions = _parse_versions(comp)
+
+# Mark latest as current
+    for i, v in enumerate(versions):
+        v["is_current"] = i == 0
+
+    return versions
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -242,15 +244,24 @@ def create_version(
         .count()
     )
 
-    new_version = {
-        "tag": body.get("tag") or _next_version_tag(versions),
-        "label": body.get("label", ""),
-        "date": datetime.utcnow().strftime("%b %d, %Y"),
-        "total_samples": total,
-        "validated_samples": validated,
-        "is_current": False,
-    }
+    tag = body.get("tag") or _next_version_tag(versions)
 
+# Assign ALL validated samples to this version
+    db.query(DataSample).filter(
+    DataSample.competition_id == competition_id,
+    DataSample.status == "validated"
+    ).update(
+    {"version_tag": tag},
+    synchronize_session=False
+    )
+    new_version = {
+    "tag": tag,
+    "label": body.get("label", ""),
+    "date": datetime.utcnow().strftime("%b %d, %Y"),
+    "total_samples": total,
+    "validated_samples": validated,
+    "is_current": False,
+}
     versions.insert(0, new_version)
 
     # Persist versions list into the datasets_json field

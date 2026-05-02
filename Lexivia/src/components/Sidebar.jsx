@@ -14,7 +14,7 @@ location.pathname === "/create-competition";
         <div className="sidebar-brand">
           <div className="brand-square">⬢</div>
           <div className="brand-text">
-            <h2>Lexivia AI</h2>
+            <h2>Lexivia</h2>
           </div>
         </div>
 

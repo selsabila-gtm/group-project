@@ -1,24 +1,15 @@
 """
-Teams API routes — uses user_profiles (not users table).
+routes/teams.py  — updated to fire notifications on invite + join-request.
 
-Tables:
-  - teams, team_members, team_invitations  (models_teams.py)
-  - team_join_requests                     (new — see SQL below)
-  - user_profiles                          (user_id text PK, full_name, email)
+Key changes vs original:
+  - invite_member  → also creates a Notification row for the receiver
+  - request_join   → also creates Notification rows for every team leader
+  - accept/decline invitation (inline) → still here for backwards compat;
+    also create feedback notifications
+  - accept/decline join request        → same
 
-SQL to create the new table:
-─────────────────────────────────────────────────────────────
-CREATE TABLE public.team_join_requests (
-  id          SERIAL PRIMARY KEY,
-  team_id     INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-  user_id     TEXT    NOT NULL REFERENCES user_profiles(user_id) ON DELETE CASCADE,
-  message     TEXT,
-  status      VARCHAR DEFAULT 'pending',  -- 'pending' | 'accepted' | 'declined'
-  created_at  TEXT,
-  updated_at  TEXT,
-  CONSTRAINT no_duplicate_request UNIQUE (team_id, user_id, status)
-);
-─────────────────────────────────────────────────────────────
+All notification creation is done via create_notification() from notifications.py
+to keep the logic in one place.
 """
 
 from datetime import datetime
@@ -32,6 +23,9 @@ from models import UserProfile
 from models_teams import Team, TeamMember, TeamInvitation
 from .utils import get_db, get_current_user
 
+# Import notification helper (lazy to avoid circular imports at module load time)
+# We import inside the functions where needed.
+
 router = APIRouter(tags=["teams"])
 
 
@@ -44,7 +38,7 @@ class TeamJoinRequest(Base):
     team_id    = Column(Integer, nullable=False)
     user_id    = Column(String, nullable=False)
     message    = Column(Text, nullable=True)
-    status     = Column(String, default="pending")  # pending | accepted | declined
+    status     = Column(String, default="pending")   # pending | accepted | declined
     created_at = Column(String, nullable=True)
     updated_at = Column(String, nullable=True)
 
@@ -221,7 +215,7 @@ def get_team(
         "created_at":        team.created_at,
         "created_by":        team.created_by,
         "members":           members,
-        "current_user_role": current_user_role,  # null = not a member
+        "current_user_role": current_user_role,
     }
 
 
@@ -251,7 +245,29 @@ def update_team(
     return {"message": "Team updated successfully"}
 
 
-# ── Invite by email (leaders + admins) ───────────────────────────────────────
+# ── Delete team (leaders only) ────────────────────────────────────────────────
+
+@router.delete("/teams/{team_id}")
+def delete_team(
+    team_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_leader(db, team_id, str(current_user.id))
+
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    db.query(TeamMember).filter(TeamMember.team_id == team_id).delete(synchronize_session=False)
+    db.query(TeamInvitation).filter(TeamInvitation.team_id == team_id).delete(synchronize_session=False)
+    db.query(TeamJoinRequest).filter(TeamJoinRequest.team_id == team_id).delete(synchronize_session=False)
+    db.delete(team)
+    db.commit()
+    return {"message": "Team deleted successfully"}
+
+
+# ── Invite by email (leaders + admins) — NOW CREATES NOTIFICATION ─────────────
 
 @router.post("/teams/{team_id}/invite")
 def invite_member(
@@ -260,6 +276,8 @@ def invite_member(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    from .notifications import create_notification   # lazy import
+
     _require_can_invite(db, team_id, str(current_user.id))
 
     email = (body.get("email") or "").strip().lower()
@@ -270,7 +288,7 @@ def invite_member(
     if role not in ("member", "admin", "leader"):
         raise HTTPException(status_code=400, detail="Invalid role")
 
-    # Resolve email → user_profiles (requires email column on user_profiles)
+    # Resolve email → user_profiles
     receiver = db.query(UserProfile).filter(UserProfile.email == email).first()
     if not receiver:
         raise HTTPException(status_code=404, detail="No registered user found with that email")
@@ -293,8 +311,18 @@ def invite_member(
     if existing_invite:
         raise HTTPException(status_code=400, detail=f"{receiver_name} already has a pending invitation")
 
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    # Get sender name
+    sender_profile = db.query(UserProfile).filter(
+        UserProfile.user_id == str(current_user.id)
+    ).first()
+    sender_name = sender_profile.full_name if sender_profile else "A team leader"
+
     now = _now()
-    db.add(TeamInvitation(
+    inv = TeamInvitation(
         team_id=team_id,
         sender_id=str(current_user.id),
         receiver_id=receiver_id,
@@ -302,12 +330,31 @@ def invite_member(
         status="pending",
         created_at=now,
         updated_at=now,
-    ))
+    )
+    db.add(inv)
+    db.flush()   # flush to get inv.id
+
+    # ── Create notification for the invited user ──────────────────────────────
+    create_notification(
+        db,
+        user_id=receiver_id,
+        type="team_invitation",
+        title="Team Invitation",
+        message=(
+            f"{sender_name} invited you to join \"{team.name}\" as {role}."
+        ),
+        actor_id=str(current_user.id),
+        actor_name=sender_name,
+        team_id=team_id,
+        team_name=team.name,
+        invitation_id=inv.id,
+    )
+
     db.commit()
     return {"message": f"Invitation sent to {receiver_name}"}
 
 
-# ── Request to join (outsiders only) ─────────────────────────────────────────
+# ── Request to join — NOW NOTIFIES ALL TEAM LEADERS ───────────────────────────
 
 @router.post("/teams/{team_id}/request-join")
 def request_join(
@@ -316,11 +363,12 @@ def request_join(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    from .notifications import create_notification   # lazy import
+
     team = db.query(Team).filter(Team.id == team_id).first()
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
-    # Already a member?
     already = db.query(TeamMember).filter(
         TeamMember.team_id == team_id,
         TeamMember.user_id == str(current_user.id),
@@ -328,7 +376,6 @@ def request_join(
     if already:
         raise HTTPException(status_code=400, detail="You are already a member of this team")
 
-    # Already has a pending request?
     existing = db.query(TeamJoinRequest).filter(
         TeamJoinRequest.team_id == team_id,
         TeamJoinRequest.user_id == str(current_user.id),
@@ -338,14 +385,46 @@ def request_join(
         raise HTTPException(status_code=400, detail="You already have a pending request for this team")
 
     now = _now()
-    db.add(TeamJoinRequest(
+    req = TeamJoinRequest(
         team_id=team_id,
         user_id=str(current_user.id),
         message=(body.get("message") or "").strip() or None,
         status="pending",
         created_at=now,
         updated_at=now,
-    ))
+    )
+    db.add(req)
+    db.flush()
+
+    # Resolve requester name
+    requester_profile = db.query(UserProfile).filter(
+        UserProfile.user_id == str(current_user.id)
+    ).first()
+    requester_name = requester_profile.full_name if requester_profile else "Someone"
+
+    # Notify all leaders (and admins) of the team
+    leaders = db.query(TeamMember).filter(
+        TeamMember.team_id == team_id,
+        TeamMember.role.in_(("leader", "admin")),
+    ).all()
+
+    for leader in leaders:
+        create_notification(
+            db,
+            user_id=leader.user_id,
+            type="team_join_request",
+            title="New Join Request",
+            message=(
+                f"{requester_name} wants to join \"{team.name}\"."
+                + (f' Message: "{req.message}"' if req.message else "")
+            ),
+            actor_id=str(current_user.id),
+            actor_name=requester_name,
+            team_id=team_id,
+            team_name=team.name,
+            join_request_id=req.id,
+        )
+
     db.commit()
     return {"message": "Join request sent. A team leader will review it."}
 
@@ -386,6 +465,8 @@ def accept_join_request(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    from .notifications import create_notification
+
     _require_leader(db, team_id, str(current_user.id))
 
     req = db.query(TeamJoinRequest).filter(
@@ -405,6 +486,20 @@ def accept_join_request(
         role="member",
         joined_at=_now(),
     ))
+
+    team = db.query(Team).filter(Team.id == team_id).first()
+    team_name = team.name if team else "the team"
+
+    create_notification(
+        db,
+        user_id=req.user_id,
+        type="team_join_accepted",
+        title="Join Request Accepted",
+        message=f"Your request to join \"{team_name}\" was accepted!",
+        team_id=team_id,
+        team_name=team_name,
+    )
+
     db.commit()
     return {"message": "Join request accepted"}
 
@@ -416,6 +511,8 @@ def decline_join_request(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    from .notifications import create_notification
+
     _require_leader(db, team_id, str(current_user.id))
 
     req = db.query(TeamJoinRequest).filter(
@@ -428,6 +525,20 @@ def decline_join_request(
 
     req.status     = "declined"
     req.updated_at = _now()
+
+    team = db.query(Team).filter(Team.id == team_id).first()
+    team_name = team.name if team else "the team"
+
+    create_notification(
+        db,
+        user_id=req.user_id,
+        type="team_join_declined",
+        title="Join Request Declined",
+        message=f"Your request to join \"{team_name}\" was not accepted.",
+        team_id=team_id,
+        team_name=team_name,
+    )
+
     db.commit()
     return {"message": "Join request declined"}
 
@@ -441,6 +552,8 @@ def remove_member(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    from .notifications import create_notification
+
     _require_leader(db, team_id, str(current_user.id))
 
     if user_id == str(current_user.id):
@@ -453,7 +566,21 @@ def remove_member(
     if not membership:
         raise HTTPException(status_code=404, detail="Member not found")
 
+    team = db.query(Team).filter(Team.id == team_id).first()
+    team_name = team.name if team else "the team"
+
     db.delete(membership)
+
+    create_notification(
+        db,
+        user_id=user_id,
+        type="team_member_removed",
+        title="Removed from Team",
+        message=f"You have been removed from \"{team_name}\".",
+        team_id=team_id,
+        team_name=team_name,
+    )
+
     db.commit()
     return {"message": "Member removed successfully"}
 
@@ -483,7 +610,7 @@ def my_pending_invitations(
     ]
 
 
-# ── Accept / decline invitation ───────────────────────────────────────────────
+# ── Accept / decline invitation (original endpoints — kept for backward compat)
 
 @router.post("/teams/invitations/{invitation_id}/accept")
 def accept_invitation(
@@ -491,6 +618,8 @@ def accept_invitation(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    from .notifications import create_notification
+
     inv = db.query(TeamInvitation).filter(
         TeamInvitation.id          == invitation_id,
         TeamInvitation.receiver_id == str(current_user.id),
@@ -501,12 +630,33 @@ def accept_invitation(
 
     inv.status     = "accepted"
     inv.updated_at = _now()
+
     db.add(TeamMember(
         team_id=inv.team_id,
         user_id=str(current_user.id),
         role=inv.role,
         joined_at=_now(),
     ))
+
+    team = db.query(Team).filter(Team.id == inv.team_id).first()
+    team_name = team.name if team else "the team"
+    receiver_profile = db.query(UserProfile).filter(
+        UserProfile.user_id == str(current_user.id)
+    ).first()
+    receiver_name = receiver_profile.full_name if receiver_profile else "Someone"
+
+    create_notification(
+        db,
+        user_id=inv.sender_id,
+        type="team_invitation_accepted",
+        title="Invitation Accepted",
+        message=f"{receiver_name} accepted your invitation to join \"{team_name}\".",
+        actor_id=str(current_user.id),
+        actor_name=receiver_name,
+        team_id=inv.team_id,
+        team_name=team_name,
+    )
+
     db.commit()
     return {"message": "Invitation accepted"}
 
@@ -517,6 +667,8 @@ def decline_invitation(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    from .notifications import create_notification
+
     inv = db.query(TeamInvitation).filter(
         TeamInvitation.id          == invitation_id,
         TeamInvitation.receiver_id == str(current_user.id),
@@ -527,5 +679,25 @@ def decline_invitation(
 
     inv.status     = "declined"
     inv.updated_at = _now()
+
+    team = db.query(Team).filter(Team.id == inv.team_id).first()
+    team_name = team.name if team else "the team"
+    receiver_profile = db.query(UserProfile).filter(
+        UserProfile.user_id == str(current_user.id)
+    ).first()
+    receiver_name = receiver_profile.full_name if receiver_profile else "Someone"
+
+    create_notification(
+        db,
+        user_id=inv.sender_id,
+        type="team_invitation_declined",
+        title="Invitation Declined",
+        message=f"{receiver_name} declined your invitation to join \"{team_name}\".",
+        actor_id=str(current_user.id),
+        actor_name=receiver_name,
+        team_id=inv.team_id,
+        team_name=team_name,
+    )
+
     db.commit()
     return {"message": "Invitation declined"}

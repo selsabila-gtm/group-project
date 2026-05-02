@@ -59,7 +59,7 @@ function StatCard({ label, value, sub, accent }) {
 }
 
 // ─── Version Control sidebar ────────────────────────────────────────────────────
-function VersionControl({ versions, loading, onCreateVersion, isOrganizer }) {
+ function VersionControl({ versions, loading, onCreateVersion, isOrganizer, onSelectVersion }){
     const [showModal, setShowModal] = useState(false);
     const [tag, setTag] = useState("");
     const [label, setLabel] = useState("");
@@ -84,7 +84,11 @@ function VersionControl({ versions, loading, onCreateVersion, isOrganizer }) {
                     </svg>
                 </button>
             </div>
-
+            <div
+    key={i}
+    className={`dh-version-row${v.is_current ? " current" : ""}`}
+    onClick={() => onSelectVersion(v.tag)}
+></div>
             {loading ? (
                 <div className="dh-version-loading">Loading…</div>
             ) : (
@@ -336,7 +340,7 @@ function RowActions({ sample, onUpdate, isOrganizer }) {
 }
 
 // ─── Raw Samples table ─────────────────────────────────────────────────────────
-function RawSamplesTable({ competitionId, isOrganizer }) {
+function RawSamplesTable({ competitionId, isOrganizer, version }) {
     const [items, setItems]         = useState([]);
     const [total, setTotal]         = useState(0);
     const [page, setPage]           = useState(1);
@@ -346,15 +350,15 @@ function RawSamplesTable({ competitionId, isOrganizer }) {
     const [searchInput, setSearchInput] = useState("");
     const [loading, setLoading]     = useState(false);
     const [view, setView]           = useState("Table View"); // Table View | Visual Explorer
-
     const load = useCallback(async () => {
         setLoading(true);
         try {
             const params = new URLSearchParams({
                 page,
                 page_size: 10,
-                ...(statusFilter !== "all" ? { status: statusFilter } : {}),
-                ...(search ? { search } : {}),
+                ...(version ? { version: version } : {}),
+                
+
             });
             const res = await fetch(
                 `${API}/competitions/${competitionId}/samples?${params}`,
@@ -369,7 +373,7 @@ function RawSamplesTable({ competitionId, isOrganizer }) {
         } finally {
             setLoading(false);
         }
-    }, [competitionId, page, statusFilter, search]);
+    }, [competitionId, page, statusFilter, search, version]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -570,7 +574,8 @@ function EmbeddingVisualizer() {
 export default function DatasetHub() {
     const params = useParams();
     const competitionId = params.id ?? params.competitionId;
-
+    
+    const [activeVersion, setActiveVersion] = useState(null);
     const [competition, setCompetition] = useState(null);
     const [health,      setHealth]      = useState(null);
     const [versions,    setVersions]    = useState([]);
@@ -583,7 +588,7 @@ const handleDownload = async () => {
     setDownloading(true);
     try {
         // Fetch ALL validated samples (no pagination limit)
-        const params = new URLSearchParams({ page: 1, page_size: 1000, status: "validated" });
+        const params = new URLSearchParams({ page: 1, page_size: 1000, status: "validated" , ...(activeVersion ? { version: activeVersion } : {}) });
         const res = await fetch(
             `${API}/competitions/${competitionId}/samples?${params}`,
             { headers: authHeader() }
@@ -693,6 +698,13 @@ const handleDownload = async () => {
                 competitionTitle={competition?.title}
                 taskType={competition?.task_type}
             />
+            <VersionControl
+    versions={versions}
+    loading={versionsLoading}
+    onCreateVersion={handleCreateVersion}
+    isOrganizer={isOrganizer}
+    onSelectVersion={setActiveVersion}
+/>
 
             <div className="dh-main">
                 <CompetitionTopbar competition={competition} />
@@ -792,6 +804,7 @@ const handleDownload = async () => {
                             <RawSamplesTable
                                 competitionId={competitionId}
                                 isOrganizer={isOrganizer}
+                                version={activeVersion}
                             />
                         </div>
                     </div>

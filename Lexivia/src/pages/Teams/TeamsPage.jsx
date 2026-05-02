@@ -172,12 +172,6 @@ export default function TeamsPage() {
 
         <div className="page-body">
           <div className="page-title-row">
-            <div>
-              <h1 className="page-title">Teams</h1>
-              <p className="page-subtitle">
-                Connect with elite NLP research collectives and collaborate on high-density language modeling competitions.
-              </p>
-            </div>
             <button className="create-btn" onClick={() => setShowCreateModal(true)}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
