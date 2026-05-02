@@ -251,6 +251,29 @@ def update_team(
     return {"message": "Team updated successfully"}
 
 
+# ── Delete team (leaders only) ────────────────────────────────────────────────
+
+@router.delete("/teams/{team_id}")
+def delete_team(
+    team_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_leader(db, team_id, str(current_user.id))
+
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    # Cascade-delete members, invitations, and join requests first
+    db.query(TeamMember).filter(TeamMember.team_id == team_id).delete(synchronize_session=False)
+    db.query(TeamInvitation).filter(TeamInvitation.team_id == team_id).delete(synchronize_session=False)
+    db.query(TeamJoinRequest).filter(TeamJoinRequest.team_id == team_id).delete(synchronize_session=False)
+    db.delete(team)
+    db.commit()
+    return {"message": "Team deleted successfully"}
+
+
 # ── Invite by email (leaders + admins) ───────────────────────────────────────
 
 @router.post("/teams/{team_id}/invite")

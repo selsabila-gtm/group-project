@@ -303,6 +303,10 @@ export default function TeamDetailPage() {
   const [editDesc, setEditDesc] = useState('');
   const [saving, setSaving]     = useState(false);
 
+  // Delete mode
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting]                   = useState(false);
+
   const [activeTab, setActiveTab] = useState('members');
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -351,6 +355,31 @@ export default function TeamDetailPage() {
     } else {
       const data = await res.json().catch(() => ({}));
       alert('Failed to save: ' + (data.detail || 'Unknown error'));
+    }
+  }
+
+  // ── Delete team ────────────────────────────────────────────────────────────
+
+  async function handleDeleteTeam() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API}/teams/${teamId}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (res.status === 401) { navigate('/login'); return; }
+      if (res.ok) {
+        navigate('/teams');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert('Failed to delete team: ' + (data.detail || 'Unknown error'));
+        setShowDeleteConfirm(false);
+      }
+    } catch (err) {
+      alert('Failed to delete team: ' + err.message);
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -503,7 +532,28 @@ export default function TeamDetailPage() {
                   </button>
                 </>
               ) : (
-                <button className="btn-outline" onClick={() => setEditMode(true)}>Edit Team</button>
+                <>
+                  <button className="btn-outline" onClick={() => setEditMode(true)}>Edit Team</button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    style={{
+                      padding: '9px 20px',
+                      border: '1.5px solid #fcc',
+                      background: '#fff0f0',
+                      borderRadius: 9,
+                      fontSize: 13.5,
+                      fontWeight: 600,
+                      color: '#c33',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      transition: 'background 0.15s, border-color 0.15s',
+                    }}
+                    onMouseOver={e => { e.currentTarget.style.background = '#ffe4e4'; e.currentTarget.style.borderColor = '#e55'; }}
+                    onMouseOut={e => { e.currentTarget.style.background = '#fff0f0'; e.currentTarget.style.borderColor = '#fcc'; }}
+                  >
+                    Delete Team
+                  </button>
+                </>
               )
             )}
 
@@ -701,6 +751,54 @@ export default function TeamDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Delete confirmation modal ── */}
+      {showDeleteConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 16, padding: '32px 28px',
+            width: 400, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+          }}>
+            <div style={{ fontSize: 36, marginBottom: 12, textAlign: 'center' }}>⚠️</div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1c20', margin: '0 0 10px', textAlign: 'center' }}>
+              Delete "{team.name}"?
+            </h2>
+            <p style={{ fontSize: 13.5, color: '#666', lineHeight: 1.6, margin: '0 0 24px', textAlign: 'center' }}>
+              This will permanently remove the team and all its members. This action <strong>cannot be undone</strong>.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                style={{
+                  flex: 1, padding: '10px', border: '1.5px solid #d4d8e4',
+                  background: '#fff', borderRadius: 9, fontSize: 14,
+                  fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteTeam}
+                disabled={deleting}
+                style={{
+                  flex: 1, padding: '10px', border: 'none',
+                  background: '#c33', borderRadius: 9, fontSize: 14,
+                  fontWeight: 600, color: '#fff', cursor: deleting ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit', opacity: deleting ? 0.7 : 1,
+                  transition: 'background 0.15s',
+                }}
+              >
+                {deleting ? 'Deleting…' : 'Yes, Delete Team'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
