@@ -28,6 +28,37 @@ function OrganizerDashboard() {
 
     const token = localStorage.getItem("token");
 
+    async function handleDeleteCompetition() {
+        const confirmDelete = window.confirm(
+            "Are you sure you want to delete this competition?"
+        );
+
+        if (!confirmDelete) return;
+
+        try {
+            const res = await fetch(
+                `http://127.0.0.1:8000/competitions/${competitionId}`,
+                {
+                    method: "DELETE",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (!res.ok) {
+                const error = await res.json();
+                throw new Error(error.detail || "Delete failed");
+            }
+
+            alert("Competition deleted successfully.");
+            navigate("/competitions?tab=organizing");
+        } catch (error) {
+            console.error(error);
+            alert(error.message || "Could not delete competition.");
+        }
+    }
+
     useEffect(() => {
         if (!token) {
             navigate("/login");
@@ -71,17 +102,19 @@ function OrganizerDashboard() {
     }, [competitionId, navigate, token]);
 
     useEffect(() => {
+        if (!token) return;
+
         const interval = setInterval(() => {
             fetch(`http://127.0.0.1:8000/competitions/${competitionId}/monitoring`, {
                 headers: { Authorization: `Bearer ${token}` },
             })
-                .then(res => res.json())
+                .then((res) => res.json())
                 .then(setMonitoring)
                 .catch(() => { });
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [competitionId]);
+    }, [competitionId, token]);
 
     const datasets = useMemo(
         () => safeJson(competition?.datasets_json, []),
@@ -91,10 +124,10 @@ function OrganizerDashboard() {
     const milestones = useMemo(() => {
         const extra = safeJson(competition?.milestones_json, []);
         return [
-            { title: "Submission Open", date: competition?.start_date, status: "done" },
-            { title: "Model Validation", date: competition?.validation_date, status: "pending" },
-            { title: "Final Leaderboard", date: competition?.freeze_date, status: "waiting" },
-            { title: "Competition End", date: competition?.end_date, status: "waiting" },
+            { title: "Submission Open", date: competition?.start_date },
+            { title: "Model Validation", date: competition?.validation_date },
+            { title: "Final Leaderboard", date: competition?.freeze_date },
+            { title: "Competition End", date: competition?.end_date },
             ...extra,
         ];
     }, [competition]);
@@ -138,6 +171,7 @@ function OrganizerDashboard() {
                         >
                             ← Back to Competitions
                         </button>
+
                         <div className="organizer-title-row">
                             <h1>{competition.title}</h1>
                             <span className="badge badge-open">{competition.status}</span>
@@ -153,13 +187,16 @@ function OrganizerDashboard() {
                         <button
                             onClick={() =>
                                 navigate(`/edit-competition/${competitionId}`, {
-                                    state: { competition }
+                                    state: { competition },
                                 })
                             }
                         >
                             Edit Competition
                         </button>
-                        <button className="danger">Delete</button>
+
+                        <button className="danger" onClick={handleDeleteCompetition}>
+                            Delete
+                        </button>
                     </div>
                 </section>
 
@@ -226,7 +263,9 @@ function OrganizerDashboard() {
 
                         <div className="empty-state">
                             <strong>No leaderboard yet</strong>
-                            <p>Top teams will appear after model submissions are validated.</p>
+                            <p>
+                                Top teams will appear after model submissions are validated.
+                            </p>
                         </div>
 
                         <button className="full-btn">View Full Leaderboard</button>

@@ -143,6 +143,36 @@ class DataSample(Base):
     quality_score  = Column(String, nullable=True)        # float stored as string for compatibility
     flags          = Column(Text, default="[]")
     meta_data      = Column(Text, default="{}")
+    meta_data      = Column(Text, default="{}")
     submitted_at   = Column(String, nullable=True)
     # Version tag assigned when a dataset snapshot is created
     version_tag    = Column(String, nullable=True, index=True)
+    version_tag    = Column(String, nullable=True, index=True)  # dataset snapshot tag e.g. "v1.2"
+
+
+    # ── Add this class to models.py ───────────────────────────────────────────────
+# Make sure these are at the top of models.py:
+#   import uuid
+#   from datetime import datetime
+#   from sqlalchemy import Column, String, Integer, Text, ForeignKey
+#   from sqlalchemy.orm import relationship
+
+class CompetitionDataset(Base):
+    __tablename__ = "competition_datasets"
+
+    id                = Column(String, primary_key=True,
+                               default=lambda: str(uuid.uuid4()))
+    competition_id    = Column(String, ForeignKey("competitions.id"), nullable=False)
+    uploaded_by       = Column(String, ForeignKey("user_profiles.user_id"), nullable=False)
+    dataset_type      = Column(String, default="hidden_test")  # hidden_test | public_train | sample
+    original_filename = Column(String, nullable=False)
+    storage_path      = Column(String, nullable=False)   # path inside "competition-datasets" bucket
+    file_size_bytes   = Column(Integer, default=0)
+    description       = Column(Text, default="")
+    uploaded_at       = Column(String, default=lambda: datetime.utcnow().isoformat())
+
+    competition = relationship("Competition", back_populates="datasets")
+    uploader    = relationship("UserProfile", foreign_keys=[uploaded_by])
+
+# ── Inside the existing Competition class add: ────────────────────────────────
+#   datasets = relationship("CompetitionDataset", back_populates="competition", cascade="all, delete-orphan")

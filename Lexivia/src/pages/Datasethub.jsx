@@ -23,6 +23,7 @@ function authHeader() {
 }
 
 // ─── Top bar ───────────────────────────────────────────────────────────────────
+// ─── Top bar ───────────────────────────────────────────────────────────────────
 function CompetitionTopbar({ competition }) {
     return (
         <div className="dh-topbar">
@@ -90,6 +91,7 @@ function VersionControl({ versions, loading, onCreateVersion, isOrganizer, onSel
                     </svg>
                 </button>
             </div>
+
 
             {loading ? (
                 <div className="dh-version-loading">Loading…</div>

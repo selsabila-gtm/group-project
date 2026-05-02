@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import NotificationPopup from "./NotificationPopup";   // ← new
 
 function Topbar({ title = "", subtitle = "", showBrowseButton = false }) {
     const navigate = useNavigate();
@@ -14,10 +15,8 @@ function Topbar({ title = "", subtitle = "", showBrowseButton = false }) {
 
     function handleSearch(e) {
         e.preventDefault();
-
         const q = search.trim();
         if (!q) return;
-
         navigate(`/search?q=${encodeURIComponent(q)}`);
     }
 
@@ -38,8 +37,6 @@ function Topbar({ title = "", subtitle = "", showBrowseButton = false }) {
                             onChange={(e) => {
                                 const value = e.target.value;
                                 setSearch(value);
-
-                                // live search
                                 if (location.pathname === "/search") {
                                     if (value.trim()) {
                                         navigate(`/search?q=${encodeURIComponent(value)}`);
@@ -51,8 +48,6 @@ function Topbar({ title = "", subtitle = "", showBrowseButton = false }) {
                             placeholder="Search competitions, datasets, teams..."
                             style={searchInput}
                         />
-
-                        {/* ✅ CLEAR BUTTON (always visible) */}
                         <button
                             type="button"
                             onClick={handleClear}
@@ -62,10 +57,8 @@ function Topbar({ title = "", subtitle = "", showBrowseButton = false }) {
                         </button>
                     </form>
 
-                    {/* ICONS */}
-                    <button onClick={() => navigate("/notifications")} style={iconBtn}>
-                        🔔
-                    </button>
+                    {/* NOTIFICATION BELL — now uses the popup component */}
+                    <NotificationPopup />
 
                     <button onClick={() => navigate("/settings")} style={iconBtn}>
                         ☰
@@ -134,30 +127,20 @@ const searchInput = {
     color: "#475069",
 };
 
-/* ✅ CLEAN CLEAR BUTTON */
 const clearBtn = {
     position: "absolute",
     right: "8px",
     top: "50%",
     transform: "translateY(-50%)",
-
     width: "26px",
     height: "26px",
     borderRadius: "50%",
     border: "none",
-
     background: "#eef2ff",
     color: "#6f778d",
     fontSize: "14px",
-
     cursor: "pointer",
     transition: "all 0.2s ease",
-};
-
-/* hover effect */
-clearBtn[":hover"] = {
-    background: "#ff4d4f",
-    color: "#ffffff",
 };
 
 const iconBtn = {
