@@ -6,9 +6,10 @@ All other models are unchanged.
 """
 
 import uuid
-from sqlalchemy import Column, String, Integer, Boolean, Text
+from sqlalchemy import Column, String, Integer, Boolean, Text, ForeignKey
 from database import Base
 from sqlalchemy.orm import relationship
+from datetime import datetime
 
 class UserProfile(Base):
     __tablename__ = "user_profiles"

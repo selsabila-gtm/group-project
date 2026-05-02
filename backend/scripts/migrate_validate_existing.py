@@ -1,74 +1,96 @@
 """
-scripts/migrate_validate_existing.py
+scripts/migrate_validate_existing.py  (fixed)
 
-Run this ONCE from the backend/ directory to validate all existing
-"pending" samples using the rule-based pipeline (no AI, for speed).
+Root cause: existing samples have annotation="{}" or annotation=None,
+which validate_annotation() hard-rejects — causing 100% rejection rate.
 
-Usage:
-    cd backend
+This script uses a RELAXED pipeline:
+  - Empty text        -> rejected
+  - Text too short    -> flagged
+  - PII detected      -> flagged
+  - Empty annotation  -> pending (human review, not rejected)
+  - Otherwise         -> validated
+
+Run from backend/ directory:
     python scripts/migrate_validate_existing.py
 
-Add --ai flag to also run AI scoring (much slower):
-    python scripts/migrate_validate_existing.py --ai
+Dry-run first to preview without writing:
+    python scripts/migrate_validate_existing.py --dry-run
 """
 
-import asyncio
-import sys
-import os
-
-# Make sure backend modules are importable
+import asyncio, sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import json
 from database import SessionLocal
 from models import DataSample
-from services.validation_service import validate_sample
+from services.validation_service import (
+    validate_not_empty, validate_min_length,
+    validate_max_length, validate_no_pii, ValidationResult,
+)
 
 
-async def run(use_ai: bool = False):
+def is_annotation_meaningful(raw):
+    if not raw:
+        return False
+    try:
+        ann = json.loads(raw)
+    except Exception:
+        return False
+    if isinstance(ann, dict):
+        return any(v not in ("", None, [], {}) for v in ann.values())
+    if isinstance(ann, list):
+        return len(ann) > 0
+    return False
+
+
+async def validate_existing(text_content, annotation_raw):
+    text = (text_content or "").strip()
+
+    for check in [validate_not_empty, validate_min_length, validate_max_length, validate_no_pii]:
+        r = check(text) if check != validate_not_empty else validate_not_empty(text)
+        if not r.passed:
+            return r
+
+    if not is_annotation_meaningful(annotation_raw):
+        return ValidationResult(passed=False, status="pending",
+                                reasons=["Empty annotation — needs review."])
+
+    return ValidationResult(passed=True, status="validated")
+
+
+async def run(dry_run=False):
     db = SessionLocal()
     try:
+        # Show 3 sample rows so you can diagnose the data
+        rows = db.query(DataSample).filter(DataSample.status == "pending").limit(3).all()
+        print("── Data preview (first 3 rows) ──")
+        for s in rows:
+            print(f"  text: {repr((s.text_content or '')[:80])}")
+            print(f"  annotation: {repr(s.annotation)}")
+            print()
+
         pending = db.query(DataSample).filter(DataSample.status == "pending").all()
-        total   = len(pending)
-        print(f"Found {total} pending samples. Starting validation (AI={'ON' if use_ai else 'OFF'})…\n")
+        total = len(pending)
+        print(f"Found {total} pending. {'DRY RUN' if dry_run else 'Processing…'}\n")
 
-        counts = {"validated": 0, "flagged": 0, "rejected": 0, "skipped": 0}
-
-        for i, sample in enumerate(pending, 1):
-            # Parse annotation
-            try:
-                ann = json.loads(sample.annotation) if sample.annotation else {}
-            except Exception:
-                ann = {}
-
-            result = await validate_sample(
-                text_content=sample.text_content,
-                annotation=ann,
-                task_type="TEXT_PROCESSING",
-                run_ai=use_ai,
-            )
-
-            sample.status = result.status
-            if result.quality_score is not None:
-                sample.quality_score = str(result.quality_score)
-
-            counts[result.status] = counts.get(result.status, 0) + 1
-
-            # Commit in batches of 500 for performance
-            if i % 500 == 0:
+        counts = {"validated": 0, "flagged": 0, "rejected": 0, "pending": 0}
+        for i, s in enumerate(pending, 1):
+            r = await validate_existing(s.text_content, s.annotation)
+            counts[r.status] += 1
+            if not dry_run:
+                s.status = r.status
+            if not dry_run and i % 500 == 0:
                 db.commit()
-                print(f"  [{i}/{total}] validated={counts['validated']} "
-                      f"flagged={counts['flagged']} rejected={counts['rejected']}")
+                print(f"  [{i}/{total}]", " ".join(f"{k}={v}" for k, v in counts.items()))
 
-        db.commit()
-        print(f"\nDone! Results:")
-        for status, n in counts.items():
-            print(f"  {status}: {n}")
+        if not dry_run:
+            db.commit()
 
+        print(f"\n{'Preview' if dry_run else 'Done'}:")
+        for k, v in counts.items():
+            print(f"  {k}: {v} ({round(v/total*100,1) if total else 0}%)")
     finally:
         db.close()
 
-
 if __name__ == "__main__":
-    use_ai = "--ai" in sys.argv
-    asyncio.run(run(use_ai=use_ai))
+    asyncio.run(run("--dry-run" in sys.argv))
