@@ -34,8 +34,8 @@ def compute_competition_status(competition: Competition):
     start = parse_date(competition.start_date)
     end = parse_date(competition.end_date)
 
-    if competition.is_draft:
-        return "DRAFT"
+    # is_draft is a DB-only guard — all public queries filter it out already
+    # so we never return "DRAFT" as a status here
 
     if start and today < start:
         return "UPCOMING"
@@ -98,7 +98,7 @@ def validate_competition_payload(data: CompetitionCreateIn):
 
     if start and end and end < start:
         raise HTTPException(status_code=400, detail="End date must be after start date")
-    
+
     if not data.primary_metric:
         raise HTTPException(status_code=400, detail="Primary metric is required")
 
@@ -404,11 +404,10 @@ def get_competitions(
     query = apply_competition_filters(query, db, search, category, None, tab, current_user)
 
     competitions = query.all()
-    
+
     def valid_date_value(value):
         parsed = parse_date(value)
         return parsed is not None
-
 
     if sort == "unknown_dates":
         competitions = [
@@ -733,6 +732,9 @@ def update_competition(
     competition.validation_date = data.validation_date
     competition.freeze_date = data.freeze_date
 
+    # Promote draft to real competition on publish
+    competition.is_draft = False
+
     refresh_competition_display_fields(competition)
 
     recent_rows = (
@@ -741,11 +743,28 @@ def update_competition(
         .all()
     )
 
-    for row in recent_rows:
-        row.title = competition.title
-        row.type = competition.category
-        row.status = competition.status
-        row.icon = get_icon_for_task(competition.task_type)
+    if recent_rows:
+        for row in recent_rows:
+            row.title = competition.title
+            row.type = competition.category
+            row.status = competition.status
+            row.icon = get_icon_for_task(competition.task_type)
+    else:
+        # Draft had no RecentCompetition row — create one now that it's published
+        db.add(
+            RecentCompetition(
+                user_id=current_user.id,
+                competition_id=competition_id,
+                title=competition.title,
+                type=competition.category,
+                status=competition.status,
+                score="--",
+                sync="Just now",
+                icon=get_icon_for_task(competition.task_type),
+            )
+        )
+
+    update_dashboard_stat_for_user(db, current_user.id)
 
     db.commit()
 

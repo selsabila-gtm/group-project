@@ -2,6 +2,15 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./CreateCompetition.css";
+import DatasetSection from "./DatasetSection";
+import { supabase } from "../config/supabase"; // adjust path if needed
+
+/** Always returns a fresh, valid access token from Supabase session */
+async function getFreshToken() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data?.session?.access_token) return null;
+    return data.session.access_token;
+}
 
 const steps = [
     "Basic Info",
@@ -160,6 +169,13 @@ function CreateCompetition({ editMode = false }) {
     const [errors, setErrors] = useState({});
     const [skillsOpen, setSkillsOpen] = useState(false);
 
+    // ✅ ADDED: real competition ID from draft save — this is what DatasetSection needs
+    const [savedCompetitionId, setSavedCompetitionId] = useState(
+        isEditMode ? competitionId : null
+    );
+    const [savingDraft, setSavingDraft] = useState(false);
+    const [draftError, setDraftError] = useState(null);
+
     const progressPercent = ((currentStep + 1) / steps.length) * 100;
 
     useEffect(() => {
@@ -175,7 +191,7 @@ function CreateCompetition({ editMode = false }) {
 
         async function loadCompetitionForEdit() {
             try {
-                const token = localStorage.getItem("token");
+                const token = await getFreshToken();
 
                 if (!token) {
                     navigate("/login");
@@ -209,6 +225,51 @@ function CreateCompetition({ editMode = false }) {
 
         loadCompetitionForEdit();
     }, [isEditMode, location.state, competitionId, navigate]);
+
+    // ✅ ADDED: auto-save draft when user reaches step 4 so we get a real competition ID
+    useEffect(() => {
+        if (currentStep !== 4) return;   // only on Datasets step
+        if (isEditMode) return;           // edit mode already has an ID
+        if (savedCompetitionId) return;   // already saved
+
+        async function saveDraft() {
+            const token = await getFreshToken();
+            if (!token) return;
+
+            setSavingDraft(true);
+            setDraftError(null);
+
+            try {
+                const r = await fetch("http://127.0.0.1:8000/competitions/draft", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(buildPayload()),
+                });
+                const data = await r.json();
+                if (!r.ok) {
+                    throw new Error(data.detail || `HTTP ${r.status}`);
+                }
+                // backend returns { competition_id: "..." }
+                const id = data.id || data.competition_id;
+                if (id) {
+                    setSavedCompetitionId(id);
+                } else {
+                    setDraftError("Draft saved but no ID returned. Check backend response.");
+                    console.error("Draft response missing id:", data);
+                }
+            } catch (err) {
+                console.error("Draft save failed:", err);
+                setDraftError(err.message || "Failed to save draft.");
+            } finally {
+                setSavingDraft(false);
+            }
+        }
+
+        saveDraft();
+    }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const clearFieldError = (field) => {
         setErrors((prev) => {
@@ -484,7 +545,7 @@ function CreateCompetition({ editMode = false }) {
         try {
             setSubmitting(true);
 
-            const token = localStorage.getItem("token");
+            const token = await getFreshToken();
 
             if (!token) {
                 alert("You must login first.");
@@ -511,6 +572,9 @@ function CreateCompetition({ editMode = false }) {
                 );
             }
 
+            const id = data.id || data.competition_id;
+            if (id) setSavedCompetitionId(id);
+
             alert("Draft saved successfully");
         } catch (error) {
             console.error(error);
@@ -531,7 +595,7 @@ function CreateCompetition({ editMode = false }) {
         try {
             setSubmitting(true);
 
-            const token = localStorage.getItem("token");
+            const token = await getFreshToken();
 
             if (!token) {
                 alert("You must login first.");
@@ -539,11 +603,14 @@ function CreateCompetition({ editMode = false }) {
                 return;
             }
 
+            // ✅ if draft was already saved, update it — avoids creating a duplicate
             const url = isEditMode
                 ? `http://127.0.0.1:8000/competitions/${competitionId}/update`
-                : "http://127.0.0.1:8000/competitions/create";
+                : savedCompetitionId
+                    ? `http://127.0.0.1:8000/competitions/${savedCompetitionId}/update`
+                    : "http://127.0.0.1:8000/competitions/create";
 
-            const method = isEditMode ? "PUT" : "POST";
+            const method = isEditMode || savedCompetitionId ? "PUT" : "POST";
 
             const res = await fetch(url, {
                 method,
@@ -972,98 +1039,49 @@ function CreateCompetition({ editMode = false }) {
         </div>
     );
 
-    const renderDatasets = () => (
-        <div className="create-card">
-            <div className="section-header-row">
-                <div>
-                    <h3 className="create-card-title">Dataset Configuration</h3>
-                    <p className="create-card-subtitle">
-                        Optional. Define dataset requirements for participants.
+    // ✅ ADDED: replaces old inline case 4 — shows spinner/error while saving draft
+    const renderDatasets = () => {
+        if (savingDraft) {
+            return (
+                <div className="create-card" style={{ textAlign: "center", padding: "48px 24px" }}>
+                    <p style={{ color: "#6b7280", fontSize: 14 }}>
+                        ⏳ Saving draft to enable dataset upload…
                     </p>
                 </div>
+            );
+        }
 
-                <button type="button" className="soft-action-btn" onClick={addDataset}>
-                    + Add Dataset
-                </button>
-            </div>
-
-            <div className="dataset-guidelines-box">
-                <h4>Dataset Collection Guidelines</h4>
-                <p>
-                    Add datasets only if this competition requires specific public or
-                    private dataset resources.
-                </p>
-            </div>
-
-            {form.datasets.length === 0 ? (
-                <div className="empty-datasets-box">
-                    <div className="upload-icon">⇪</div>
-                    <h4>No datasets added</h4>
-                    <p>You can skip this step if datasets are not needed yet.</p>
-                    <button type="button" className="dark-action-btn" onClick={addDataset}>
-                        + Add Your First Dataset
+        if (draftError) {
+            return (
+                <div className="create-card" style={{ textAlign: "center", padding: "48px 24px" }}>
+                    <p style={{ color: "#ef4444", fontSize: 14, marginBottom: 12 }}>
+                        ⚠️ Could not save draft: {draftError}
+                    </p>
+                    <button
+                        type="button"
+                        className="footer-primary-btn"
+                        onClick={() => {
+                            setDraftError(null);
+                            setSavedCompetitionId(null); // reset so useEffect re-fires
+                        }}
+                    >
+                        Retry
                     </button>
                 </div>
-            ) : (
-                <div className="dataset-list">
-                    {form.datasets.map((dataset) => (
-                        <div key={dataset.id} className="dataset-editor">
-                            <div className="create-three-col">
-                                <div className="create-section">
-                                    <label>Dataset Name <span className="required-star">*</span></label>
-                                    <input
-                                        className={errors[`datasetName-${dataset.id}`] ? "input-error" : ""}
-                                        type="text"
-                                        value={dataset.name}
-                                        placeholder="Dataset name"
-                                        onChange={(e) =>
-                                            updateDataset(dataset.id, "name", e.target.value)
-                                        }
-                                    />
-                                    <ErrorMessage name={`datasetName-${dataset.id}`} />
-                                </div>
+            );
+        }
 
-                                <div className="create-section">
-                                    <label>Type <span className="required-star">*</span></label>
-                                    <input
-                                        className={errors[`datasetType-${dataset.id}`] ? "input-error" : ""}
-                                        type="text"
-                                        value={dataset.type}
-                                        placeholder="Text / Audio / Mixed"
-                                        onChange={(e) =>
-                                            updateDataset(dataset.id, "type", e.target.value)
-                                        }
-                                    />
-                                    <ErrorMessage name={`datasetType-${dataset.id}`} />
-                                </div>
-
-                                <div className="create-section">
-                                    <label>Visibility</label>
-                                    <select
-                                        value={dataset.visibility}
-                                        onChange={(e) =>
-                                            updateDataset(dataset.id, "visibility", e.target.value)
-                                        }
-                                    >
-                                        <option value="Private">Private</option>
-                                        <option value="Public">Public</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <button
-                                type="button"
-                                className="remove-btn"
-                                onClick={() => removeDataset(dataset.id)}
-                            >
-                                Remove
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
+        return (
+            <DatasetSection
+                competitionId={savedCompetitionId}
+                datasets={form.datasets}
+                errors={errors}
+                addDataset={addDataset}
+                updateDataset={updateDataset}
+                removeDataset={removeDataset}
+            />
+        );
+    };
 
     const renderMilestones = () => (
         <div className="create-card">
@@ -1158,7 +1176,7 @@ function CreateCompetition({ editMode = false }) {
             case 3:
                 return renderComplexity();
             case 4:
-                return renderDatasets();
+                return renderDatasets(); // ✅ now uses renderDatasets()
             case 5:
                 return renderMilestones();
             default:
@@ -1197,7 +1215,6 @@ function CreateCompetition({ editMode = false }) {
                         >
                             Cancel
                         </button>
-
                     </div>
                 </div>
 
