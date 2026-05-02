@@ -1,83 +1,81 @@
 import { Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 
-// ── Trusted-by ticker logos ────────────────────────────────────────────────
-const LOGOS = ['NEURAL_CORE', 'LEXICON.AI', 'SYNTAX LABS', 'OPUS RESEARCH', 'VECTOR NLP']
-
-// ── "Who's on" cards ───────────────────────────────────────────────────────
 const WHO_CARDS = [
   {
-    icon: '⚙',
+    icon: '🏁',
     iconBg: '#eef0ff',
     iconColor: '#4458f5',
-    title: 'AI Builders',
-    desc: 'Engineers looking to stress-test production models against rigorous benchmarks and edge cases.',
+    title: 'Competition Organizers',
+    desc: 'Create NLP competitions, define tasks, upload hidden test data, choose evaluation metrics, and monitor teams.',
   },
   {
-    icon: '⚗',
+    icon: '👥',
     iconBg: '#fff4ec',
     iconColor: '#e8621a',
-    title: 'Research Organizations',
-    desc: 'Laboratories hosting private tournaments to crowdsource novel solutions for proprietary datasets.',
+    title: 'Student & Research Teams',
+    desc: 'Create teams, join competitions, collect datasets, annotate data, train models, and submit final solutions.',
   },
   {
-    icon: '◈',
+    icon: '🧠',
     iconBg: '#edf8f3',
     iconColor: '#1a8f57',
-    title: 'Data Scientists',
-    desc: 'Specialists competing for global rankings and recognition in specialized NLP domains like low-resource translation.',
+    title: 'NLP Builders',
+    desc: 'Work on text and speech tasks such as classification, sentiment analysis, translation, QA, and speech processing.',
   },
 ]
 
-// ── Workflow steps ─────────────────────────────────────────────────────────
 const STEPS = [
   {
     num: '01',
-    title: 'Join Tournament',
-    desc: 'Select from open-source challenges or private industrial benchmarks focused on NER, QA, or summarization.',
+    title: 'Create or Join a Competition',
+    desc: 'Organizers publish NLP challenges. Teams browse competitions, read requirements, and join the ones they want to solve.',
   },
   {
     num: '02',
-    title: 'Annotate Data',
-    desc: 'Use our integrated precision tools to refine datasets or provide human-in-the-loop feedback on model outputs.',
+    title: 'Build and Annotate Datasets',
+    desc: 'Teams collect text or voice data directly in the platform, then annotate it using task-specific labels and validation rules.',
   },
   {
     num: '03',
-    title: 'Train & Experiment',
-    desc: 'Spin up H100/A100 clusters directly from our environment with pre-configured NLP library stacks.',
+    title: 'Train Models in the Workspace',
+    desc: 'Participants use integrated notebooks or JupyterLab environments to preprocess data, train models, and track experiments.',
   },
   {
     num: '04',
-    title: 'Submit & Rank',
-    desc: 'Validate models against hidden test sets and watch your position move on the global leaderboard in real-time.',
+    title: 'Submit, Evaluate, and Rank',
+    desc: 'Models are submitted to the platform, tested on organizer data or combined datasets, then ranked on a leaderboard.',
   },
 ]
 
-// ── Platform features ──────────────────────────────────────────────────────
 const FEATURES = [
   {
-    icon: '✦',
-    title: 'High-Precision Annotation',
-    desc: 'Tools optimized for semantic role labeling and dependency parsing at scale.',
+    icon: '✍️',
+    title: 'Built-in Annotation System',
+    desc: 'Supports text and speech annotation with controlled labels, quality checks, and dataset validation.',
   },
   {
-    icon: '⬡',
-    title: 'Fair Resource Scaling',
-    desc: 'H100/A100 clusters distributed dynamically to ensure competition fairness.',
+    icon: '📊',
+    title: 'Automatic Evaluation',
+    desc: 'Submissions are scored using task metrics like accuracy, F1-score, precision, recall, BLEU, WER, or custom metrics.',
+  },
+  {
+    icon: '⚖️',
+    title: 'Fair Resource Allocation',
+    desc: 'Docker and Kubernetes can isolate experiments and distribute compute resources fairly between teams.',
   },
 ]
 
-// ── Leaderboard mock rows ──────────────────────────────────────────────────
 const LB_ROWS = [
-  { rank: '#1', group: 'DeepSynthetics Lab', score: '0.9842', badge: 'gold' },
-  { rank: '#2', group: 'Oxford Semantic Group', score: '0.9711', badge: 'silver' },
+  { rank: '#1', group: 'Team Atlas NLP', score: '0.94', badge: 'gold' },
+  { rank: '#2', group: 'Syntax Squad', score: '0.91', badge: 'silver' },
+  { rank: '#3', group: 'VoiceMind Lab', score: '0.88', badge: 'bronze' },
 ]
 
-// ── Footer links ───────────────────────────────────────────────────────────
 const FOOTER = {
-  Resources: ['Documentation', 'API Reference', 'Community Forum'],
-  Platform: ['Leaderboards', 'Active Datasets', 'Compute Credits'],
-  Legal: ['Privacy Policy', 'Terms of Service', 'Contact Support'],
+  Platform: ['Competitions', 'Teams', 'Datasets', 'Leaderboards'],
+  Workflow: ['Annotation', 'Training', 'Submissions', 'Evaluation'],
+  Project: ['About Lexivia', 'Documentation', 'Contact'],
 }
 
 export default function Landing() {
@@ -85,7 +83,7 @@ export default function Landing() {
     <div style={{ minHeight: '100vh', background: '#f6f7fb', fontFamily: 'Inter, Arial, sans-serif' }}>
       <Navbar />
 
-      {/* ── HERO ─────────────────────────────────────────────────────── */}
+      {/* HERO */}
       <section style={{
         display: 'flex',
         alignItems: 'center',
@@ -95,69 +93,79 @@ export default function Landing() {
         margin: '0 auto',
         gap: '40px',
       }}>
-        <div style={{ flex: 1, maxWidth: '560px' }}>
+        <div style={{ flex: 1, maxWidth: '600px' }}>
           <span style={{
             display: 'inline-block',
             fontSize: '11px',
-            fontWeight: 600,
+            fontWeight: 700,
             letterSpacing: '1.5px',
             color: '#1a2fff',
             background: '#eef0ff',
-            padding: '4px 10px',
-            borderRadius: '4px',
+            padding: '6px 12px',
+            borderRadius: '6px',
             marginBottom: '24px',
-          }}>NLP FRONTIER LAB</span>
+          }}>
+            NLP COMPETITION PLATFORM
+          </span>
 
           <h1 style={{
             fontSize: '52px',
-            fontWeight: 700,
+            fontWeight: 800,
             lineHeight: 1.1,
             letterSpacing: '-1.5px',
             margin: '0 0 24px',
             color: '#0d0e14',
           }}>
-            The Elite<br />
-            Proving<br />
-            Ground for <span style={{ color: '#1a2fff' }}>NLP</span><br />
-            <span style={{ color: '#1a2fff' }}>Research</span>
+            Build, Annotate,<br />
+            Train & Compete<br />
+            in <span style={{ color: '#1a2fff' }}>NLP Challenges</span>
           </h1>
 
-          <p style={{ fontSize: '15px', color: '#555e7a', lineHeight: 1.6, marginBottom: '32px' }}>
-            Push the boundaries of Natural Language Processing. Deploy models,<br />
-            compete for global rankings, and optimize precision metrics<br />
-            across diverse data domains.
+          <p style={{ fontSize: '16px', color: '#555e7a', lineHeight: 1.7, marginBottom: '32px' }}>
+            Lexivia is a platform for hosting NLP competitions where organizers create challenges,
+            teams collect and annotate datasets, train models, submit solutions, and compete on
+            transparent leaderboards.
           </p>
 
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '48px' }}>
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '48px', flexWrap: 'wrap' }}>
             <Link to="/signup" style={{
               background: '#1a2fff',
               color: '#fff',
-              padding: '11px 22px',
-              borderRadius: '7px',
+              padding: '12px 24px',
+              borderRadius: '8px',
               textDecoration: 'none',
               fontSize: '14px',
-              fontWeight: 500,
-            }}>Explore Competitions →</Link>
-            <a href="#datasets" style={{
+              fontWeight: 600,
+            }}>
+              Get Started →
+            </Link>
+
+            <a href="#workflow" style={{
               background: '#fff',
               color: '#1d2333',
-              padding: '11px 22px',
-              borderRadius: '7px',
+              padding: '12px 24px',
+              borderRadius: '8px',
               textDecoration: 'none',
               fontSize: '14px',
-              fontWeight: 500,
+              fontWeight: 600,
               border: '1px solid #e3e6ef',
-            }}>View Datasets</a>
+            }}>
+              See Workflow
+            </a>
           </div>
 
-          <div style={{ display: 'flex', gap: '40px' }}>
+          <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
             <div>
-              <strong style={{ fontSize: '22px', fontWeight: 700, color: '#0d0e14', display: 'block' }}>12k+</strong>
-              <span style={{ fontSize: '11px', letterSpacing: '1px', color: '#8892a4' }}>RESEARCHERS</span>
+              <strong style={{ fontSize: '24px', fontWeight: 800, color: '#0d0e14', display: 'block' }}>Teams</strong>
+              <span style={{ fontSize: '11px', letterSpacing: '1px', color: '#8892a4' }}>COLLABORATE</span>
             </div>
             <div>
-              <strong style={{ fontSize: '22px', fontWeight: 700, color: '#0d0e14', display: 'block' }}>450+</strong>
-              <span style={{ fontSize: '11px', letterSpacing: '1px', color: '#8892a4' }}>ACTIVE MODELS</span>
+              <strong style={{ fontSize: '24px', fontWeight: 800, color: '#0d0e14', display: 'block' }}>Datasets</strong>
+              <span style={{ fontSize: '11px', letterSpacing: '1px', color: '#8892a4' }}>ANNOTATE</span>
+            </div>
+            <div>
+              <strong style={{ fontSize: '24px', fontWeight: 800, color: '#0d0e14', display: 'block' }}>Models</strong>
+              <span style={{ fontSize: '11px', letterSpacing: '1px', color: '#8892a4' }}>SUBMIT</span>
             </div>
           </div>
         </div>
@@ -165,162 +173,187 @@ export default function Landing() {
         {/* Hero visual */}
         <div style={{
           flex: '0 0 auto',
-          width: '280px',
-          height: '280px',
+          width: '340px',
           background: '#0d0e14',
-          borderRadius: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative',
-          overflow: 'hidden',
-          boxShadow: '0 30px 80px rgba(26,47,255,0.2)',
+          borderRadius: '24px',
+          padding: '24px',
+          color: '#fff',
+          boxShadow: '0 30px 80px rgba(26,47,255,0.22)',
         }}>
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: 'radial-gradient(circle at 50% 50%, rgba(26,47,255,0.25) 0%, transparent 70%)',
-          }} />
-          <svg viewBox="0 0 260 260" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '220px', height: '220px', position: 'relative', zIndex: 1 }}>
-            <line x1="130" y1="130" x2="60" y2="60" stroke="#1a2fff" strokeWidth="1" strokeOpacity="0.5"/>
-            <line x1="130" y1="130" x2="200" y2="60" stroke="#1a2fff" strokeWidth="1" strokeOpacity="0.5"/>
-            <line x1="130" y1="130" x2="50" y2="180" stroke="#1a2fff" strokeWidth="1" strokeOpacity="0.5"/>
-            <line x1="130" y1="130" x2="210" y2="180" stroke="#1a2fff" strokeWidth="1" strokeOpacity="0.5"/>
-            <line x1="130" y1="130" x2="130" y2="30" stroke="#1a2fff" strokeWidth="1" strokeOpacity="0.4"/>
-            <line x1="130" y1="130" x2="130" y2="230" stroke="#1a2fff" strokeWidth="1" strokeOpacity="0.3"/>
-            <line x1="60" y1="60" x2="130" y2="30" stroke="#1a2fff" strokeWidth="0.5" strokeOpacity="0.3"/>
-            <line x1="200" y1="60" x2="130" y2="30" stroke="#1a2fff" strokeWidth="0.5" strokeOpacity="0.3"/>
-            <circle cx="60" cy="60" r="8" fill="#0d0e14" stroke="#1a2fff" strokeWidth="1.5" strokeOpacity="0.8"/>
-            <circle cx="200" cy="60" r="8" fill="#0d0e14" stroke="#1a2fff" strokeWidth="1.5" strokeOpacity="0.8"/>
-            <circle cx="50" cy="180" r="8" fill="#0d0e14" stroke="#1a2fff" strokeWidth="1.5" strokeOpacity="0.8"/>
-            <circle cx="210" cy="180" r="8" fill="#0d0e14" stroke="#1a2fff" strokeWidth="1.5" strokeOpacity="0.8"/>
-            <circle cx="130" cy="30" r="6" fill="#0d0e14" stroke="#1a2fff" strokeWidth="1.5" strokeOpacity="0.6"/>
-            <circle cx="130" cy="230" r="6" fill="#0d0e14" stroke="#1a2fff" strokeWidth="1.5" strokeOpacity="0.5"/>
-            <circle cx="130" cy="130" r="36" fill="none" stroke="#1a2fff" strokeWidth="0.75" strokeOpacity="0.35"/>
-            <circle cx="130" cy="130" r="18" fill="#1a2fff" fillOpacity="0.18" stroke="#1a2fff" strokeWidth="1.5"/>
-            <circle cx="130" cy="130" r="8" fill="#1a2fff"/>
-          </svg>
+          <div style={{ display: 'flex', gap: '7px', marginBottom: '24px' }}>
+            <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#ff5f57' }} />
+            <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#febc2e' }} />
+            <span style={{ width: 11, height: 11, borderRadius: '50%', background: '#28c840' }} />
+          </div>
+
+          <div style={{ marginBottom: '22px' }}>
+            <p style={{ fontSize: '12px', color: '#8892a4', margin: '0 0 8px' }}>CURRENT COMPETITION</p>
+            <h3 style={{ fontSize: '20px', margin: 0 }}>Arabic Sentiment Classification</h3>
+          </div>
+
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {[
+              ['Dataset status', '78% annotated'],
+              ['Active teams', '12 teams'],
+              ['Metric', 'Macro F1-score'],
+              ['Submission mode', 'Docker model'],
+            ].map(([label, value]) => (
+              <div key={label} style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '12px',
+                padding: '12px 14px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: '12px',
+              }}>
+                <span style={{ fontSize: '12px', color: '#aab2c8' }}>{label}</span>
+                <strong style={{ fontSize: '12px', color: '#fff' }}>{value}</strong>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ── TICKER ───────────────────────────────────────────────────── */}
-      <div style={{
-        borderTop: '1px solid #e8eaf2',
-        borderBottom: '1px solid #e8eaf2',
-        padding: '28px 60px',
-        textAlign: 'center',
-        background: '#fff',
-      }}>
-        <p style={{ fontSize: '11px', letterSpacing: '1.5px', color: '#8892a4', marginBottom: '16px' }}>
-          TRUSTED BY GLOBAL RESEARCH ORGANIZATIONS
-        </p>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '48px', flexWrap: 'wrap' }}>
-          {LOGOS.map((l, i) => (
-            <span key={i} style={{
-              fontSize: '12px',
-              letterSpacing: '1.2px',
-              color: '#b0b8cc',
-              fontWeight: 500,
-              border: '1px solid #e3e6ef',
-              padding: '6px 16px',
-              borderRadius: '4px',
-            }}>{l}</span>
-          ))}
-        </div>
-      </div>
-
-      {/* ── WHO'S ON ─────────────────────────────────────────────────── */}
+      {/* WHO USES IT */}
       <section style={{ padding: '80px 60px', maxWidth: '1200px', margin: '0 auto' }} id="competitions">
-        <h2 style={{ fontSize: '28px', fontWeight: 700, color: '#0d0e14', marginBottom: '8px' }}>
-          Who's on Precision Architect?
+        <h2 style={{ fontSize: '30px', fontWeight: 800, color: '#0d0e14', marginBottom: '8px' }}>
+          One platform for the full NLP competition lifecycle
         </h2>
         <p style={{ fontSize: '15px', color: '#555e7a', marginBottom: '48px' }}>
-          A multi-disciplinary ecosystem designed for high-stakes natural language evaluation.
+          Lexivia connects organizers, teams, annotators, and machine learning engineers in one workspace.
         </p>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
           {WHO_CARDS.map((c) => (
             <div key={c.title} style={{
               background: '#fff',
-              borderRadius: '12px',
+              borderRadius: '16px',
               padding: '28px',
               border: '1px solid #e8eaf2',
+              boxShadow: '0 12px 30px rgba(15,23,42,0.04)',
             }}>
               <span style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
                 background: c.iconBg,
                 color: c.iconColor,
-                fontSize: '18px',
+                fontSize: '20px',
                 marginBottom: '16px',
-              }}>{c.icon}</span>
-              <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#0d0e14', margin: '0 0 8px' }}>{c.title}</h3>
-              <p style={{ fontSize: '14px', color: '#6b7590', lineHeight: 1.6 }}>{c.desc}</p>
+              }}>
+                {c.icon}
+              </span>
+              <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#0d0e14', margin: '0 0 8px' }}>
+                {c.title}
+              </h3>
+              <p style={{ fontSize: '14px', color: '#6b7590', lineHeight: 1.6, margin: 0 }}>
+                {c.desc}
+              </p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── WORKFLOW ─────────────────────────────────────────────────── */}
-      <section style={{
-        background: '#fff',
-        padding: '80px 60px',
-      }} id="datasets">
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', alignItems: 'start' }}>
-          {/* Left */}
+      {/* WORKFLOW */}
+      <section style={{ background: '#fff', padding: '80px 60px' }} id="workflow">
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1.1fr',
+          gap: '60px',
+          alignItems: 'start',
+        }}>
           <div>
-            <h2 style={{ fontSize: '28px', fontWeight: 700, color: '#0d0e14', margin: '0 0 8px' }}>The Workflow</h2>
-            <p style={{ fontSize: '14px', color: '#6b7590', lineHeight: 1.6, marginBottom: '32px' }}>
-              From data ingestion to model deployment, our platform provides a seamless scientific pipeline.
-            </p>
-            {/* Dashboard mockup */}
-            <div style={{
-              background: '#0d0e14',
-              borderRadius: '12px',
-              padding: '20px',
-              height: '180px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-              justifyContent: 'center',
+            <span style={{
+              display: 'inline-block',
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '1.4px',
+              color: '#1a2fff',
+              background: '#eef0ff',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              marginBottom: '18px',
             }}>
-              {[80, 60, 90, 45].map((w, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{
-                    height: '10px',
-                    width: `${w}%`,
-                    background: i === 2 ? '#1a2fff' : 'rgba(26,47,255,0.3)',
-                    borderRadius: '3px',
-                  }} />
-                </div>
-              ))}
-              <div style={{ height: '1px', background: 'rgba(26,47,255,0.2)', marginTop: '6px' }} />
+              HOW IT WORKS
+            </span>
+
+            <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#0d0e14', margin: '0 0 12px' }}>
+              From competition setup to final ranking
+            </h2>
+
+            <p style={{ fontSize: '15px', color: '#6b7590', lineHeight: 1.7, marginBottom: '32px' }}>
+              The platform guides teams through the complete process: competition discovery,
+              dataset construction, annotation, model development, submission, automatic evaluation,
+              and leaderboard ranking.
+            </p>
+
+            <div style={{
+              background: '#f6f7fb',
+              border: '1px solid #e8eaf2',
+              borderRadius: '16px',
+              padding: '24px',
+            }}>
+              <h3 style={{ margin: '0 0 16px', fontSize: '16px', color: '#0d0e14' }}>
+                Example NLP Tasks
+              </h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                {[
+                  'Text Classification',
+                  'Sentiment Analysis',
+                  'Named Entity Recognition',
+                  'Question Answering',
+                  'Translation',
+                  'Speech Recognition',
+                  'Summarization',
+                ].map((task) => (
+                  <span key={task} style={{
+                    background: '#fff',
+                    border: '1px solid #e3e6ef',
+                    padding: '8px 12px',
+                    borderRadius: '999px',
+                    fontSize: '12px',
+                    color: '#555e7a',
+                    fontWeight: 600,
+                  }}>
+                    {task}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Steps */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
             {STEPS.map((s, i) => (
               <div key={s.num} style={{
                 display: 'flex',
                 gap: '20px',
-                padding: '20px',
-                borderLeft: i === 0 ? '3px solid #1a2fff' : '3px solid #e8eaf2',
-                marginBottom: '4px',
-                background: i === 0 ? '#f6f7ff' : 'transparent',
-                borderRadius: '0 8px 8px 0',
+                padding: '22px',
+                borderLeft: i === 0 ? '4px solid #1a2fff' : '4px solid #e8eaf2',
+                marginBottom: '8px',
+                background: i === 0 ? '#f6f7ff' : '#fff',
+                borderRadius: '0 12px 12px 0',
               }}>
                 <span style={{
-                  fontSize: '24px',
-                  fontWeight: 700,
+                  fontSize: '26px',
+                  fontWeight: 800,
                   color: i === 0 ? '#1a2fff' : '#c8cfe0',
-                  minWidth: '40px',
-                }}>{s.num}</span>
+                  minWidth: '44px',
+                }}>
+                  {s.num}
+                </span>
                 <div>
-                  <h4 style={{ fontSize: '15px', fontWeight: 600, color: '#0d0e14', margin: '0 0 4px' }}>{s.title}</h4>
-                  <p style={{ fontSize: '13px', color: '#6b7590', lineHeight: 1.6, margin: 0 }}>{s.desc}</p>
+                  <h4 style={{ fontSize: '16px', fontWeight: 700, color: '#0d0e14', margin: '0 0 6px' }}>
+                    {s.title}
+                  </h4>
+                  <p style={{ fontSize: '13px', color: '#6b7590', lineHeight: 1.6, margin: 0 }}>
+                    {s.desc}
+                  </p>
                 </div>
               </div>
             ))}
@@ -328,85 +361,108 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── PLATFORM FEATURES ────────────────────────────────────────── */}
-      <section style={{ padding: '80px 60px', maxWidth: '1200px', margin: '0 auto' }} id="benchmarks">
-        <h2 style={{ fontSize: '28px', fontWeight: 700, color: '#0d0e14', marginBottom: '40px', textAlign: 'center' }}>
-          Platform Features
+      {/* FEATURES */}
+      <section style={{ padding: '80px 60px', maxWidth: '1200px', margin: '0 auto' }} id="features">
+        <h2 style={{ fontSize: '30px', fontWeight: 800, color: '#0d0e14', marginBottom: '12px', textAlign: 'center' }}>
+          Platform modules
         </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '20px', marginBottom: '20px' }}>
-          {/* JupyterLab card */}
+        <p style={{ fontSize: '15px', color: '#6b7590', marginBottom: '44px', textAlign: 'center' }}>
+          Everything needed to manage an NLP competition from start to finish.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '20px', marginBottom: '20px' }}>
           <div style={{
             background: '#0d0e14',
-            borderRadius: '16px',
+            borderRadius: '18px',
             padding: '32px',
             color: '#fff',
           }}>
-            {/* Terminal mockup */}
             <div style={{ marginBottom: '24px' }}>
-              <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ff5f57' }} />
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#febc2e' }} />
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#28c840' }} />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {[70, 50, 85, 40].map((w, i) => (
-                  <div key={i} style={{
-                    height: '8px',
-                    width: `${w}%`,
-                    background: 'rgba(26,47,255,0.4)',
-                    borderRadius: '3px',
-                  }} />
-                ))}
-              </div>
+
+              {[
+                'load_dataset("team_annotations.csv")',
+                'train_model(task="sentiment-analysis")',
+                'submit_model(metric="macro_f1")',
+              ].map((line) => (
+                <div key={line} style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  marginBottom: '8px',
+                  fontSize: '12px',
+                  color: '#aab2c8',
+                  fontFamily: 'monospace',
+                }}>
+                  <span style={{ color: '#1a2fff' }}>› </span>{line}
+                </div>
+              ))}
             </div>
-            <h3 style={{ fontSize: '18px', fontWeight: 600, margin: '0 0 10px', color: '#fff' }}>Integrated JupyterLab</h3>
-            <p style={{ fontSize: '13px', color: '#8892a4', lineHeight: 1.6, marginBottom: '20px' }}>
-              A fully-featured IDE living within your competition workspace. Zero-latency connection to high-performance compute clusters.
+
+            <h3 style={{ fontSize: '20px', fontWeight: 700, margin: '0 0 10px', color: '#fff' }}>
+              Modeling Workspace
+            </h3>
+            <p style={{ fontSize: '13px', color: '#aab2c8', lineHeight: 1.7, marginBottom: '20px' }}>
+              Teams can train and test their NLP models using notebooks, tracked experiments,
+              Dockerized submissions, and controlled compute resources.
             </p>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {['CUDA SUPPORT', 'PRE-INSTALLED PYTORCH'].map(tag => (
+
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {['JUPYTERLAB', 'DOCKER', 'KUBERNETES', 'MLFLOW/DVC READY'].map(tag => (
                 <span key={tag} style={{
                   fontSize: '10px',
                   letterSpacing: '0.8px',
-                  color: '#8892a4',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  padding: '4px 10px',
-                  borderRadius: '4px',
-                }}>{tag}</span>
+                  color: '#c7cce0',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  padding: '5px 10px',
+                  borderRadius: '5px',
+                }}>
+                  {tag}
+                </span>
               ))}
             </div>
           </div>
 
-          {/* Feature cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {FEATURES.map((f) => (
               <div key={f.title} style={{
-                background: '#f0f2ff',
+                background: '#fff',
+                border: '1px solid #e8eaf2',
                 borderRadius: '16px',
-                padding: '24px',
+                padding: '22px',
                 display: 'flex',
-                gap: '16px',
+                gap: '14px',
                 alignItems: 'flex-start',
               }}>
                 <span style={{
                   fontSize: '22px',
-                  color: '#1a2fff',
                   display: 'block',
-                  minWidth: '28px',
-                }}>{f.icon}</span>
+                  minWidth: '30px',
+                }}>
+                  {f.icon}
+                </span>
                 <div>
-                  <h4 style={{ fontSize: '15px', fontWeight: 600, color: '#0d0e14', margin: '0 0 6px' }}>{f.title}</h4>
-                  <p style={{ fontSize: '13px', color: '#6b7590', lineHeight: 1.5, margin: 0 }}>{f.desc}</p>
+                  <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#0d0e14', margin: '0 0 6px' }}>
+                    {f.title}
+                  </h4>
+                  <p style={{ fontSize: '13px', color: '#6b7590', lineHeight: 1.5, margin: 0 }}>
+                    {f.desc}
+                  </p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Global Leaderboard */}
+        {/* Leaderboard */}
         <div style={{
           background: '#fff',
-          borderRadius: '16px',
+          borderRadius: '18px',
           padding: '32px',
           border: '1px solid #e8eaf2',
           display: 'grid',
@@ -415,11 +471,14 @@ export default function Landing() {
           alignItems: 'center',
         }} id="leaderboards">
           <div>
-            <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#0d0e14', margin: '0 0 8px' }}>Global Leaderboard</h3>
-            <p style={{ fontSize: '13px', color: '#6b7590', lineHeight: 1.6, margin: 0 }}>
-              Real-time precision metrics tracking across all active participants. Get historical insights and model comparison statistics instantly.
+            <h3 style={{ fontSize: '22px', fontWeight: 800, color: '#0d0e14', margin: '0 0 8px' }}>
+              Competition Leaderboard
+            </h3>
+            <p style={{ fontSize: '13px', color: '#6b7590', lineHeight: 1.7, margin: 0 }}>
+              Every submitted model is evaluated automatically. Teams are ranked using the metric chosen by the organizer.
             </p>
           </div>
+
           <div>
             <div style={{
               display: 'grid',
@@ -431,9 +490,10 @@ export default function Landing() {
               borderBottom: '1px solid #e8eaf2',
             }}>
               <span>RANK</span>
-              <span>RESEARCH GROUP</span>
+              <span>TEAM</span>
               <span style={{ textAlign: 'right' }}>SCORE</span>
             </div>
+
             {LB_ROWS.map((r) => (
               <div key={r.rank} style={{
                 display: 'grid',
@@ -443,36 +503,42 @@ export default function Landing() {
                 alignItems: 'center',
                 borderBottom: '1px solid #f0f2f8',
               }}>
-                <span style={{ fontWeight: 700, color: '#0d0e14' }}>{r.rank}</span>
-                <span style={{ color: '#1d2333' }}>{r.group}</span>
+                <span style={{ fontWeight: 800, color: '#0d0e14' }}>{r.rank}</span>
+                <span style={{ color: '#1d2333', fontWeight: 600 }}>{r.group}</span>
                 <span style={{
-                  background: r.badge === 'gold' ? '#c0392b' : '#c0392b',
+                  background:
+                    r.badge === 'gold' ? '#e74c3c' :
+                      r.badge === 'silver' ? '#95a5a6' :
+                        '#d97706',
                   color: '#fff',
                   fontSize: '12px',
-                  fontWeight: 600,
-                  padding: '2px 8px',
-                  borderRadius: '4px',
+                  fontWeight: 700,
+                  padding: '4px 8px',
+                  borderRadius: '6px',
                   textAlign: 'center',
-                  background: r.badge === 'gold' ? '#e74c3c' : '#95a5a6',
-                }}>{r.score}</span>
+                }}>
+                  {r.score}
+                </span>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── CTA BAND ─────────────────────────────────────────────────── */}
+      {/* CTA */}
       <section style={{
         background: '#eef0ff',
         padding: '80px 60px',
         textAlign: 'center',
       }}>
-        <h2 style={{ fontSize: '36px', fontWeight: 700, color: '#0d0e14', marginBottom: '16px' }}>
-          Ready to set the new standard?
+        <h2 style={{ fontSize: '36px', fontWeight: 800, color: '#0d0e14', marginBottom: '16px' }}>
+          Ready to launch your NLP competition?
         </h2>
-        <p style={{ fontSize: '16px', color: '#555e7a', marginBottom: '36px' }}>
-          Join the most prestigious NLP community and prove your model's<br />precision on the world stage.
+        <p style={{ fontSize: '16px', color: '#555e7a', marginBottom: '36px', lineHeight: 1.7 }}>
+          Create challenges, manage teams, collect annotated datasets, train models,
+          and evaluate submissions in one complete platform.
         </p>
+
         <Link to="/signup" style={{
           display: 'inline-block',
           background: '#1a2fff',
@@ -481,11 +547,13 @@ export default function Landing() {
           borderRadius: '8px',
           textDecoration: 'none',
           fontSize: '15px',
-          fontWeight: 600,
-        }}>Join the Laboratory</Link>
+          fontWeight: 700,
+        }}>
+          Start with Lexivia
+        </Link>
       </section>
 
-      {/* ── FOOTER ───────────────────────────────────────────────────── */}
+      {/* FOOTER */}
       <footer style={{
         background: '#fff',
         borderTop: '1px solid #e8eaf2',
@@ -500,15 +568,15 @@ export default function Landing() {
           marginBottom: '40px',
         }}>
           <div>
-            <strong style={{ fontSize: '16px', color: '#0d0e14', display: 'block', marginBottom: '12px' }}>LEXIVIA</strong>
+            <strong style={{ fontSize: '18px', color: '#0d0e14', display: 'block', marginBottom: '12px' }}>
+              LEXIVIA
+            </strong>
             <p style={{ fontSize: '13px', color: '#6b7590', lineHeight: 1.7, marginBottom: '16px' }}>
-              Leading the world in NLP benchmarks, model evaluation, and decentralized research collaboration.
+              A full-stack platform for NLP competitions, dataset annotation, model training,
+              submission evaluation, and leaderboard ranking.
             </p>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <span style={{ fontSize: '18px', color: '#8892a4', cursor: 'pointer' }}>⬡</span>
-              <span style={{ fontSize: '18px', color: '#8892a4', cursor: 'pointer' }}>◈</span>
-            </div>
           </div>
+
           {Object.entries(FOOTER).map(([cat, links]) => (
             <div key={cat}>
               <strong style={{ fontSize: '11px', letterSpacing: '1.2px', color: '#0d0e14', display: 'block', marginBottom: '16px' }}>
@@ -517,13 +585,16 @@ export default function Landing() {
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {links.map((l) => (
                   <li key={l}>
-                    <a href="#" style={{ fontSize: '13px', color: '#6b7590', textDecoration: 'none' }}>{l}</a>
+                    <a href="#" style={{ fontSize: '13px', color: '#6b7590', textDecoration: 'none' }}>
+                      {l}
+                    </a>
                   </li>
                 ))}
               </ul>
             </div>
           ))}
         </div>
+
         <div style={{
           borderTop: '1px solid #e8eaf2',
           paddingTop: '24px',
@@ -531,7 +602,7 @@ export default function Landing() {
           fontSize: '12px',
           color: '#8892a4',
         }}>
-          © 2024 Precision Architect NLP Labs. All rights reserved.
+          © 2026 Lexivia. NLP Competition Platform.
         </div>
       </footer>
     </div>
