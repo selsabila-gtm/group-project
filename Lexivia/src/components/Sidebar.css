@@ -19,8 +19,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 34px;
-  padding: 2px 8px;
+  margin-bottom: 5px;
+  padding: 2px 2px;
 }
 
 .brand-square {
@@ -119,4 +119,19 @@
   margin: 2px 0 0;
   font-size: 11px;
   color: #8e95a9;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* ↓ reduced from big spacing */
+}
+
+.sidebar-logo {
+  width: 70px;
+  /* ↓ smaller logo */
+  height: auto;
+  object-fit: contain;
+  display: block;
 }
