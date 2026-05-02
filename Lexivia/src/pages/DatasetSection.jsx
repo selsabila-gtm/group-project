@@ -34,12 +34,7 @@ const TYPE_LABELS = {
     dotColor: "#10b981",
     hint: "Participants can download this to train their models.",
   },
-  sample: {
-    label: "Sample",
-    activeStyle: { background: "#0ea5e9", color: "#fff", borderColor: "transparent" },
-    dotColor: "#0ea5e9",
-    hint: "A small preview dataset shown on the competition page.",
-  },
+ 
 };
 
 /* ─── FormatCard ─── */
