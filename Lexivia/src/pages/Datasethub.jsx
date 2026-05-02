@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import CompetitionSidebar from "../components/CompetitionSidebar";
 import "./DatasetHub.css";
@@ -10,7 +10,7 @@ function authHeader() {
     return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// ─── Top bar (same style as DataCollection) ───────────────────────────────────
+// ─── Top bar ───────────────────────────────────────────────────────────────────
 function CompetitionTopbar({ competition }) {
     return (
         <div className="dh-topbar">
@@ -59,7 +59,10 @@ function StatCard({ label, value, sub, accent }) {
 }
 
 // ─── Version Control sidebar ────────────────────────────────────────────────────
- function VersionControl({ versions, loading, onCreateVersion, isOrganizer, onSelectVersion }){
+// FIX 1: Removed the stray broken <div> block (lines 87-91 in original) that
+//         referenced `i` and `v` outside any .map() — this caused an immediate
+//         ReferenceError that crashed the whole page on load.
+function VersionControl({ versions, loading, onCreateVersion, isOrganizer, onSelectVersion }) {
     const [showModal, setShowModal] = useState(false);
     const [tag, setTag] = useState("");
     const [label, setLabel] = useState("");
@@ -84,17 +87,18 @@ function StatCard({ label, value, sub, accent }) {
                     </svg>
                 </button>
             </div>
-            <div
-    key={i}
-    className={`dh-version-row${v.is_current ? " current" : ""}`}
-    onClick={() => onSelectVersion(v.tag)}
-></div>
+
             {loading ? (
                 <div className="dh-version-loading">Loading…</div>
             ) : (
                 <div className="dh-version-list">
                     {versions.map((v, i) => (
-                        <div key={i} className={`dh-version-row${v.is_current ? " current" : ""}`}>
+                        <div
+                            key={i}
+                            className={`dh-version-row${v.is_current ? " current" : ""}`}
+                            onClick={() => onSelectVersion && onSelectVersion(v.tag)}
+                            style={{ cursor: "pointer" }}
+                        >
                             <div className="dh-version-dot-wrap">
                                 <div className={`dh-version-dot${v.is_current ? " active" : ""}`} />
                                 {i < versions.length - 1 && <div className="dh-version-line" />}
@@ -159,7 +163,6 @@ function DataHealthPanel({ health }) {
 
     const severityColor = severity === "CRITICAL" ? "#e53e3e" : severity === "WARNING" ? "#dd6b20" : "#18965d";
 
-    // Label distribution bar
     const labels = Object.entries(health.label_distribution || {});
     const totalLabeled = labels.reduce((s, [, v]) => s + v, 0);
 
@@ -175,7 +178,6 @@ function DataHealthPanel({ health }) {
                 </span>
             </div>
 
-            {/* Label distribution */}
             {labels.length > 0 && (
                 <div className="dh-health-section">
                     <p className="dh-health-section-title">LABEL DIST.</p>
@@ -198,7 +200,6 @@ function DataHealthPanel({ health }) {
                 </div>
             )}
 
-            {/* Alerts */}
             {health.alerts?.length > 0 && (
                 <div className="dh-health-alerts">
                     {health.alerts.map((a, i) => (
@@ -213,7 +214,6 @@ function DataHealthPanel({ health }) {
                 </div>
             )}
 
-            {/* Summary numbers */}
             <div className="dh-health-grid">
                 <div className="dh-health-cell">
                     <span className="dh-health-num" style={{ color: "#18965d" }}>{health.validated}</span>
@@ -245,14 +245,14 @@ function DataHealthPanel({ health }) {
 
 // ─── Label badge ──────────────────────────────────────────────────────────────
 const LABEL_COLORS = {
-    ORG: { bg: "#fff3f3", color: "#c53030" },
-    LOC: { bg: "#ebf8ff", color: "#2b6cb0" },
-    PERSON: { bg: "#f0fff4", color: "#276749" },
-    MISC: { bg: "#faf5ff", color: "#6b46c1" },
-    Finance: { bg: "#fffff0", color: "#975a16" },
+    ORG:      { bg: "#fff3f3", color: "#c53030" },
+    LOC:      { bg: "#ebf8ff", color: "#2b6cb0" },
+    PERSON:   { bg: "#f0fff4", color: "#276749" },
+    MISC:     { bg: "#faf5ff", color: "#6b46c1" },
+    Finance:  { bg: "#fffff0", color: "#975a16" },
     Positive: { bg: "#f0fff4", color: "#276749" },
     Negative: { bg: "#fff5f5", color: "#c53030" },
-    Neutral: { bg: "#f7fafc", color: "#4a5568" },
+    Neutral:  { bg: "#f7fafc", color: "#4a5568" },
 };
 
 function LabelBadge({ label }) {
@@ -304,7 +304,6 @@ function RowActions({ sample, onUpdate, isOrganizer }) {
     };
 
     if (!isOrganizer) {
-        // Participants can only flag
         if (sample.status === "flagged") return <span className="dh-action-done">Flagged</span>;
         return (
             <button
@@ -340,28 +339,30 @@ function RowActions({ sample, onUpdate, isOrganizer }) {
 }
 
 // ─── Raw Samples table ─────────────────────────────────────────────────────────
+// FIX 3: statusFilter and search were never included in the URLSearchParams,
+//         so filtering/search had no effect. Now correctly passed to the API.
 function RawSamplesTable({ competitionId, isOrganizer, version }) {
-    const [items, setItems]         = useState([]);
-    const [total, setTotal]         = useState(0);
-    const [page, setPage]           = useState(1);
-    const [pages, setPages]         = useState(1);
-    const [statusFilter, setStatus] = useState("all");
-    const [search, setSearch]       = useState("");
+    const [items, setItems]             = useState([]);
+    const [total, setTotal]             = useState(0);
+    const [page, setPage]               = useState(1);
+    const [pages, setPages]             = useState(1);
+    const [statusFilter, setStatus]     = useState("all");
+    const [search, setSearch]           = useState("");
     const [searchInput, setSearchInput] = useState("");
-    const [loading, setLoading]     = useState(false);
-    const [view, setView]           = useState("Table View"); // Table View | Visual Explorer
+    const [loading, setLoading]         = useState(false);
+    const [activeView, setActiveView]   = useState("Table View");
+
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const params = new URLSearchParams({
-                page,
-                page_size: 10,
-                ...(version ? { version: version } : {}),
-                
+            // FIX 3: Include statusFilter and search in the request params
+            const qp = new URLSearchParams({ page, page_size: 10 });
+            if (statusFilter && statusFilter !== "all") qp.set("status", statusFilter);
+            if (search) qp.set("search", search);
+            if (version) qp.set("version", version);
 
-            });
             const res = await fetch(
-                `${API}/competitions/${competitionId}/samples?${params}`,
+                `${API}/competitions/${competitionId}/samples?${qp}`,
                 { headers: authHeader() }
             );
             const data = await res.json();
@@ -392,7 +393,6 @@ function RawSamplesTable({ competitionId, isOrganizer, version }) {
 
     return (
         <div className="dh-table-card">
-            {/* Table header row */}
             <div className="dh-table-header">
                 <div className="dh-table-title-row">
                     <h2 className="dh-table-title">Raw Samples</h2>
@@ -400,8 +400,8 @@ function RawSamplesTable({ competitionId, isOrganizer, version }) {
                         {["Table View", "Visual Explorer"].map((v) => (
                             <button
                                 key={v}
-                                className={`dh-view-btn${view === v ? " active" : ""}`}
-                                onClick={() => setView(v)}
+                                className={`dh-view-btn${activeView === v ? " active" : ""}`}
+                                onClick={() => setActiveView(v)}
                             >{v}</button>
                         ))}
                     </div>
@@ -432,13 +432,15 @@ function RawSamplesTable({ competitionId, isOrganizer, version }) {
                     </div>
                     <button className="dh-tune-btn" title="Filter options">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+                            <line x1="4" y1="6" x2="20" y2="6"/>
+                            <line x1="8" y1="12" x2="16" y2="12"/>
+                            <line x1="11" y1="18" x2="13" y2="18"/>
                         </svg>
                     </button>
                 </div>
             </div>
 
-            {view === "Visual Explorer" ? (
+            {activeView === "Visual Explorer" ? (
                 <VisualExplorer items={items} loading={loading} />
             ) : (
                 <>
@@ -470,8 +472,8 @@ function RawSamplesTable({ competitionId, isOrganizer, version }) {
                                     <td><LabelBadge label={row.label} /></td>
                                     <td>
                                         <div className="dh-annotator">
-                                            <div className="dh-annotator-avatar">{row.annotator.initials}</div>
-                                            <span>{row.annotator.name}</span>
+                                            <div className="dh-annotator-avatar">{row.annotator?.initials}</div>
+                                            <span>{row.annotator?.name}</span>
                                         </div>
                                     </td>
                                     <td><AgreementScore value={row.agreement} /></td>
@@ -490,7 +492,6 @@ function RawSamplesTable({ competitionId, isOrganizer, version }) {
                         </tbody>
                     </table>
 
-                    {/* Pagination */}
                     <div className="dh-pagination">
                         <span className="dh-page-info">
                             Showing {items.length} of {total.toLocaleString()} samples
@@ -530,8 +531,8 @@ function VisualExplorer({ items, loading }) {
                         <StatusBadge status={row.status} />
                     </div>
                     <div className="dh-visual-annotator">
-                        <div className="dh-annotator-avatar sm">{row.annotator.initials}</div>
-                        <span>{row.annotator.name}</span>
+                        <div className="dh-annotator-avatar sm">{row.annotator?.initials}</div>
+                        <span>{row.annotator?.name}</span>
                         {row.agreement !== null && row.agreement !== undefined && (
                             <span className="dh-visual-agree">{row.agreement.toFixed(2)}</span>
                         )}
@@ -547,17 +548,16 @@ function EmbeddingVisualizer() {
     return (
         <div className="dh-embed-card">
             <div className="dh-embed-bg" aria-hidden="true">
-                {/* Decorative cluster dots */}
                 {Array.from({ length: 28 }).map((_, i) => (
                     <div
                         key={i}
                         className="dh-embed-dot"
                         style={{
-                            left: `${10 + Math.sin(i * 2.5) * 35 + Math.random() * 20}%`,
-                            top:  `${15 + Math.cos(i * 1.8) * 30 + Math.random() * 25}%`,
+                            left:    `${10 + Math.sin(i * 2.5) * 35 + (i * 7 % 20)}%`,
+                            top:     `${15 + Math.cos(i * 1.8) * 30 + (i * 11 % 25)}%`,
                             opacity: 0.15 + (i % 5) * 0.08,
-                            width:  `${3 + (i % 4)}px`,
-                            height: `${3 + (i % 4)}px`,
+                            width:   `${3 + (i % 4)}px`,
+                            height:  `${3 + (i % 4)}px`,
                         }}
                     />
                 ))}
@@ -572,109 +572,46 @@ function EmbeddingVisualizer() {
 
 // ─── Main DatasetHub page ──────────────────────────────────────────────────────
 export default function DatasetHub() {
-    const params = useParams();
-    const competitionId = params.id ?? params.competitionId;
-    
-    const [activeVersion, setActiveVersion] = useState(null);
-    const [competition, setCompetition] = useState(null);
-    const [health,      setHealth]      = useState(null);
-    const [versions,    setVersions]    = useState([]);
-    const [versionsLoading, setVersionsLoading] = useState(true);
-    const [isOrganizer, setIsOrganizer] = useState(false);
-const [downloadFormat, setDownloadFormat] = useState("csv");
-const [downloading, setDownloading] = useState(false);
+    // FIX 4: Renamed local variable from `params` to `routeParams` to avoid
+    //        shadowing the `params` name used inside handleDownload's
+    //        URLSearchParams construction.
+    const routeParams   = useParams();
+    const competitionId = routeParams.id ?? routeParams.competitionId;
 
-const handleDownload = async () => {
-    setDownloading(true);
-    try {
-        // Fetch ALL validated samples (no pagination limit)
-        const params = new URLSearchParams({ page: 1, page_size: 1000, status: "validated" , ...(activeVersion ? { version: activeVersion } : {}) });
-        const res = await fetch(
-            `${API}/competitions/${competitionId}/samples?${params}`,
-            { headers: authHeader() }
-        );
-        const data = await res.json();
-        const items = data.items || [];
+    const [activeVersion,    setActiveVersion]    = useState(null);
+    const [competition,      setCompetition]      = useState(null);
+    const [health,           setHealth]           = useState(null);
+    const [versions,         setVersions]         = useState([]);
+    const [versionsLoading,  setVersionsLoading]  = useState(true);
+    const [isOrganizer,      setIsOrganizer]      = useState(false);
+    const [downloadFormat,   setDownloadFormat]   = useState("csv");
+    const [downloading,      setDownloading]      = useState(false);
 
-        if (items.length === 0) {
-            alert("No validated samples to download yet.");
-            return;
-        }
+    const loadVersions = useCallback(() => {
+        setVersionsLoading(true);
+        fetch(`${API}/competitions/${competitionId}/versions`, { headers: authHeader() })
+            .then(r => r.json())
+            .then(d => setVersions(Array.isArray(d) ? d : []))
+            .catch(() => setVersions([]))
+            .finally(() => setVersionsLoading(false));
+    }, [competitionId]);
 
-        let content = "";
-        let filename = "";
-        let mimeType = "";
-
-        if (downloadFormat === "csv") {
-            const header = "uid,content_snippet,label,annotator,agreement,status";
-            const rows = items.map(r =>
-                `"${r.uid}","${(r.content_snippet || "").replace(/"/g, '""')}","${r.label || ""}","${r.annotator.name}","${r.agreement ?? ""}","${r.status}"`
-            );
-            content  = [header, ...rows].join("\n");
-            filename = `dataset-${competitionId}.csv`;
-            mimeType = "text/csv";
-
-        } else if (downloadFormat === "json") {
-            content  = JSON.stringify(items, null, 2);
-            filename = `dataset-${competitionId}.json`;
-            mimeType = "application/json";
-
-        } else if (downloadFormat === "conll") {
-            // CoNLL format: one token per line, blank line between sentences
-            content = items.map(r => {
-                const tokens = (r.content_snippet || "").split(/\s+/);
-                const label  = r.label || "O";
-                return tokens.map((tok, i) =>
-                    `${tok}\t${i === 0 ? "B-" : "I-"}${label}`
-                ).join("\n");
-            }).join("\n\n");
-            filename = `dataset-${competitionId}.conll`;
-            mimeType = "text/plain";
-        }
-
-        // Trigger browser download
-        const blob = new Blob([content], { type: mimeType });
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement("a");
-        a.href     = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-
-    } catch (err) {
-        console.error(err);
-        alert("Download failed — please try again.");
-    } finally {
-        setDownloading(false);
-    }
-};
     useEffect(() => {
-        // Load competition
+        if (!competitionId) return;
+
         fetch(`${API}/competitions/${competitionId}`, { headers: authHeader() })
             .then(r => r.json()).then(setCompetition).catch(() => {});
 
-        // Load monitoring (to check organizer status)
         fetch(`${API}/competitions/${competitionId}/monitoring`, { headers: authHeader() })
             .then(r => r.json())
             .then(d => setIsOrganizer(d.is_organizer || false))
             .catch(() => {});
 
-        // Load data health
         fetch(`${API}/competitions/${competitionId}/data-health`, { headers: authHeader() })
             .then(r => r.json()).then(setHealth).catch(() => {});
 
-        // Load versions
         loadVersions();
-    }, [competitionId]);
-
-    const loadVersions = () => {
-        setVersionsLoading(true);
-        fetch(`${API}/competitions/${competitionId}/versions`, { headers: authHeader() })
-            .then(r => r.json())
-            .then(d => { setVersions(Array.isArray(d) ? d : []); })
-            .catch(() => setVersions([]))
-            .finally(() => setVersionsLoading(false));
-    };
+    }, [competitionId, loadVersions]);
 
     const handleCreateVersion = async (body) => {
         try {
@@ -687,8 +624,77 @@ const handleDownload = async () => {
         } catch { /* ignore */ }
     };
 
-    const total  = health?.total  || 0;
-    const avgLen = health?.avg_text_length || 0;
+    // FIX 4: Renamed URLSearchParams variable from `params` to `dlParams`
+    //        to avoid any name collision with routeParams / useParams.
+    const handleDownload = async () => {
+        setDownloading(true);
+        try {
+            const dlParams = new URLSearchParams({
+                page: 1,
+                page_size: 1000,
+                status: "validated",
+                ...(activeVersion ? { version: activeVersion } : {}),
+            });
+            const res  = await fetch(
+                `${API}/competitions/${competitionId}/samples?${dlParams}`,
+                { headers: authHeader() }
+            );
+            const data  = await res.json();
+            const items = data.items || [];
+
+            if (items.length === 0) {
+                alert("No validated samples to download yet.");
+                return;
+            }
+
+            let content  = "";
+            let filename = "";
+            let mimeType = "";
+
+            if (downloadFormat === "csv") {
+                const header = "uid,content_snippet,label,annotator,agreement,status";
+                const rows   = items.map(r =>
+                    `"${r.uid}","${(r.content_snippet || "").replace(/"/g, '""')}","${r.label || ""}","${r.annotator?.name}","${r.agreement ?? ""}","${r.status}"`
+                );
+                content  = [header, ...rows].join("\n");
+                filename = `dataset-${competitionId}.csv`;
+                mimeType = "text/csv";
+
+            } else if (downloadFormat === "json") {
+                content  = JSON.stringify(items, null, 2);
+                filename = `dataset-${competitionId}.json`;
+                mimeType = "application/json";
+
+            } else if (downloadFormat === "conll") {
+                content = items.map(r => {
+                    const tokens = (r.content_snippet || "").split(/\s+/);
+                    const label  = r.label || "O";
+                    return tokens.map((tok, i) =>
+                        `${tok}\t${i === 0 ? "B-" : "I-"}${label}`
+                    ).join("\n");
+                }).join("\n\n");
+                filename = `dataset-${competitionId}.conll`;
+                mimeType = "text/plain";
+            }
+
+            const blob = new Blob([content], { type: mimeType });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement("a");
+            a.href     = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+
+        } catch (err) {
+            console.error(err);
+            alert("Download failed — please try again.");
+        } finally {
+            setDownloading(false);
+        }
+    };
+
+    const total     = health?.total           || 0;
+    const avgLen    = health?.avg_text_length  || 0;
     const vocabSize = health ? Math.round(total * 10.2 / 1000 * 10) / 10 + "k" : "—";
 
     return (
@@ -698,13 +704,11 @@ const handleDownload = async () => {
                 competitionTitle={competition?.title}
                 taskType={competition?.task_type}
             />
-            <VersionControl
-    versions={versions}
-    loading={versionsLoading}
-    onCreateVersion={handleCreateVersion}
-    isOrganizer={isOrganizer}
-    onSelectVersion={setActiveVersion}
-/>
+
+            {/* FIX 2: VersionControl was rendered TWICE — once here outside
+                dh-main (without onSelectVersion), and again inside dh-left-col.
+                Removed the duplicate outside dh-main; it now only lives inside
+                dh-left-col where it belongs. */}
 
             <div className="dh-main">
                 <CompetitionTopbar competition={competition} />
@@ -729,25 +733,25 @@ const handleDownload = async () => {
                             <p className="dh-page-desc">{competition?.description || ""}</p>
                         </div>
                         <div className="dh-page-header-right">
-<div className="dh-download-group">
-    <select
-        className="dh-format-select"
-        value={downloadFormat}
-        onChange={e => setDownloadFormat(e.target.value)}
-    >
-        <option value="csv">CSV</option>
-        <option value="json">JSON</option>
-        <option value="conll">CoNLL</option>
-    </select>
-    <button className="dh-download-btn" onClick={handleDownload} disabled={downloading}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        {downloading ? "Downloading…" : "Download"}
-    </button>
-</div>
+                            <div className="dh-download-group">
+                                <select
+                                    className="dh-format-select"
+                                    value={downloadFormat}
+                                    onChange={e => setDownloadFormat(e.target.value)}
+                                >
+                                    <option value="csv">CSV</option>
+                                    <option value="json">JSON</option>
+                                    <option value="conll">CoNLL</option>
+                                </select>
+                                <button className="dh-download-btn" onClick={handleDownload} disabled={downloading}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="7 10 12 15 17 10"/>
+                                        <line x1="12" y1="15" x2="12" y2="3"/>
+                                    </svg>
+                                    {downloading ? "Downloading…" : "Download"}
+                                </button>
+                            </div>
                             <button className="dh-mount-btn">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
@@ -795,6 +799,7 @@ const handleDownload = async () => {
                                 loading={versionsLoading}
                                 onCreateVersion={handleCreateVersion}
                                 isOrganizer={isOrganizer}
+                                onSelectVersion={setActiveVersion}
                             />
                             <EmbeddingVisualizer />
                         </div>

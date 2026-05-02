@@ -124,8 +124,9 @@ class DataSample(Base):
     audio_duration = Column(String, nullable=True)
     quality_score  = Column(String, nullable=True)
     flags          = Column(Text, default="[]")
-    meta_data       = Column(Text, default="{}")
+    meta_data      = Column(Text, default="{}")
     submitted_at   = Column(String, nullable=True)
+    version_tag    = Column(String, nullable=True, index=True)  # dataset snapshot tag e.g. "v1.2"
 
 
     # ── Add this class to models.py ───────────────────────────────────────────────

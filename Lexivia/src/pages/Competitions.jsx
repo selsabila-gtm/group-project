@@ -77,6 +77,8 @@ function Competitions() {
     "AUDIO SYNTHESIS",
     "TRANSLATION",
     "COGNITIVE LOGIC",
+    "QUESTION ANSWERING",
+    "SUMMARIZATION",
   ];
 
   const token = localStorage.getItem("token");
