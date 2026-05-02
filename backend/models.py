@@ -95,17 +95,9 @@ class RecentCompetition(Base):
     sync = Column(String, nullable=False)
     icon = Column(String, nullable=False)
 
-class Notification(Base):
-    __tablename__ = "notifications"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, index=True, nullable=False)
-    title = Column(String, nullable=False)
-    message = Column(String, nullable=False)
-    time = Column(String, nullable=False)
-    highlighted = Column(Boolean, default=False)
-    actions = Column(Boolean, default=False)
-
+# NOTE: The full Notification model lives in routes/notifications.py
+# It was removed here to avoid a duplicate-table conflict with SQLAlchemy.
+# routes/notifications.py defines the authoritative Notification class.
 
 class CompetitionPrompt(Base):
     __tablename__ = "competition_prompts"
@@ -131,3 +123,4 @@ class DataSample(Base):
     flags          = Column(Text, default="[]")
     meta_data       = Column(Text, default="{}")
     submitted_at   = Column(String, nullable=True)
+    version_tag    = Column(String, nullable=True)   # ← used by validation.py snapshots

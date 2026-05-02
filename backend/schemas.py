@@ -77,17 +77,10 @@ class RecentCompetitionOut(BaseModel):
         from_attributes = True
 
 
-class NotificationOut(BaseModel):
-    id: str
-    user_id: str
-    title: str
-    message: str
-    time: str
-    highlighted: bool
-    actions: bool
 
-    class Config:
-        from_attributes = True
+
+# NOTE: NotificationOut was removed — the notifications router returns plain dicts.
+# If you need a Pydantic schema for notifications, add it in routes/notifications.py.
 
 
 class CompetitionCreateIn(BaseModel):

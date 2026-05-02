@@ -14,6 +14,7 @@ import SearchResults from "./pages/SearchResults";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import NotificationsPage from "./pages/notifications/NotificationsPage";  // ← new
 
 // ── Profile pages ──────────────────────────────────────────────────────────────
 import ProfilePage from "./pages/profile/ProfilePage";
@@ -22,6 +23,7 @@ import SettingsPage from "./pages/profile/settings";
 import "./index.css";
 import OrganizerDashboard from "./pages/OrganizerDashboard";
 import AuthCallback from "./pages/AuthCallback";
+
 // ── Placeholder ───────────────────────────────────────────────────────────────
 function SimplePage({ title, subtitle }) {
   return (
@@ -88,7 +90,10 @@ function App() {
           <Route path="/teams" element={<TeamsPage />} />
           <Route path="/teams/:teamId" element={<TeamDetailPage />} />
 
-          {/* ✅ FIXED ORDER */}
+          {/* ── Notifications (dedicated page) ── */}
+          <Route path="/notifications" element={<NotificationsPage />} />
+
+          {/* Profile */}
           <Route path="/profile/settings" element={<SettingsPage />} />
           <Route path="/profile/update" element={<UpdateProfilePage />} />
           <Route path="/profile/:userId" element={<ProfilePage />} />
@@ -96,10 +101,6 @@ function App() {
 
           {/* Misc */}
           <Route path="/search" element={<SearchResults />} />
-          <Route
-            path="/notifications"
-            element={<SimplePage title="Notifications" subtitle="View your latest platform updates." />}
-          />
 
         </Route>
 
