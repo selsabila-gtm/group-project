@@ -304,7 +304,7 @@ def data_health(
     pending = base.filter(DataSample.status == "pending").count()
 
     # Average text length
-    samples = base.limit(500).all()
+    samples = base.all()
     text_lengths = [len((s.text_content or "").split()) for s in samples if s.text_content]
     avg_text_len = round(sum(text_lengths) / len(text_lengths), 1) if text_lengths else 0
 
@@ -324,8 +324,8 @@ def data_health(
     # Flag alerts
     alerts = []
     if total > 0:
-        misc_pct = label_counts.get("Misc", 0) / total
-        if misc_pct > 0.04:
+        misc_pct = label_counts.get("Misc", 0) / max(total, 1)
+        if misc_pct < 0.04:
             alerts.append({
                 "level": "critical",
                 "type": "Class Imbalance",

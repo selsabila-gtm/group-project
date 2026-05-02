@@ -1,0 +1,210 @@
+/* DataHealthPanel.css
+   Matches the existing DatasetHub dark-glass aesthetic.
+   Uses CSS variables so it inherits the host app's theme automatically.
+*/
+
+.dhp-panel {
+    background: var(--panel-bg, #111827);
+    border: 1px solid var(--border, #1f2937);
+    border-radius: 10px;
+    padding: 18px 20px;
+    min-width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-family: inherit;
+}
+
+/* ── Loading state ─────────────────────────────────────────────── */
+.dhp-panel--loading {
+    align-items: center;
+    justify-content: center;
+    min-height: 140px;
+    gap: 14px;
+}
+
+.dhp-spinner {
+    width: 22px;
+    height: 22px;
+    border: 2px solid #374151;
+    border-top-color: #1359db;
+    border-radius: 50%;
+    animation: dhp-spin 0.75s linear infinite;
+}
+
+@keyframes dhp-spin { to { transform: rotate(360deg); } }
+
+.dhp-loading-text {
+    font-size: 12px;
+    color: #6b7280;
+    margin: 0;
+    letter-spacing: 0.04em;
+}
+
+/* ── Header ────────────────────────────────────────────────────── */
+.dhp-panel-header {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dhp-panel-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.dhp-panel-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #9ca3af;
+    text-transform: uppercase;
+}
+
+.dhp-total-label {
+    font-size: 11px;
+    color: #6b7280;
+}
+
+/* ── Severity badge ─────────────────────────────────────────────── */
+.dhp-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 99px;
+    white-space: nowrap;
+}
+
+.dhp-badge--healthy  { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
+.dhp-badge--warning  { background: rgba(249, 115, 22, 0.12); color: #f97316; }
+.dhp-badge--critical { background: rgba(239, 68, 68, 0.12);  color: #ef4444; }
+
+/* ── Status rows ────────────────────────────────────────────────── */
+.dhp-status-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dhp-status-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.dhp-status-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.dhp-status-icon {
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.dhp-status-label {
+    font-size: 12px;
+    color: #d1d5db;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dhp-status-count {
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.dhp-bar-track {
+    width: 80px;
+    height: 4px;
+    background: #1f2937;
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.dhp-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+
+.dhp-bar-pct {
+    font-size: 10px;
+    color: #6b7280;
+    width: 30px;
+    text-align: right;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Divider ────────────────────────────────────────────────────── */
+.dhp-divider {
+    height: 1px;
+    background: #1f2937;
+    margin: 2px 0;
+}
+
+/* ── Alert rows ─────────────────────────────────────────────────── */
+.dhp-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border-left: 3px solid transparent;
+}
+
+.dhp-alert--critical {
+    background: rgba(239, 68, 68, 0.08);
+    border-left-color: #ef4444;
+}
+
+.dhp-alert--warning {
+    background: rgba(249, 115, 22, 0.08);
+    border-left-color: #f97316;
+}
+
+.dhp-alert-icon {
+    font-size: 13px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.dhp-alert--critical .dhp-alert-icon { color: #ef4444; }
+.dhp-alert--warning  .dhp-alert-icon { color: #f97316; }
+
+.dhp-alert-body { display: flex; flex-direction: column; gap: 1px; }
+
+.dhp-alert-type {
+    font-size: 11px;
+    font-weight: 700;
+    color: #e5e7eb;
+    margin: 0;
+    letter-spacing: 0.02em;
+}
+
+.dhp-alert-detail {
+    font-size: 11px;
+    color: #9ca3af;
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* ── No-alerts message ──────────────────────────────────────────── */
+.dhp-no-alerts {
+    font-size: 11px;
+    color: #6b7280;
+    margin: 0;
+    font-style: italic;
+}
