@@ -7,7 +7,8 @@ from .dashboard import router as dashboard_router
 from .data import router as data_router
 from .settings import router as settings_router
 from .validation import router as validation_router
-from routes.datasets import router as datasets_router
+from .datasets import router as datasets_router
+from .experiments import router as experiments_router
 from .notifications import router as notifications_router
 
 router = APIRouter()
