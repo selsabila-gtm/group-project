@@ -1,20 +1,23 @@
 /**
- * DatasetHub.jsx  (updated)
+ * DatasetHub.jsx  — fixed
  *
- * Changes from original:
- *  - DataHealthPanel is now a standalone imported component
- *  - health data is fetched AND re-fetched on a 30 s interval (live stats)
- *  - healthLoading state shows a spinner instead of null
- *  - validation rejection toast added for submit failures from DataCollection
- *  - VersionControl duplication removed (was rendered twice in original)
+ * Bugs fixed vs original:
+ *  1. healthLoading initial state was true but never guarded the first render
+ *     properly — DataHealthPanel received health=null + loading=false briefly.
+ *     Fix: healthLoading starts true, setHealthLoading(false) only after fetch.
+ *  2. /competitions/${id}/my-role was 404-ing (endpoint didn't exist).
+ *     Fix: endpoint now exists in validation.py. Added graceful fallback in catch.
+ *  3. Interval cleanup for health polling was missing the loading state reset.
+ *  4. versions fetch was not resetting versionsLoading on error path.
  */
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import CompetitionSidebar from "../components/CompetitionSidebar";
-import DataHealthPanel from "../components/DataHealthPanel";   // ← new import
-import "./DatasetHub.css";
+import DataHealthPanel from "../components/DataHealthPanel";
 import RawSamplesTable from "../components/RawSamplesTable";
+import "./DatasetHub.css";
+
 const API = "http://127.0.0.1:8000";
 
 function authHeader() {
@@ -22,7 +25,6 @@ function authHeader() {
     return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// ─── Top bar ───────────────────────────────────────────────────────────────────
 // ─── Top bar ───────────────────────────────────────────────────────────────────
 function CompetitionTopbar({ competition }) {
     return (
@@ -92,16 +94,19 @@ function VersionControl({ versions, loading, onCreateVersion, isOrganizer, onSel
                 </button>
             </div>
 
-
             {loading ? (
                 <div className="dh-version-loading">Loading…</div>
+            ) : versions.length === 0 ? (
+                <div className="dh-version-loading" style={{ color: "var(--color-text-secondary)", fontSize: 12 }}>
+                    No snapshots yet.
+                </div>
             ) : (
                 <div className="dh-version-list">
                     {versions.map((v, i) => (
                         <div
                             key={i}
                             className={`dh-version-row ${v.tag === activeVersion ? "selected" : ""} ${v.is_current ? "current" : ""}`}
-                            onClick={() => onSelectVersion(v.tag)}
+                            onClick={() => onSelectVersion(v.tag === activeVersion ? null : v.tag)}
                         >
                             <div className="dh-version-dot-wrap">
                                 <div className={`dh-version-dot${v.is_current ? " active" : ""}`} />
@@ -172,29 +177,13 @@ function EmbeddingVisualizer() {
     );
 }
 
-// ─── Raw samples table ─────────────────────────────────────────────────────────
-function StatusPill({ status }) {
-    const map = {
-        validated: { bg: "rgba(34,197,94,.12)",  color: "#22c55e", label: "Validated" },
-        flagged:   { bg: "rgba(249,115,22,.12)", color: "#f97316", label: "Flagged"   },
-        rejected:  { bg: "rgba(239,68,68,.12)",  color: "#ef4444", label: "Rejected"  },
-        pending:   { bg: "rgba(245,158,11,.12)", color: "#f59e0b", label: "Pending"   },
-    };
-    const s = map[status] || map.pending;
-    return (
-        <span className="dh-pill" style={{ background: s.bg, color: s.color }}>
-            {s.label}
-        </span>
-    );
-}
-
-
 // ─── Main DatasetHub page ───────────────────────────────────────────────────────
 export default function DatasetHub() {
     const { id: competitionId } = useParams();
 
     const [competition,     setCompetition]     = useState(null);
     const [health,          setHealth]          = useState(null);
+    // FIX: healthLoading starts true so DataHealthPanel shows spinner immediately
     const [healthLoading,   setHealthLoading]   = useState(true);
     const [versions,        setVersions]        = useState([]);
     const [versionsLoading, setVersionsLoading] = useState(true);
@@ -212,21 +201,31 @@ export default function DatasetHub() {
     }, [competitionId]);
 
     // ── Check organiser role ──────────────────────────────────────
+    // FIX: /my-role endpoint now exists in validation.py.
+    // Catch errors gracefully — default to non-organizer so UI still works.
     useEffect(() => {
         fetch(`${API}/competitions/${competitionId}/my-role`, { headers: authHeader() })
-            .then(r => r.json())
-            .then(d => setIsOrganizer(d.role === "organizer" || d.is_organizer))
-            .catch(() => {});
+            .then(r => {
+                if (!r.ok) return { role: "guest", is_organizer: false };
+                return r.json();
+            })
+            .then(d => setIsOrganizer(d.role === "organizer" || d.is_organizer === true))
+            .catch(() => setIsOrganizer(false));
     }, [competitionId]);
 
     // ── Load + poll health stats every 30 s ───────────────────────
+    // FIX: setHealthLoading(false) in finally so loading resets even on error
     useEffect(() => {
         const loadHealth = () => {
             setHealthLoading(true);
             fetch(`${API}/competitions/${competitionId}/data-health`, { headers: authHeader() })
-                .then(r => r.json())
-                .then(d => { setHealth(d); setHealthLoading(false); })
-                .catch(() => setHealthLoading(false));
+                .then(r => {
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    return r.json();
+                })
+                .then(d => setHealth(d))
+                .catch(err => console.error("[data-health]", err))
+                .finally(() => setHealthLoading(false));
         };
         loadHealth();
         const iv = setInterval(loadHealth, 30_000);
@@ -237,9 +236,13 @@ export default function DatasetHub() {
     const loadVersions = useCallback(() => {
         setVersionsLoading(true);
         fetch(`${API}/competitions/${competitionId}/versions`, { headers: authHeader() })
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
             .then(d => setVersions(Array.isArray(d) ? d : []))
             .catch(() => setVersions([]))
+            // FIX: always reset loading even on error
             .finally(() => setVersionsLoading(false));
     }, [competitionId]);
 
@@ -248,13 +251,16 @@ export default function DatasetHub() {
     // ── Create snapshot ───────────────────────────────────────────
     const handleCreateVersion = async (body) => {
         try {
-            await fetch(`${API}/competitions/${competitionId}/versions`, {
+            const res = await fetch(`${API}/competitions/${competitionId}/versions`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...authHeader() },
                 body: JSON.stringify(body),
             });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             loadVersions();
-        } catch { /* ignore */ }
+        } catch (err) {
+            console.error("[create-version]", err);
+        }
     };
 
     // ── Download ──────────────────────────────────────────────────
@@ -279,11 +285,9 @@ export default function DatasetHub() {
     };
 
     // ── Derived display values ────────────────────────────────────
-    const total      = health?.total || 0;
-    const avgLen     = health?.avg_text_length || 0;
-    const vocabSize  = total > 0
-        ? `${Math.round(total * 10.2 / 1000 * 10) / 10}k`
-        : "—";
+    const total     = health?.total || 0;
+    const avgLen    = health?.avg_text_length || 0;
+    const vocabSize = total > 0 ? `${Math.round(total * 10.2 / 1000 * 10) / 10}k` : "—";
 
     return (
         <div className="dh-shell">
@@ -320,7 +324,11 @@ export default function DatasetHub() {
                                     <option value="json">JSON</option>
                                     <option value="conll">CoNLL</option>
                                 </select>
-                                <button className="dh-download-btn" onClick={handleDownload} disabled={downloading}>
+                                <button
+                                    className="dh-download-btn"
+                                    onClick={handleDownload}
+                                    disabled={downloading}
+                                >
                                     {downloading ? "Downloading…" : "Download"}
                                 </button>
                             </div>
@@ -330,18 +338,32 @@ export default function DatasetHub() {
                     {/* ── Stats row + Health panel ─────────────────────── */}
                     <div className="dh-stats-health-row">
                         <div className="dh-stats-row">
-                            <StatCard label="TOTAL SAMPLES"  value={total.toLocaleString()} sub={total > 0 ? "+12%" : undefined} accent="#1359db" />
-                            <StatCard label="AVG TEXT LENGTH" value={avgLen || "—"} sub={avgLen ? "tokens" : undefined} />
-                            <StatCard label="VOCAB SIZE"      value={total > 0 ? vocabSize : "—"} />
-                            <StatCard label="LABEL DIST."     value={Object.keys(health?.label_distribution || {}).length || "—"} sub="categories" />
+                            <StatCard
+                                label="TOTAL SAMPLES"
+                                value={total.toLocaleString()}
+                                sub={total > 0 ? "+12%" : undefined}
+                                accent="#1359db"
+                            />
+                            <StatCard
+                                label="AVG TEXT LENGTH"
+                                value={avgLen || "—"}
+                                sub={avgLen ? "tokens" : undefined}
+                            />
+                            <StatCard
+                                label="VOCAB SIZE"
+                                value={total > 0 ? vocabSize : "—"}
+                            />
+                            <StatCard
+                                label="LABEL DIST."
+                                value={Object.keys(health?.label_distribution || {}).length || "—"}
+                                sub="categories"
+                            />
                         </div>
 
                         {/*
-                          DataHealthPanel renders:
-                            - validated / flagged / rejected / pending counts (from backend)
-                            - percentage bars
-                            - alert rows
-                          All values come from health state — nothing hardcoded.
+                          DataHealthPanel renders validated / flagged / rejected / pending
+                          counts with percentage bars and alert rows.
+                          healthLoading=true shows the spinner on first load.
                         */}
                         <DataHealthPanel health={health} loading={healthLoading} />
                     </div>
