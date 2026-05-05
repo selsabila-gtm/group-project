@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
@@ -6,7 +6,7 @@ import "./Dashboard.css";
 import { supabase } from "../config/supabase";
 
 function statusClass(status) {
-    const s = status?.toLowerCase();
+    const s = String(status || "").toLowerCase();
 
     if (s === "open") return "open";
     if (s === "closed") return "closed";
@@ -19,9 +19,32 @@ function statusClass(status) {
     return "";
 }
 
+function normalizeStats(data) {
+    return {
+        organized_competitions: Number(data?.organized_competitions ?? 0),
+        joined_competitions: Number(data?.joined_competitions ?? 0),
+        teams_joined: Number(data?.teams_joined ?? 0),
+    };
+}
+
+function normalizeRecentItem(item, index) {
+    return {
+        id: item?.id || `${item?.competition_id || "competition"}-${index}`,
+        competition_id: item?.competition_id || null,
+        title: item?.title || "Untitled Competition",
+        type: item?.type || item?.task_type || "GENERAL",
+        status: item?.status || "OPEN",
+        score: item?.score || "--",
+        sync: item?.sync || "Recently",
+        icon: item?.icon || "🏆",
+    };
+}
+
 function Dashboard() {
     const [userName, setUserName] = useState("User");
     const [userId, setUserId] = useState(null);
+    const [token, setToken] = useState(localStorage.getItem("token") || "");
+    const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         organized_competitions: 0,
         joined_competitions: 0,
@@ -31,99 +54,157 @@ function Dashboard() {
 
     const navigate = useNavigate();
 
-    // ✅ FIX: use localStorage instead of supabase
     useEffect(() => {
         async function loadUser() {
-            const { data: { session } } = await supabase.auth.getSession();
-
-            if (!session?.user) {
-                navigate("/login");
-                return;
-            }
-
-            const user = session.user;
-            const realUserId = user.id;
-
-            setUserId(realUserId);
-
-            let name =
-                user.user_metadata?.full_name ||
-                user.email?.split("@")[0] ||
-                "User";
-
             try {
-                const profileRes = await fetch("http://127.0.0.1:8000/profile/me", {
+                const { data, error } = await supabase.auth.getSession();
+
+                if (error || !data?.session?.user) {
+                    navigate("/login");
+                    return;
+                }
+
+                const session = data.session;
+                const user = session.user;
+                const realUserId = user.id;
+
+                localStorage.setItem("token", session.access_token);
+                localStorage.setItem("user", JSON.stringify(user));
+
+                setToken(session.access_token);
+                setUserId(realUserId);
+
+                let name =
+                    user.user_metadata?.full_name ||
+                    user.email?.split("@")[0] ||
+                    "User";
+
+                try {
+                    const profileRes = await fetch("http://127.0.0.1:8000/profile/me", {
+                        headers: { Authorization: `Bearer ${session.access_token}` },
+                    });
+
+                    if (profileRes.ok) {
+                        const profile = await profileRes.json();
+                        name =
+                            profile.full_name ||
+                            profile.name ||
+                            profile.username ||
+                            name;
+                    }
+                } catch (err) {
+                    console.error("Profile name fetch failed:", err);
+                }
+
+                setUserName(name);
+
+                fetch("http://127.0.0.1:8000/sync-user", {
+                    method: "POST",
                     headers: {
+                        "Content-Type": "application/json",
                         Authorization: `Bearer ${session.access_token}`,
                     },
-                });
-
-                if (profileRes.ok) {
-                    const profile = await profileRes.json();
-                    name =
-                        profile.full_name ||
-                        profile.name ||
-                        profile.username ||
-                        name;
-                }
-            } catch (err) {
-                console.error("Profile name fetch failed:", err);
+                    body: JSON.stringify({
+                        user_id: realUserId,
+                        full_name: name,
+                        email: user.email,
+                    }),
+                }).catch(console.error);
+            } finally {
+                setLoading(false);
             }
-
-            setUserName(name);
-
-            localStorage.setItem("token", session.access_token);
-            localStorage.setItem("user", JSON.stringify(user));
-
-            fetch("http://127.0.0.1:8000/sync-user", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify({
-                    user_id: realUserId,
-                    full_name: name,
-                    email: user.email,
-                }),
-            }).catch(console.error);
         }
 
         loadUser();
     }, [navigate]);
 
-    const fetchRecent = () => {
-        if (!userId) return;
+    const fetchStats = useCallback(async () => {
+        if (!userId || !token) return;
 
-        const token = localStorage.getItem("token");
+        try {
+            const res = await fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
 
-        fetch(`http://127.0.0.1:8000/dashboard/recent/${userId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then((res) => res.json())
-            .then((data) => {
-                const safeData = Array.isArray(data) ? data : [];
-                setRecentCompetitions(safeData);
-            })
-            .catch((err) =>
-                console.error("Recent competitions fetch error:", err)
-            );
-    };
+            if (res.status === 401) {
+                navigate("/login");
+                return;
+            }
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                console.error("Stats fetch failed:", data);
+                setStats({
+                    organized_competitions: 0,
+                    joined_competitions: 0,
+                    teams_joined: 0,
+                });
+                return;
+            }
+
+            setStats(normalizeStats(data));
+        } catch (err) {
+            console.error("Stats fetch error:", err);
+            setStats({
+                organized_competitions: 0,
+                joined_competitions: 0,
+                teams_joined: 0,
+            });
+        }
+    }, [userId, token, navigate]);
+
+    const fetchRecent = useCallback(async () => {
+        if (!userId || !token) return;
+
+        try {
+            const res = await fetch(`http://127.0.0.1:8000/dashboard/recent/${userId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+
+            if (res.status === 401) {
+                navigate("/login");
+                return;
+            }
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                console.error("Recent competitions fetch failed:", data);
+                setRecentCompetitions([]);
+                return;
+            }
+
+            const safeData = Array.isArray(data) ? data : [];
+            setRecentCompetitions(safeData.map(normalizeRecentItem));
+        } catch (err) {
+            console.error("Recent competitions fetch error:", err);
+            setRecentCompetitions([]);
+        }
+    }, [userId, token, navigate]);
 
     useEffect(() => {
-        if (!userId) return;
+        if (!userId || !token) return;
 
-        const token = localStorage.getItem("token");
-
-        fetch(`http://127.0.0.1:8000/dashboard/stats/${userId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then((res) => res.json())
-            .then((data) => setStats(data))
-            .catch((err) => console.error("Stats fetch error:", err));
-
+        fetchStats();
         fetchRecent();
-    }, [userId]);
+    }, [userId, token, fetchStats, fetchRecent]);
+
+    if (loading) {
+        return (
+            <div className="dashboard-shell">
+                <Sidebar />
+                <div className="dashboard-main">
+                    <Topbar
+                        title="Loading dashboard..."
+                        subtitle="Please wait while your workspace loads."
+                        showBrowseButton={false}
+                    />
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="dashboard-shell">
             <Sidebar />
@@ -137,8 +218,6 @@ function Dashboard() {
 
                 <div className="dashboard-body">
                     <div className="dashboard-left full-width">
-
-                        {/* STATS */}
                         <div className="stats-row">
                             <div className="stat-card">
                                 <div className="stat-card-top">
@@ -166,17 +245,22 @@ function Dashboard() {
                             </div>
                         </div>
 
-                        {/* RECENT */}
                         <div className="recent-card">
                             <div className="section-head">
                                 <h2>Recent Competitions</h2>
 
                                 <div className="small-actions">
-                                    <button onClick={() => navigate("/competitions")}>
+                                    <button type="button" onClick={() => navigate("/competitions")}>
                                         ↗
                                     </button>
 
-                                    <button onClick={fetchRecent}>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            fetchStats();
+                                            fetchRecent();
+                                        }}
+                                    >
                                         ⟳
                                     </button>
                                 </div>
@@ -201,7 +285,7 @@ function Dashboard() {
                                                 if (item.competition_id) {
                                                     navigate(`/competitions/${item.competition_id}`);
                                                 } else {
-                                                    navigate(`/competitions`);
+                                                    navigate("/competitions");
                                                 }
                                             }}
                                             style={{ cursor: "pointer" }}
@@ -227,7 +311,6 @@ function Dashboard() {
                                 )}
                             </div>
                         </div>
-
                     </div>
                 </div>
             </div>

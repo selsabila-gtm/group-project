@@ -42,7 +42,13 @@ function CompetitionDetails() {
     useEffect(() => {
         window.scrollTo(0, 0);
 
-        fetch(`http://127.0.0.1:8000/competitions/${competitionId}`)
+        const token = localStorage.getItem("token");
+
+        fetch(`http://127.0.0.1:8000/competitions/${competitionId}`, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        })
             .then((res) => {
                 if (!res.ok) throw new Error("Competition not found");
                 return res.json();
@@ -68,6 +74,8 @@ function CompetitionDetails() {
             .then((data) => {
                 console.log("MONITORING DATA:", data);
                 setMonitoring(data);
+                if (data.user_role === "organizer") setIsJoined(false);
+                if (data.user_role === "participant") setIsJoined(true);
             })
             .catch((err) => console.error("Monitoring fetch error:", err));
     }, [competitionId]);
@@ -81,12 +89,15 @@ function CompetitionDetails() {
             },
         })
             .then((res) => res.json())
-            .then((data) => setIsJoined(data.joined === true))
+            .then((data) => {
+                if (data.user_role === "organizer") setIsJoined(false);
+                else setIsJoined(data.joined === true);
+            })
             .catch((err) => console.error("Joined check error:", err));
     }, [competitionId]);
 
     const datasets = useMemo(() => {
-        return safeJson(competition?.datasets_json, []);
+        return [];
     }, [competition]);
 
     const requiredSkills = useMemo(() => {
@@ -116,8 +127,6 @@ function CompetitionDetails() {
                 return;
             }
 
-            setIsJoined(true);
-            alert("Joined competition successfully");
             setIsJoined(true);
             alert("Joined competition successfully");
 
@@ -188,14 +197,14 @@ function CompetitionDetails() {
                                 <strong>{prize}</strong>
                             </div>
 
-                            {monitoring && monitoring.is_organizer === true ? (
+                            {(monitoring?.is_organizer === true || competition.is_organizer === true || competition.user_role === "organizer") ? (
                                 <button
                                     className="organizer-badge clickable"
                                     onClick={() => navigate(`/competitions/${competitionId}/organizer`)}
                                 >
                                     Check Dashboard →
                                 </button>
-                            ) : isJoined ? (
+                            ) : (isJoined || monitoring?.user_role === "participant" || competition.user_role === "participant") ? (
                                 <button
                                     className="organizer-badge clickable"
                                     onClick={() => navigate(`/competitions/${competitionId}/data-collection`)}
@@ -378,28 +387,12 @@ function CompetitionDetails() {
                                 <button type="button">View File Documentation</button>
                             </div>
 
-                            {datasets.length === 0 ? (
-                                <div className="dataset-row">
-                                    <div>
-                                        <strong>No datasets configured</strong>
-                                        <p>The organizer did not add dataset requirements yet.</p>
-                                    </div>
+                            <div className="dataset-row">
+                                <div>
+                                    <strong>{competition.datasets_count || 0} dataset file(s) configured</strong>
+                                    <p>Dataset files are stored in the competition_datasets table.</p>
                                 </div>
-                            ) : (
-                                datasets.map((dataset, index) => (
-                                    <div className="dataset-row" key={index}>
-                                        <div>
-                                            <strong>{dataset.name || `Dataset ${index + 1}`}</strong>
-                                            <p>
-                                                {dataset.type || dataset.format || "Unknown format"} •{" "}
-                                                {dataset.visibility || "Visibility not specified"} •{" "}
-                                                {dataset.description || "No description"}
-                                            </p>
-                                        </div>
-                                        <span>⇩</span>
-                                    </div>
-                                ))
-                            )}
+                            </div>
                         </section>
                     )}
 

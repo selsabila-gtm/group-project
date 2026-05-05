@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from models import (
@@ -13,14 +13,24 @@ from .utils import get_db, get_icon_for_task
 router = APIRouter(tags=["dashboard"])
 
 
-def compute_status(comp: Competition):
-    today = date.today()
-
+def parse_date(value):
+    if not value:
+        return None
     try:
-        start = datetime.strptime(comp.start_date, "%Y-%m-%d").date() if comp.start_date else None
-        end = datetime.strptime(comp.end_date, "%Y-%m-%d").date() if comp.end_date else None
+        return datetime.strptime(value, "%Y-%m-%d").date()
     except Exception:
-        return comp.status or "UNKNOWN"
+        return None
+
+
+def compute_status(comp: Competition):
+    # IMPORTANT:
+    # competitions.status was deleted from the DB, so never use comp.status here.
+    if comp.is_draft:
+        return "DRAFT"
+
+    today = date.today()
+    start = parse_date(comp.start_date)
+    end = parse_date(comp.end_date)
 
     if start and today < start:
         return "UPCOMING"
@@ -31,7 +41,13 @@ def compute_status(comp: Competition):
     if end and today > end:
         return "CLOSED"
 
-    return comp.status or "OPEN"
+    return "OPEN"
+
+
+def competition_type(comp: Competition):
+    # IMPORTANT:
+    # competitions.category was deleted from the DB, so use task_type only.
+    return (comp.task_type or "GENERAL").upper()
 
 
 def time_ago(value):
@@ -65,32 +81,32 @@ def time_ago(value):
 @router.get("/dashboard/stats/{user_id}")
 def get_dashboard_stats(user_id: str, db: Session = Depends(get_db)):
     organized_competitions = (
-    db.query(CompetitionOrganizer.competition_id)
-    .join(Competition, CompetitionOrganizer.competition_id == Competition.id)
-    .filter(
-        CompetitionOrganizer.user_id == user_id,
-        Competition.is_draft == False,
-    )
-    .distinct()
-    .count()
+        db.query(CompetitionOrganizer.competition_id)
+        .join(Competition, CompetitionOrganizer.competition_id == Competition.id)
+        .filter(
+            CompetitionOrganizer.user_id == user_id,
+            Competition.is_draft == False,
+        )
+        .distinct()
+        .count()
     )
 
     joined_competitions = (
-    db.query(CompetitionParticipant.competition_id)
-    .join(Competition, CompetitionParticipant.competition_id == Competition.id)
-    .filter(
-        CompetitionParticipant.user_id == user_id,
-        Competition.is_draft == False,
-    )
-    .distinct()
-    .count()
+        db.query(CompetitionParticipant.competition_id)
+        .join(Competition, CompetitionParticipant.competition_id == Competition.id)
+        .filter(
+            CompetitionParticipant.user_id == user_id,
+            Competition.is_draft == False,
+        )
+        .distinct()
+        .count()
     )
 
     teams_joined = (
-    db.query(TeamMember.team_id)
-    .filter(TeamMember.user_id == user_id)
-    .distinct()
-    .count()
+        db.query(TeamMember.team_id)
+        .filter(TeamMember.user_id == user_id)
+        .distinct()
+        .count()
     )
 
     return {
@@ -130,7 +146,7 @@ def get_recent_competitions(user_id: str, db: Session = Depends(get_db)):
             "id": f"organized-{comp.id}",
             "competition_id": comp.id,
             "title": comp.title,
-            "type": comp.task_type or comp.category,
+            "type": competition_type(comp),
             "status": compute_status(comp),
             "score": "--",
             "sync": time_ago(action_time),
@@ -144,7 +160,7 @@ def get_recent_competitions(user_id: str, db: Session = Depends(get_db)):
             "id": f"joined-{comp.id}",
             "competition_id": comp.id,
             "title": comp.title,
-            "type": comp.task_type or comp.category,
+            "type": competition_type(comp),
             "status": compute_status(comp),
             "score": "--",
             "sync": time_ago(action_time),

@@ -148,7 +148,7 @@ function mapCompetitionToForm(c) {
 
         complexityLevel: c.complexity_level ?? 0,
 
-        datasets: safeArrayJson(c.datasets_json),
+        datasets: [],
         milestones: safeArrayJson(c.milestones_json),
         validationDate: c.validation_date || "",
         freezeDate: c.freeze_date || "",
@@ -533,7 +533,6 @@ function CreateCompetition({ editMode = false }) {
 
         complexity_level: form.complexityLevel,
 
-        datasets: form.datasets,
         milestones: form.milestones,
         validation_date: form.validationDate || null,
         freeze_date: form.freezeDate || null,

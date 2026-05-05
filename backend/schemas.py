@@ -25,24 +25,18 @@ class DashboardStatOut(BaseModel):
 
 class CompetitionOut(BaseModel):
     id: str
-    category: str
-    status: str
     title: str
     description: str
-    stat1_label: str
-    stat1_value: str
-    stat2_label: str
-    stat2_value: str
-    footer: str
-    muted: bool
 
     is_draft: bool | None = False
     task_type: str | None = None
     start_date: str | None = None
     end_date: str | None = None
     prize_pool: int | None = None
+
     primary_metric: str | None = None
     secondary_metric: str | None = None
+
     max_teams: int | None = None
     min_members: int | None = None
     max_members: int | None = None
@@ -53,14 +47,15 @@ class CompetitionOut(BaseModel):
     allow_pretrained_models: bool | None = True
     require_code_sharing: bool | None = False
     additional_rules: str | None = None
+
     complexity_level: int | None = None
-    datasets_json: str | None = None
     milestones_json: str | None = None
     validation_date: str | None = None
     freeze_date: str | None = None
 
     class Config:
         from_attributes = True
+
 
 class RecentCompetitionOut(BaseModel):
     id: str
@@ -75,12 +70,6 @@ class RecentCompetitionOut(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-
-
-# NOTE: NotificationOut was removed — the notifications router returns plain dicts.
-# If you need a Pydantic schema for notifications, add it in routes/notifications.py.
 
 
 class CompetitionCreateIn(BaseModel):
@@ -106,8 +95,6 @@ class CompetitionCreateIn(BaseModel):
     additional_rules: Optional[str] = None
 
     complexity_level: Optional[int] = None
-
-    datasets: List[Dict[str, Any]] = []
     milestones: List[Dict[str, Any]] = []
     validation_date: Optional[str] = None
     freeze_date: Optional[str] = None
@@ -120,13 +107,15 @@ class CompetitionActionOut(BaseModel):
 
 class DataSampleIn(BaseModel):
     competition_id: str
-    text_content:   Optional[str] = None
-    annotation:     Optional[dict] = None
+    text_content: Optional[str] = None
+    annotation: Optional[dict] = None
+
 
 class DataSampleOut(BaseModel):
-    id:             str
+    id: str
     competition_id: str
-    status:         str
-    submitted_at:   Optional[str]
+    status: str
+    submitted_at: Optional[str]
+
     class Config:
         from_attributes = True
