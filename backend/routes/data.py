@@ -1,13 +1,9 @@
 """
 routes/data.py  — fixed
 
-Bugs fixed vs original:
-  1. quality_score: stored as float() not str() — DB column is double precision
-  2. annotation: stored as json.dumps() string for text/json compatibility;
-     the _parse_annotation() helper in validation.py handles both dict and str
-  3. create_text_sample: shows a user-friendly error toast on flag (not just reject)
-  4. create_audio_sample: quality_score stored as float
-  5. bulk_import: quality_score stored as float
+Key fix: result.reasons (validation failure messages) are now saved into the
+`flags` column on every insert. This powers the "Why?" popover in the UI
+with the actual rule that failed, instead of a generic fallback message.
 """
 
 import csv
@@ -84,8 +80,9 @@ async def create_text_sample(
         text_content=body.text_content,
         annotation=json.dumps(body.annotation or {}),
         status=result.status,
-        # FIX: store as float, not str — DB column is double precision
         quality_score=float(result.quality_score) if result.quality_score is not None else None,
+        # ── FIX: save the actual validation reasons so the UI can show them ──
+        flags=json.dumps(result.reasons),
         submitted_at=datetime.utcnow().isoformat(),
     )
     db.add(sample)
@@ -132,8 +129,11 @@ async def create_audio_sample(
         )
 
     derived_status = result.status
+    derived_reasons = list(result.reasons)
+
     if audio_duration <= 0:
         derived_status = "flagged"
+        derived_reasons.append("Audio duration is zero — recording may be empty.")
 
     sample_id    = str(uuid.uuid4())
     storage_path = f"{competition_id}/{sample_id}.wav"
@@ -151,8 +151,8 @@ async def create_audio_sample(
         audio_duration=audio_duration,
         annotation=annotation,
         status=derived_status,
-        # FIX: float, not str
         quality_score=float(result.quality_score) if result.quality_score is not None else None,
+        flags=json.dumps(derived_reasons),
         submitted_at=datetime.utcnow().isoformat(),
     )
     db.add(sample)
@@ -215,8 +215,8 @@ async def bulk_import(
                 text_content=row["text_content"],
                 annotation=json.dumps(row["annotation"]),
                 status=result.status,
-                # FIX: float, not str
                 quality_score=float(result.quality_score) if result.quality_score is not None else None,
+                flags=json.dumps(result.reasons),
                 submitted_at=datetime.utcnow().isoformat(),
             ))
 

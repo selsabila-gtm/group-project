@@ -536,3 +536,216 @@ button:disabled { opacity: .5; cursor: not-allowed !important; }
     .dh-topbar-tabs  { display: none; }
     .dh-status-filters { display: none; }
 }
+/* ── Version Control — COG-22/23 additions ────────────────────── */
+
+/* Widen left column to fit version cards comfortably */
+.dh-content-area {
+    grid-template-columns: 300px 1fr;
+}
+
+.dh-version-panel {
+    overflow: visible;   /* never clip the snapshot button */
+}
+
+/* Version card (each snapshot entry) */
+.dh-ver-card {
+    border: 1px solid #e8edf8;
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s;
+    overflow: hidden;
+}
+.dh-ver-card:hover     { border-color: #c8d5f5; box-shadow: 0 2px 10px rgba(19,89,219,.07); }
+.dh-ver-card.active    { border-color: #1359db; box-shadow: 0 2px 12px rgba(19,89,219,.12); background: #f8fbff; }
+.dh-ver-card.is-latest { border-left: 3px solid #1359db; }
+
+.dh-ver-card-head {
+    padding: 10px 12px 8px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+}
+.dh-ver-tag {
+    font-size: 13px; font-weight: 800;
+    font-family: 'Courier New', monospace;
+    color: #1d2333;
+}
+.dh-ver-card.active .dh-ver-tag { color: #1359db; }
+.dh-ver-label { font-size: 11px; color: #8d94a8; margin: 2px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dh-ver-date  { font-size: 10px; color: #b0b8cc; font-weight: 600; margin: 1px 0 0; }
+
+.dh-ver-badge-latest {
+    font-size: 8px; font-weight: 800; letter-spacing: .07em;
+    background: #1359db; color: #fff;
+    padding: 2px 7px; border-radius: 99px; white-space: nowrap; flex-shrink: 0;
+}
+.dh-ver-badge-viewing {
+    font-size: 8px; font-weight: 800; letter-spacing: .07em;
+    background: rgba(19,89,219,.12); color: #1359db;
+    padding: 2px 7px; border-radius: 99px; white-space: nowrap; flex-shrink: 0;
+}
+
+/* Stats row inside card */
+.dh-ver-stats {
+    padding: 0 12px 8px;
+    display: flex; gap: 8px; flex-wrap: wrap;
+}
+.dh-ver-stat {
+    font-size: 11px; font-weight: 700;
+}
+
+/* Diff badges */
+.dh-ver-diffs {
+    padding: 0 12px 8px;
+    display: flex; gap: 5px; flex-wrap: wrap;
+}
+.dh-diff-badge {
+    font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 99px; white-space: nowrap;
+}
+.dh-diff-badge.pos { background: rgba(34,197,94,.1);  color: #16a34a; }
+.dh-diff-badge.neg { background: rgba(239,68,68,.1);   color: #dc2626; }
+
+/* Expand toggle */
+.dh-ver-toggle {
+    width: 100%; border: none; background: none;
+    border-top: 1px solid #f0f3fb;
+    padding: 6px 12px; text-align: left;
+    font-size: 10px; font-weight: 600; color: #8d94a8;
+    cursor: pointer; display: flex; align-items: center; gap: 4px;
+    transition: background .12s;
+}
+.dh-ver-toggle:hover { background: #f7f8fc; color: #1359db; }
+
+/* Expanded content */
+.dh-ver-expanded {
+    padding: 10px 12px 12px;
+    border-top: 1px solid #f0f3fb;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.dh-ver-section-title {
+    font-size: 9px; font-weight: 800; letter-spacing: .1em;
+    color: #b0b8cc; text-transform: uppercase; margin: 0 0 4px;
+}
+.dh-ver-changelog { margin: 0; padding-left: 14px; }
+.dh-ver-changelog li { font-size: 11px; color: #4f586f; line-height: 1.6; }
+.dh-ver-notes { font-size: 11px; color: #4f586f; line-height: 1.6; margin: 0; }
+
+/* Label bar inside version */
+.dh-ver-label-bars { display: flex; flex-direction: column; gap: 4px; }
+.dh-ver-label-row  { display: flex; align-items: center; gap: 6px; }
+.dh-ver-label-name { font-size: 10px; color: #4f586f; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
+.dh-ver-label-bar  { flex: 2; height: 4px; background: #eef3ff; border-radius: 2px; overflow: hidden; }
+.dh-ver-label-fill { height: 100%; border-radius: 2px; background: #1359db; }
+.dh-ver-label-pct  { font-size: 10px; color: #8d94a8; font-weight: 700; min-width: 28px; text-align: right; }
+
+/* Organiser action buttons inside cards */
+.dh-ver-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.dh-ver-edit-btn {
+    width: 24px; height: 24px; border: 1px solid #e8edf8; background: #f7f8fc;
+    border-radius: 6px; color: #8d94a8; cursor: pointer; font-size: 11px;
+    display: flex; align-items: center; justify-content: center; transition: all .12s;
+}
+.dh-ver-edit-btn:hover { border-color: #1359db; color: #1359db; background: #eef3ff; }
+.dh-ver-del-btn {
+    width: 24px; height: 24px; border: 1px solid #fecaca; background: #fff5f5;
+    border-radius: 6px; color: #dc2626; cursor: pointer; font-size: 11px;
+    display: flex; align-items: center; justify-content: center; transition: all .12s;
+}
+.dh-ver-del-btn:hover { background: #fee2e2; }
+
+/* Active version filter banner */
+.dh-ver-filter-banner {
+    padding: 7px 10px; border-radius: 8px;
+    background: rgba(19,89,219,.07); border: 1px solid rgba(19,89,219,.2);
+    font-size: 11px; color: #1359db; font-weight: 600;
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+}
+.dh-ver-clear-btn {
+    font-size: 10px; font-weight: 700; color: #1359db;
+    background: none; border: 1px solid rgba(19,89,219,.3); border-radius: 5px;
+    padding: 2px 7px; cursor: pointer; white-space: nowrap; transition: background .12s;
+}
+.dh-ver-clear-btn:hover { background: rgba(19,89,219,.12); }
+
+/* Empty state */
+.dh-ver-empty {
+    padding: 16px 12px; border-radius: 10px; text-align: center;
+    border: 1.5px dashed #e8edf8; color: #8d94a8;
+}
+.dh-ver-empty-title { font-size: 12px; font-weight: 700; color: #4f586f; margin: 0 0 4px; }
+.dh-ver-empty-sub   { font-size: 11px; color: #b0b8cc; margin: 0; line-height: 1.5; }
+
+/* Timeline spine wrapper */
+.dh-ver-timeline { display: flex; flex-direction: column; gap: 8px; }
+.dh-ver-spine    { display: flex; gap: 10px; align-items: flex-start; }
+.dh-ver-spine-col { display: flex; flex-direction: column; align-items: center; width: 14px; flex-shrink: 0; padding-top: 13px; }
+.dh-ver-spine-dot { width: 10px; height: 10px; border-radius: 50%; background: #c8d5f5; border: 2px solid #e8edf8; flex-shrink: 0; }
+.dh-ver-spine-dot.active { background: #1359db; border-color: #a8c0f8; box-shadow: 0 0 0 3px rgba(19,89,219,.15); }
+.dh-ver-spine-line { width: 1px; flex: 1; background: #e8edf8; min-height: 10px; margin-top: 2px; }
+.dh-ver-spine-card { flex: 1; min-width: 0; }
+
+/* Error box in modal */
+.dh-modal-error {
+    padding: 8px 12px; border-radius: 7px;
+    background: rgba(239,68,68,.07); border: 1px solid rgba(239,68,68,.2);
+    color: #dc2626; font-size: 12px;
+}
+
+@media (max-width: 1200px) {
+    .dh-content-area { grid-template-columns: 260px 1fr; }
+}
+
+/* ── Version pinning ──────────────────────────────────────────── */
+
+/* Pin button in card actions */
+.dh-ver-pin-btn {
+    width: 24px; height: 24px; border: 1px solid #e8edf8;
+    background: #f7f8fc; border-radius: 6px;
+    cursor: pointer; font-size: 13px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .12s;
+}
+.dh-ver-pin-btn:hover   { border-color: #f59e0b; background: #fffbeb; }
+.dh-ver-pin-btn.pinned  { border-color: #f59e0b; background: #fffbeb; }
+.dh-ver-pin-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* "In Use" badge on pinned version card */
+.dh-ver-badge-pinned {
+    font-size: 8px; font-weight: 800; letter-spacing: .07em;
+    background: #fffbeb; color: #b45309;
+    border: 1px solid #fcd34d;
+    padding: 2px 7px; border-radius: 99px; white-space: nowrap; flex-shrink: 0;
+}
+
+/* Pinned version status bar inside the version panel */
+.dh-ver-pinned-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px 12px;
+    background: #fffbeb;
+    border: 1.5px solid #fcd34d;
+    border-radius: 10px;
+}
+.dh-ver-pinned-info { display: flex; align-items: center; gap: 8px; }
+.dh-ver-pinned-icon { font-size: 16px; flex-shrink: 0; }
+.dh-ver-pinned-label {
+    font-size: 8px; font-weight: 800; letter-spacing: .1em;
+    text-transform: uppercase; color: #92400e; margin: 0 0 2px;
+}
+.dh-ver-pinned-tag {
+    font-size: 13px; font-weight: 800;
+    font-family: 'Courier New', monospace;
+    color: #b45309; margin: 0;
+}
+.dh-ver-unpin-btn {
+    font-size: 11px; font-weight: 700; color: #92400e;
+    background: none; border: 1px solid #fcd34d;
+    border-radius: 6px; padding: 3px 10px; cursor: pointer;
+    white-space: nowrap; transition: background .12s; flex-shrink: 0;
+}
+.dh-ver-unpin-btn:hover    { background: #fef3c7; }
+.dh-ver-unpin-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Pinned version card gets amber left border */
+.dh-ver-card.is-pinned {
+    border-left: 3px solid #f59e0b;
+}
