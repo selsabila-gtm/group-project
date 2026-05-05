@@ -62,10 +62,12 @@ def get_current_user(authorization: str = Header(...)):
 
 def get_icon_for_task(task_type: str) -> str:
     task = (task_type or "").upper()
-    if "TRANSLATION" in task:  return "文"
-    if "AUDIO"       in task:  return "◉"
-    if "TEXT"        in task:  return "◎"
-    if "COGNITIVE"   in task:  return "▣"
-    if "QUESTION"    in task:  return "Q"
-    if "SUMMARIZATION" in task: return "▤"
-    return "◎"
+    if "TRANSLATION"       in task: return "⇄"
+    if "AUDIO_TRANSCRIPTION" in task: return "◉"
+    if "SPEECH_EMOTION"    in task: return "◕"
+    if "AUDIO_EVENT"       in task: return "▣"
+    if "NER"               in task: return "▦"
+    if "SENTIMENT"         in task: return "◕"
+    if "QUESTION"          in task: return "◈"
+    if "SUMMARIZATION"     in task: return "▤"
+    return "◉"  # TEXT_CLASSIFICATION default

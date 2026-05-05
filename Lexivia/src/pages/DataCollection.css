@@ -817,3 +817,168 @@
 .dh-download-btn {
     border-radius: 0 9px 9px 0;  /* override the existing radius */
 }
+
+/* ──────────────────────────────────────────────────────────────
+   widgets.css
+   Append these rules to the bottom of DataCollection.css.
+   They cover all new widget types added in the refactor.
+   ────────────────────────────────────────────────────────────── */
+
+/* ── NER widget ─────────────────────────────────────────────── */
+.ner-annotation-area {
+  cursor: text;
+  line-height: 1.9;
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #dce3f4;
+  background: #ffffff;
+  min-height: 120px;
+}
+
+.ner-entity-chip {
+  display: inline-flex;
+  align-items: center;
+  background: #f7f8fc;
+  border: 1px solid #e8edf8;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.ner-remove-btn {
+  border: none;
+  background: transparent;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+  margin-left: 2px;
+}
+
+/* ── Translation grid ───────────────────────────────────────── */
+.translation-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.translation-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.translation-divider {
+  font-size: 22px;
+  color: #bcc5d9;
+  align-self: center;
+  margin-top: 20px;
+  user-select: none;
+}
+
+.pane-count {
+  font-size: 10px;
+  color: #9ca3af;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* ── Cognitive / QA row ─────────────────────────────────────── */
+.cognitive-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.cognitive-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── dc-input (single-line) ─────────────────────────────────── */
+.dc-input {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid #dce3f4;
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #1d2333;
+  background: #ffffff;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.dc-input:focus {
+  border-color: #1359db;
+  box-shadow: 0 0 0 3px rgba(19, 89, 219, 0.08);
+}
+
+/* ── Audio event timeline ───────────────────────────────────── */
+.event-timeline {
+  position: relative;
+  height: 48px;
+  background: #f7f8fc;
+  border-radius: 8px;
+  border: 1px solid #e8edf8;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+/* ── dc-dataset-hub-btn ─────────────────────────────────────── */
+.dc-dataset-hub-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #dce3f4;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #1359db;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.dc-dataset-hub-btn:hover {
+  background: #f0f4ff;
+  border-color: #1359db;
+}
+
+.dc-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+/* ── Sentiment slider accent ────────────────────────────────── */
+input[type="range"] {
+  accent-color: #1359db;
+}
+
+/* ── Responsive adjustments ─────────────────────────────────── */
+@media (max-width: 900px) {
+  .translation-grid {
+    grid-template-columns: 1fr;
+  }
+  .translation-divider {
+    transform: rotate(90deg);
+    margin: 0 auto;
+  }
+  .cognitive-row {
+    grid-template-columns: 1fr;
+  }
+}
