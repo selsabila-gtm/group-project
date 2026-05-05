@@ -1,9 +1,9 @@
 """
-routes/data.py  (updated)
+routes/data.py  — fixed
 
-All sample submission endpoints now run the validation pipeline
-BEFORE inserting into the database. The assigned status comes
-directly from the ValidationResult — never hardcoded to "pending".
+Key fix: result.reasons (validation failure messages) are now saved into the
+`flags` column on every insert. This powers the "Why?" popover in the UI
+with the actual rule that failed, instead of a generic fallback message.
 """
 
 import csv
@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from models import Competition, DataSample, CompetitionPrompt, UserProfile
 from schemas import DataSampleIn
 from supabase_client import supabase
-from services.validation_service import validate_sample   # ← new import
+from services.validation_service import validate_sample
 from .utils import get_db, get_current_user
 
 router = APIRouter(tags=["data"])
@@ -31,7 +31,6 @@ router = APIRouter(tags=["data"])
 
 @router.get("/competitions/{competition_id}/prompts/next")
 def get_next_prompt(competition_id: str, db: Session = Depends(get_db)):
-    """Returns the least-used prompt for this competition."""
     prompt = (
         db.query(CompetitionPrompt)
         .filter(CompetitionPrompt.competition_id == competition_id)
@@ -46,7 +45,7 @@ def get_next_prompt(competition_id: str, db: Session = Depends(get_db)):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Text sample  (validated BEFORE insert)
+# Text sample
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/data-samples")
@@ -55,27 +54,16 @@ async def create_text_sample(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Submit a text-based data sample.
-
-    Validation runs first; the sample is only written to the DB once
-    a status has been assigned by the pipeline.
-    Clients receive a 422 with detail when the sample is outright rejected,
-    so the user can correct and resubmit.
-    """
-    # Fetch the competition's task_type to pass to the AI validator
     comp = db.query(Competition).filter(Competition.id == body.competition_id).first()
-    task_type = comp.task_type if comp else "TEXT_PROCESSING"
+    task_type = (comp.task_type if comp else None) or "TEXT_PROCESSING"
 
-    # ── Run validation pipeline ───────────────────────────────────────────
     result = await validate_sample(
         text_content=body.text_content,
         annotation=body.annotation,
-        task_type=task_type or "TEXT_PROCESSING",
+        task_type=task_type,
         run_ai=True,
     )
 
-    # Hard reject: return an error so the frontend can inform the contributor
     if result.status == "rejected":
         raise HTTPException(
             status_code=422,
@@ -86,14 +74,15 @@ async def create_text_sample(
             },
         )
 
-    # ── Insert with the validated/flagged status ──────────────────────────
     sample = DataSample(
         competition_id=body.competition_id,
-        contributor_id=current_user.id,
+        contributor_id=str(current_user.id),
         text_content=body.text_content,
         annotation=json.dumps(body.annotation or {}),
-        status=result.status,                          # never hardcoded
-        quality_score=str(result.quality_score) if result.quality_score is not None else None,
+        status=result.status,
+        quality_score=float(result.quality_score) if result.quality_score is not None else None,
+        # ── FIX: save the actual validation reasons so the UI can show them ──
+        flags=json.dumps(result.reasons),
         submitted_at=datetime.utcnow().isoformat(),
     )
     db.add(sample)
@@ -101,7 +90,7 @@ async def create_text_sample(
     db.refresh(sample)
 
     return {
-        "id": sample.id,
+        "id": str(sample.id),
         "status": sample.status,
         "quality_score": result.quality_score,
         "validation_notes": result.reasons,
@@ -109,7 +98,7 @@ async def create_text_sample(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Audio sample  (lightweight validation — no AI on binary blobs)
+# Audio sample
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/data-samples/audio")
@@ -121,38 +110,30 @@ async def create_audio_sample(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Submit an audio recording.
-
-    We validate the annotation JSON before uploading audio to storage
-    so we don't waste bandwidth on structurally invalid submissions.
-    Audio itself is validated at the media level (duration > 0).
-    """
-    # Parse annotation
     try:
         ann_dict = json.loads(annotation)
     except json.JSONDecodeError:
         raise HTTPException(status_code=422, detail="annotation must be valid JSON")
 
-    # Basic structural validation (no AI for audio — skip run_ai)
     result = await validate_sample(
-        text_content=ann_dict.get("transcript", "placeholder"),  # use transcript if present
+        text_content=ann_dict.get("transcript", "placeholder"),
         annotation=ann_dict,
         task_type="AUDIO SYNTHESIS",
-        run_ai=False,   # AI text scoring not applicable to audio blobs
+        run_ai=False,
     )
 
-    # Reject entirely invalid audio submissions
     if result.status == "rejected":
         raise HTTPException(
             status_code=422,
             detail={"status": "rejected", "reasons": result.reasons},
         )
 
-    # Duration sanity check — flag zero-length recordings
     derived_status = result.status
+    derived_reasons = list(result.reasons)
+
     if audio_duration <= 0:
         derived_status = "flagged"
+        derived_reasons.append("Audio duration is zero — recording may be empty.")
 
     sample_id    = str(uuid.uuid4())
     storage_path = f"{competition_id}/{sample_id}.wav"
@@ -165,11 +146,13 @@ async def create_audio_sample(
     sample = DataSample(
         id=sample_id,
         competition_id=competition_id,
-        contributor_id=current_user.id,
+        contributor_id=str(current_user.id),
         audio_url=storage_path,
-        audio_duration=str(audio_duration),
+        audio_duration=audio_duration,
         annotation=annotation,
         status=derived_status,
+        quality_score=float(result.quality_score) if result.quality_score is not None else None,
+        flags=json.dumps(derived_reasons),
         submitted_at=datetime.utcnow().isoformat(),
     )
     db.add(sample)
@@ -178,7 +161,7 @@ async def create_audio_sample(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Bulk import  (fast-path: rule-based only, no AI per row)
+# Bulk import
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/competitions/{competition_id}/samples/bulk")
@@ -188,28 +171,25 @@ async def bulk_import(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Bulk-import .csv or .jsonl files.
-
-    Each row is validated with run_ai=False (fast rule-based pass).
-    Rows that are rejected are counted separately and NOT inserted.
-    Rows that pass with status "flagged" or "validated" are inserted.
-    """
     inserted = 0
     rejected = 0
 
     for f in files:
         content = (await f.read()).decode("utf-8")
         rows_to_insert = []
-
         raw_rows = []
+
         if f.filename.endswith(".jsonl"):
             for line in content.strip().splitlines():
-                obj = json.loads(line)
-                raw_rows.append({
-                    "text_content": obj.get("text_content"),
-                    "annotation": obj.get("annotation", {}),
-                })
+                try:
+                    obj = json.loads(line)
+                    raw_rows.append({
+                        "text_content": obj.get("text_content"),
+                        "annotation": obj.get("annotation", {}),
+                    })
+                except json.JSONDecodeError:
+                    rejected += 1
+
         elif f.filename.endswith(".csv"):
             reader = csv.DictReader(io.StringIO(content))
             for row in reader:
@@ -219,7 +199,6 @@ async def bulk_import(
                 })
 
         for row in raw_rows:
-            # Validate each row (no AI for bulk speed)
             result = await validate_sample(
                 text_content=row["text_content"],
                 annotation=row["annotation"],
@@ -228,15 +207,16 @@ async def bulk_import(
             )
             if result.status == "rejected":
                 rejected += 1
-                continue  # DO NOT insert rejected rows
+                continue
 
             rows_to_insert.append(DataSample(
                 competition_id=competition_id,
-                contributor_id=current_user.id,
+                contributor_id=str(current_user.id),
                 text_content=row["text_content"],
                 annotation=json.dumps(row["annotation"]),
                 status=result.status,
-                quality_score=str(result.quality_score) if result.quality_score else None,
+                quality_score=float(result.quality_score) if result.quality_score is not None else None,
+                flags=json.dumps(result.reasons),
                 submitted_at=datetime.utcnow().isoformat(),
             ))
 
@@ -248,7 +228,7 @@ async def bulk_import(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Stats helpers (unchanged from original)
+# Stats helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/data-samples/count")
@@ -265,7 +245,7 @@ def my_stats(
 ):
     base = db.query(DataSample).filter(
         DataSample.competition_id == competition_id,
-        DataSample.contributor_id == current_user.id,
+        DataSample.contributor_id == str(current_user.id),
     )
     return {
         "validated": base.filter(DataSample.status == "validated").count(),
@@ -290,8 +270,8 @@ def team_stats(competition_id: str, db: Session = Depends(get_db)):
     members = []
     for contributor_id, cnt in rows:
         profile  = db.query(UserProfile).filter(UserProfile.user_id == contributor_id).first()
-        name     = profile.full_name if profile else "Unknown"
-        initials = "".join(w[0].upper() for w in name.split()[:2])
+        name     = (profile.full_name if profile else None) or "Unknown"
+        initials = "".join(w[0].upper() for w in name.split()[:2]) or "?"
         members.append({
             "id": contributor_id,
             "name": name,
