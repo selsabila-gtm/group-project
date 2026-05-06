@@ -25,51 +25,50 @@ function clearAuthAndGoLogin() {
     window.location.href = "/login";
 }
 
+// ─── Resource tier config ────────────────────────────────────────────────────
+
 const RESOURCE_TIERS = {
     "CPU Basic": {
-        cpuLabel: "2 cores",
-        ramLabel: "4 GB",
-        gpuLabel: "No GPU",
-        diskLabel: "10 GB",
-        cpuPct: 40,
-        ramPct: 45,
-        gpuPct: 0,
+        cpuLabel: "2 cores", ramLabel: "4 GB", gpuLabel: "No GPU", diskLabel: "10 GB",
+        cpuPct: 40, ramPct: 45, gpuPct: 0,
     },
     "GPU Basic": {
-        cpuLabel: "4 cores",
-        ramLabel: "16 GB",
-        gpuLabel: "1 shared GPU",
-        diskLabel: "40 GB",
-        cpuPct: 55,
-        ramPct: 65,
-        gpuPct: 35,
+        cpuLabel: "4 cores", ramLabel: "16 GB", gpuLabel: "1 shared GPU", diskLabel: "40 GB",
+        cpuPct: 55, ramPct: 65, gpuPct: 35,
     },
     "GPU Pro": {
-        cpuLabel: "8 cores",
-        ramLabel: "32 GB",
-        gpuLabel: "1 dedicated GPU",
-        diskLabel: "80 GB",
-        cpuPct: 70,
-        ramPct: 75,
-        gpuPct: 80,
+        cpuLabel: "8 cores", ramLabel: "32 GB", gpuLabel: "1 dedicated GPU", diskLabel: "80 GB",
+        cpuPct: 70, ramPct: 75, gpuPct: 80,
     },
 };
 
-const DEFAULT_CODE = `# Start your experiment here
-print("Hello from Lexivia workspace")
+// ─── Default starter code ────────────────────────────────────────────────────
+
+const DEFAULT_CODE = `# ── Lexivia Workspace ──────────────────────────────────────────────
+# Click "Load Dataset" in the toolbar to populate data/dataset.csv
+# with all validated samples from this competition's Dataset Hub.
+#
+# Then run this file to see your data:
+import pandas as pd
+
+df = pd.read_csv('/home/jovyan/work/data/dataset.csv')
+print('Dataset loaded:', df.shape)
+print(df.head())
+
+# When you train a model, print your metric like this for auto-detection:
+# print('accuracy: 0.94')
+# print('f1: 0.88')
 `;
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
 function ResBar({ label, value, pct }) {
     const color = pct > 75 ? "#f59e0b" : "#22c55e";
-
     return (
         <div className="ws-resbar">
             <span className="ws-resbar-label">{label}</span>
             <div className="ws-resbar-track">
-                <div
-                    className="ws-resbar-fill"
-                    style={{ width: `${pct}%`, background: color }}
-                />
+                <div className="ws-resbar-fill" style={{ width: `${pct}%`, background: color }} />
             </div>
             <span className="ws-resbar-val">{value}</span>
         </div>
@@ -87,18 +86,14 @@ function SaveModal({ saving, onClose, onSave, lastMetric }) {
         epochs: "5",
     });
 
-    const update = (key) => (e) => {
-        setForm((prev) => ({ ...prev, [key]: e.target.value }));
-    };
+    const update = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
     return (
         <div className="ws-modal-overlay" onClick={onClose}>
             <div className="ws-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="ws-modal-header">
                     <span>Save Experiment Run</span>
-                    <button className="ws-modal-close" onClick={onClose}>
-                        ×
-                    </button>
+                    <button className="ws-modal-close" onClick={onClose}>×</button>
                 </div>
 
                 <div className="ws-modal-body">
@@ -121,52 +116,34 @@ function SaveModal({ saving, onClose, onSave, lastMetric }) {
                     <div className="ws-modal-row2">
                         <div>
                             <label className="ws-modal-label">Metric Name</label>
-                            <input
-                                className="ws-modal-input"
-                                value={form.metric_name}
-                                onChange={update("metric_name")}
-                            />
+                            <input className="ws-modal-input" value={form.metric_name} onChange={update("metric_name")} />
                         </div>
-
                         <div>
                             <label className="ws-modal-label">Metric Value</label>
-                            <input
-                                className="ws-modal-input"
-                                value={form.metric_value}
-                                onChange={update("metric_value")}
-                                placeholder="0.94"
-                            />
+                            <input className="ws-modal-input" value={form.metric_value} onChange={update("metric_value")} placeholder="0.94" />
                         </div>
                     </div>
 
                     <div className="ws-modal-row3">
                         <div>
                             <label className="ws-modal-label">LR</label>
-                            <input
-                                className="ws-modal-input"
-                                value={form.learning_rate}
-                                onChange={update("learning_rate")}
-                            />
+                            <input className="ws-modal-input" value={form.learning_rate} onChange={update("learning_rate")} />
                         </div>
-
                         <div>
                             <label className="ws-modal-label">Batch</label>
-                            <input
-                                className="ws-modal-input"
-                                value={form.batch_size}
-                                onChange={update("batch_size")}
-                            />
+                            <input className="ws-modal-input" value={form.batch_size} onChange={update("batch_size")} />
                         </div>
-
                         <div>
                             <label className="ws-modal-label">Epochs</label>
-                            <input
-                                className="ws-modal-input"
-                                value={form.epochs}
-                                onChange={update("epochs")}
-                            />
+                            <input className="ws-modal-input" value={form.epochs} onChange={update("epochs")} />
                         </div>
                     </div>
+
+                    {lastMetric && (
+                        <p style={{ fontSize: 12, color: "#22c55e", marginBottom: 8 }}>
+                            ✓ Metric auto-detected from last run: {lastMetric.name} = {lastMetric.value}
+                        </p>
+                    )}
 
                     <button
                         className="ws-modal-save"
@@ -181,9 +158,12 @@ function SaveModal({ saving, onClose, onSave, lastMetric }) {
     );
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function Experiments() {
     const { competitionId } = useParams();
 
+    // ── State ──────────────────────────────────────────────────────────────────
     const [competition, setCompetition] = useState(null);
     const [workspace, setWorkspace] = useState(null);
     const [experiments, setExperiments] = useState([]);
@@ -204,42 +184,41 @@ export default function Experiments() {
     const [toast, setToast] = useState("");
     const [pageError, setPageError] = useState("");
     const [stdinByFile, setStdinByFile] = useState({});
-    const activeStdin = stdinByFile[activeFile] || "";
-    const [pushHistory, setPushHistory] = useState([]);
-    const fileInputRef = useRef(null);
     const [lastMetric, setLastMetric] = useState(null);
-
     const [uptime, setUptime] = useState(0);
+
+    // Dataset loading state
+    const [loadingDataset, setLoadingDataset] = useState(false);
+    const [datasetInfo, setDatasetInfo] = useState(null); // { sample_count, files_written }
+
+    const activeStdin = stdinByFile[activeFile] || "";
+    const fileInputRef = useRef(null);
     const uptimeRef = useRef(null);
 
     const isRunning = workspace?.status === "running";
 
-    const tier = useMemo(() => {
-        return RESOURCE_TIERS[resourceTier] || RESOURCE_TIERS["GPU Basic"];
-    }, [resourceTier]);
+    const tier = useMemo(
+        () => RESOURCE_TIERS[resourceTier] || RESOURCE_TIERS["GPU Basic"],
+        [resourceTier],
+    );
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
 
     const showToast = (msg) => {
         setToast(msg);
-        setTimeout(() => setToast(""), 2200);
+        setTimeout(() => setToast(""), 2800);
     };
 
     const safeJson = async (res) => {
         const text = await res.text();
-
-        try {
-            return text ? JSON.parse(text) : {};
-        } catch {
-            return { detail: text };
-        }
+        try { return text ? JSON.parse(text) : {}; }
+        catch { return { detail: text }; }
     };
 
     const request = async (url, options = {}) => {
         const res = await fetch(url, {
             ...options,
-            headers: {
-                ...(options.headers || {}),
-                ...authHeader(),
-            },
+            headers: { ...(options.headers || {}), ...authHeader() },
         });
 
         if (res.status === 401) {
@@ -249,36 +228,48 @@ export default function Experiments() {
 
         const data = await safeJson(res);
 
-        if (!res.ok) {
-            throw new Error(data.detail || "Request failed");
-        }
+        if (!res.ok) throw new Error(data.detail || "Request failed");
 
         return data;
     };
 
-    const loadFile = useCallback(
-        async (filename) => {
-            if (!filename) return;
+    const fmtUptime = (seconds) => {
+        const h = String(Math.floor(seconds / 3600)).padStart(2, "0");
+        const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, "0");
+        const s = String(seconds % 60).padStart(2, "0");
+        return `${h}:${m}:${s}`;
+    };
 
-            setActiveFile(filename);
-            setOpenTabs((prev) =>
-                prev.includes(filename) ? prev : [...prev, filename]
+    // Display values — use real workspace limits if available, else tier defaults
+    const displayCpu = workspace?.cpu_limit || tier.cpuLabel;
+    const displayRam = workspace?.ram_limit || tier.ramLabel;
+    const displayGpu = workspace?.gpu_limit || tier.gpuLabel;
+    const displayDisk = workspace?.storage_limit || tier.diskLabel;
+
+    // Git hash derived from container_id
+    const gitHash = workspace?.container_id
+        ? workspace.container_id.replace("ctr-", "").slice(0, 7)
+        : "local";
+
+    // ── File loading ───────────────────────────────────────────────────────────
+
+    const loadFile = useCallback(async (filename) => {
+        if (!filename) return;
+
+        setActiveFile(filename);
+        setOpenTabs((prev) => prev.includes(filename) ? prev : [...prev, filename]);
+
+        try {
+            const data = await request(
+                `${API}/competitions/${competitionId}/workspace/file?filename=${encodeURIComponent(filename)}`
             );
+            setFileContent(data.content ?? "");
+        } catch (err) {
+            setRunOutput(String(err.message || err));
+        }
+    }, [competitionId]);
 
-            try {
-                const data = await request(
-                    `${API}/competitions/${competitionId}/workspace/file?filename=${encodeURIComponent(
-                        filename
-                    )}`
-                );
-
-                setFileContent(data.content ?? "");
-            } catch (err) {
-                setRunOutput(String(err.message || err));
-            }
-        },
-        [competitionId]
-    );
+    // ── Page load ──────────────────────────────────────────────────────────────
 
     const loadPage = useCallback(async () => {
         setLoading(true);
@@ -320,10 +311,9 @@ export default function Experiments() {
         }
     }, [competitionId, loadFile]);
 
-    useEffect(() => {
-        loadPage();
-    }, [loadPage]);
+    useEffect(() => { loadPage(); }, [loadPage]);
 
+    // ── Uptime counter — resets only when workspace goes from stopped → running ─
     useEffect(() => {
         clearInterval(uptimeRef.current);
 
@@ -336,31 +326,18 @@ export default function Experiments() {
         return () => clearInterval(uptimeRef.current);
     }, [isRunning]);
 
-    const fmtUptime = (seconds) => {
-        const h = String(Math.floor(seconds / 3600)).padStart(2, "0");
-        const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, "0");
-        const s = String(seconds % 60).padStart(2, "0");
-
-        return `${h}:${m}:${s}`;
-    };
+    // ── File operations ────────────────────────────────────────────────────────
 
     const saveCurrentFile = async () => {
         if (!activeFile) return;
-
         setSavingFile(true);
 
         try {
             await request(`${API}/competitions/${competitionId}/workspace/file`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    filename: activeFile,
-                    content: fileContent,
-                }),
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ filename: activeFile, content: fileContent }),
             });
-
             showToast("File saved");
         } catch (err) {
             setRunOutput(String(err.message || err));
@@ -368,6 +345,7 @@ export default function Experiments() {
             setSavingFile(false);
         }
     };
+
     const downloadCurrentFile = async () => {
         if (!activeFile) return;
 
@@ -384,149 +362,17 @@ export default function Experiments() {
 
             const blob = await res.blob();
             const url = window.URL.createObjectURL(blob);
-
             const a = document.createElement("a");
             a.href = url;
             a.download = activeFile;
             document.body.appendChild(a);
             a.click();
             a.remove();
-
             window.URL.revokeObjectURL(url);
             showToast("File downloaded");
         } catch (err) {
             setRunOutput(String(err.message || err));
         }
-    };
-
-    const launchWorkspace = async () => {
-        setLaunching(true);
-
-        try {
-            const data = await request(
-                `${API}/competitions/${competitionId}/workspace/launch`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ resource_tier: resourceTier }),
-                }
-            );
-
-            setWorkspace(data.workspace);
-            setKernelStatus("RUNNING");
-            showToast("Workspace launched");
-
-            const notebookUrl = data.notebook_url || data.workspace?.notebook_url;
-
-            if (notebookUrl && notebookUrl.startsWith("http")) {
-                window.open(notebookUrl, "_blank", "noopener,noreferrer");
-            }
-        } catch (err) {
-            setPageError(String(err.message || err));
-        } finally {
-            setLaunching(false);
-        }
-    };
-
-    const stopWorkspace = async () => {
-        try {
-            const data = await request(
-                `${API}/competitions/${competitionId}/workspace/stop`,
-                {
-                    method: "POST",
-                }
-            );
-
-            setWorkspace(data.workspace);
-            setKernelStatus("IDLE");
-            showToast("Workspace stopped");
-        } catch (err) {
-            setPageError(String(err.message || err));
-        }
-    };
-
-    const openJupyter = async () => {
-        if (workspace?.notebook_url && workspace.notebook_url.startsWith("http")) {
-            window.open(workspace.notebook_url, "_blank", "noopener,noreferrer");
-            return;
-        }
-
-        try {
-            const data = await request(
-                `${API}/competitions/${competitionId}/workspace/jupyter`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ resource_tier: resourceTier }),
-                }
-            );
-
-            const url = data.notebook_url || data.workspace?.notebook_url;
-
-            if (url) {
-                window.open(url, "_blank", "noopener,noreferrer");
-            }
-        } catch (err) {
-            setPageError(String(err.message || err));
-        }
-    };
-
-    const runCurrentFile = async () => {
-        if (!activeFile) return;
-
-        await saveCurrentFile();
-
-        setRunning(true);
-        setKernelStatus("BUSY");
-        setRunOutput("Running...");
-        setLastMetric(null);
-
-        try {
-            const data = await request(
-                `${API}/competitions/${competitionId}/workspace/run`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        filename: activeFile,
-                        content: fileContent,
-                        stdin: activeStdin
-                            ? activeStdin.endsWith("\n")
-                                ? activeStdin
-                                : `${activeStdin}\n`
-                            : "",
-                    }),
-                }
-            );
-
-            setRunOutput(
-                `${data.stdout || ""}${data.stderr ? `\nERROR:\n${data.stderr}` : ""}${data.exit_code !== undefined ? `\n\nExit code: ${data.exit_code}` : ""
-                }`
-            );
-
-            if (data.metric_name && data.metric_value) {
-                setLastMetric({
-                    name: data.metric_name,
-                    value: data.metric_value,
-                });
-                showToast(`Metric detected: ${data.metric_name}=${data.metric_value}`);
-            }
-        } catch (err) {
-            setRunOutput(String(err.message || err));
-        } finally {
-            setRunning(false);
-            setKernelStatus(isRunning ? "RUNNING" : "IDLE");
-        }
-    };
-
-    const runAll = async () => {
-        await runCurrentFile();
     };
 
     const createNewFile = async () => {
@@ -536,15 +382,12 @@ export default function Experiments() {
         try {
             await request(`${API}/competitions/${competitionId}/workspace/file`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     filename,
                     content: filename.endsWith(".txt") ? "" : "# New file\n",
                 }),
             });
-
             await loadPage();
             await loadFile(filename);
             showToast("File created");
@@ -552,6 +395,7 @@ export default function Experiments() {
             setRunOutput(String(err.message || err));
         }
     };
+
     const uploadWorkspaceFile = async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -560,11 +404,10 @@ export default function Experiments() {
         formData.append("file", file);
 
         try {
-            const res = await fetch(`${API}/competitions/${competitionId}/workspace/upload`, {
-                method: "POST",
-                headers: authHeader(),
-                body: formData,
-            });
+            const res = await fetch(
+                `${API}/competitions/${competitionId}/workspace/upload`,
+                { method: "POST", headers: authHeader(), body: formData }
+            );
 
             const data = await safeJson(res);
             if (res.status === 401) return clearAuthAndGoLogin();
@@ -580,40 +423,175 @@ export default function Experiments() {
         }
     };
 
-    const pushChanges = async () => {
-        await saveCurrentFile();
-
-        const message = prompt("Commit message:", "Update workspace files");
-        if (!message) return;
-
-        try {
-            const data = await request(`${API}/competitions/${competitionId}/workspace/push`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message }),
-            });
-
-            setPushHistory(data.history || []);
-            showToast("Changes pushed");
-        } catch (err) {
-            setRunOutput(String(err.message || err));
-        }
-    };
-
     const closeTab = (filename, e) => {
         e.stopPropagation();
-
         const nextTabs = openTabs.filter((tab) => tab !== filename);
         setOpenTabs(nextTabs);
 
         if (activeFile === filename) {
             const next = nextTabs[nextTabs.length - 1] || "";
             setActiveFile(next);
-
             if (next) loadFile(next);
             else setFileContent("");
         }
     };
+
+    // ── Workspace lifecycle ────────────────────────────────────────────────────
+
+    const launchWorkspace = async () => {
+        setLaunching(true);
+
+        try {
+            const data = await request(
+                `${API}/competitions/${competitionId}/workspace/launch`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ resource_tier: resourceTier }),
+                }
+            );
+
+            setWorkspace(data.workspace);
+            setKernelStatus("RUNNING");
+            showToast("Workspace launched");
+
+            const notebookUrl = data.notebook_url || data.workspace?.notebook_url;
+            if (notebookUrl?.startsWith("http")) {
+                window.open(notebookUrl, "_blank", "noopener,noreferrer");
+            }
+        } catch (err) {
+            setPageError(String(err.message || err));
+        } finally {
+            setLaunching(false);
+        }
+    };
+
+    const stopWorkspace = async () => {
+        try {
+            const data = await request(
+                `${API}/competitions/${competitionId}/workspace/stop`,
+                { method: "POST" }
+            );
+            setWorkspace(data.workspace);
+            setKernelStatus("IDLE");
+            showToast("Workspace stopped");
+        } catch (err) {
+            setPageError(String(err.message || err));
+        }
+    };
+
+    const openJupyter = async () => {
+        if (workspace?.notebook_url?.startsWith("http")) {
+            window.open(workspace.notebook_url, "_blank", "noopener,noreferrer");
+            return;
+        }
+
+        try {
+            const data = await request(
+                `${API}/competitions/${competitionId}/workspace/jupyter`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ resource_tier: resourceTier }),
+                }
+            );
+
+            const url = data.notebook_url || data.workspace?.notebook_url;
+            if (url) window.open(url, "_blank", "noopener,noreferrer");
+        } catch (err) {
+            setPageError(String(err.message || err));
+        }
+    };
+
+    // ── Dataset bridge ─────────────────────────────────────────────────────────
+
+    const loadDatasetIntoWorkspace = async () => {
+        setLoadingDataset(true);
+        setRunOutput("Loading dataset from Dataset Hub into workspace...");
+
+        try {
+            const data = await request(
+                `${API}/competitions/${competitionId}/workspace/load-dataset`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ format: "both" }),
+                }
+            );
+
+            setDatasetInfo({
+                sample_count: data.sample_count,
+                files_written: data.files_written,
+            });
+
+            setRunOutput(
+                `✓ ${data.message}\n\n` +
+                `Files written:\n${(data.files_written || []).map(f => `  • ${f}`).join("\n")}\n\n` +
+                `Container paths:\n${(data.container_paths || []).map(f => `  ${f}`).join("\n")}\n\n` +
+                `Usage:\n${data.usage_hint}`
+            );
+
+            // Refresh file list so data/dataset.csv appears
+            await loadPage();
+
+            showToast(`✓ Dataset loaded: ${data.sample_count} validated samples`);
+        } catch (err) {
+            const msg = String(err.message || err);
+            setRunOutput(`⚠ Dataset load failed:\n${msg}`);
+            showToast(`⚠ ${msg}`);
+        } finally {
+            setLoadingDataset(false);
+        }
+    };
+
+    // ── Code execution ─────────────────────────────────────────────────────────
+
+    const runCurrentFile = async () => {
+        if (!activeFile) return;
+        await saveCurrentFile();
+
+        setRunning(true);
+        setKernelStatus("BUSY");
+        setRunOutput("Running...");
+        setLastMetric(null);
+
+        try {
+            const stdin = activeStdin
+                ? activeStdin.endsWith("\n") ? activeStdin : `${activeStdin}\n`
+                : "";
+
+            const data = await request(
+                `${API}/competitions/${competitionId}/workspace/run`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        filename: activeFile,
+                        content: fileContent,
+                        stdin,
+                    }),
+                }
+            );
+
+            setRunOutput(
+                `${data.stdout || ""}` +
+                `${data.stderr ? `\nERROR:\n${data.stderr}` : ""}` +
+                `${data.exit_code !== undefined ? `\n\nExit code: ${data.exit_code}` : ""}`
+            );
+
+            if (data.metric_name && data.metric_value) {
+                setLastMetric({ name: data.metric_name, value: data.metric_value });
+                showToast(`Metric detected: ${data.metric_name} = ${data.metric_value}`);
+            }
+        } catch (err) {
+            setRunOutput(String(err.message || err));
+        } finally {
+            setRunning(false);
+            setKernelStatus(isRunning ? "RUNNING" : "IDLE");
+        }
+    };
+
+    // ── Experiment saving ──────────────────────────────────────────────────────
 
     const saveExperiment = async (form) => {
         setSavingRun(true);
@@ -625,9 +603,7 @@ export default function Experiments() {
                 `${API}/competitions/${competitionId}/experiments`,
                 {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         name: form.name,
                         notes: form.notes,
@@ -655,14 +631,26 @@ export default function Experiments() {
         }
     };
 
-    const displayCpu = workspace?.cpu_limit || tier.cpuLabel;
-    const displayRam = workspace?.ram_limit || tier.ramLabel;
-    const displayGpu = workspace?.gpu_limit || tier.gpuLabel;
-    const displayDisk = workspace?.storage_limit || tier.diskLabel;
+    // ── Push changes ───────────────────────────────────────────────────────────
 
-    const gitHash = workspace?.container_id
-        ? workspace.container_id.replace("ctr-", "").slice(0, 7)
-        : "local";
+    const pushChanges = async () => {
+        await saveCurrentFile();
+        const message = prompt("Commit message:", "Update workspace files");
+        if (!message) return;
+
+        try {
+            await request(`${API}/competitions/${competitionId}/workspace/push`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message }),
+            });
+            showToast("Changes pushed");
+        } catch (err) {
+            setRunOutput(String(err.message || err));
+        }
+    };
+
+    // ── Loading / error states ─────────────────────────────────────────────────
 
     if (loading) {
         return (
@@ -677,12 +665,12 @@ export default function Experiments() {
         return (
             <div className="ws-boot">
                 <span style={{ color: "#f85149" }}>{pageError}</span>
-                <button className="ws-btn ws-btn--launch" onClick={loadPage}>
-                    Retry
-                </button>
+                <button className="ws-btn ws-btn--launch" onClick={loadPage}>Retry</button>
             </div>
         );
     }
+
+    // ── Render ─────────────────────────────────────────────────────────────────
 
     return (
         <div className="ws-shell">
@@ -693,14 +681,14 @@ export default function Experiments() {
             />
 
             <div className="ws-ide">
+                {/* Chrome bar: resource usage + tier selector + kernel controls */}
                 <div className="ws-chrome">
                     <div className="ws-chrome-logo">
                         <div className="ws-logo-icon">⬡</div>
                         <div>
                             <div className="ws-logo-name">{competition?.title || "Workspace"}</div>
                             <div className="ws-logo-sub">
-                                {resourceTier.toUpperCase()} ·{" "}
-                                {workspace?.docker_image || "lexivia/notebook-gpu:latest"}
+                                {resourceTier.toUpperCase()} · {workspace?.docker_image || "lexivia/notebook-gpu:latest"}
                             </div>
                         </div>
                     </div>
@@ -749,6 +737,7 @@ export default function Experiments() {
                     </div>
                 </div>
 
+                {/* Tab bar */}
                 <div className="ws-tabbar">
                     {openTabs.map((tab) => (
                         <button
@@ -756,33 +745,23 @@ export default function Experiments() {
                             className={`ws-tab ${activeFile === tab ? "ws-tab--active" : ""}`}
                             onClick={() => loadFile(tab)}
                         >
-                            <span
-                                className={`ws-tab-dot ${tab.endsWith(".py")
-                                    ? "ws-tab-dot--py"
-                                    : tab.endsWith(".txt")
-                                        ? "ws-tab-dot--txt"
-                                        : "ws-tab-dot--nb"
-                                    }`}
-                            />
+                            <span className={`ws-tab-dot ${tab.endsWith(".py") ? "ws-tab-dot--py" :
+                                tab.endsWith(".txt") ? "ws-tab-dot--txt" : "ws-tab-dot--nb"
+                                }`} />
                             {tab}
-                            <span className="ws-tab-x" onClick={(e) => closeTab(tab, e)}>
-                                ×
-                            </span>
+                            <span className="ws-tab-x" onClick={(e) => closeTab(tab, e)}>×</span>
                         </button>
                     ))}
                 </div>
 
                 <div className="ws-body">
+                    {/* Left sidebar: file explorer + saved runs */}
                     <aside className="ws-explorer">
                         <div className="ws-pane-title">
                             EXPLORER
                             <div className="ws-pane-actions">
-                                <button className="ws-icon-btn" onClick={createNewFile}>
-                                    +
-                                </button>
-                                <button className="ws-icon-btn" onClick={loadPage}>
-                                    ↻
-                                </button>
+                                <button className="ws-icon-btn" onClick={createNewFile}>+</button>
+                                <button className="ws-icon-btn" onClick={loadPage}>↻</button>
                             </div>
                         </div>
 
@@ -790,7 +769,11 @@ export default function Experiments() {
                             <div className="ws-tree-folder">
                                 <span className="ws-arrow">▸</span>
                                 <span>data</span>
-                                <span className="ws-ro-badge">RO</span>
+                                {datasetInfo && (
+                                    <span className="ws-ro-badge" title={`${datasetInfo.sample_count} samples`}>
+                                        {datasetInfo.sample_count}
+                                    </span>
+                                )}
                             </div>
 
                             <div className="ws-tree-folder">
@@ -806,18 +789,12 @@ export default function Experiments() {
                             {files.map((file) => (
                                 <button
                                     key={file}
-                                    className={`ws-tree-file ${activeFile === file ? "ws-tree-file--active" : ""
-                                        }`}
+                                    className={`ws-tree-file ${activeFile === file ? "ws-tree-file--active" : ""}`}
                                     onClick={() => loadFile(file)}
                                 >
-                                    <span
-                                        className={`ws-file-dot ${file.endsWith(".py")
-                                            ? "ws-file-dot--py"
-                                            : file.endsWith(".txt")
-                                                ? "ws-file-dot--txt"
-                                                : "ws-file-dot--nb"
-                                            }`}
-                                    />
+                                    <span className={`ws-file-dot ${file.endsWith(".py") ? "ws-file-dot--py" :
+                                        file.endsWith(".txt") ? "ws-file-dot--txt" : "ws-file-dot--nb"
+                                        }`} />
                                     {file}
                                 </button>
                             ))}
@@ -844,9 +821,10 @@ export default function Experiments() {
                         </div>
                     </aside>
 
+                    {/* Main editor area */}
                     <main className="ws-notebook">
                         <div className="ws-nb-toolbar">
-                            <button className="ws-nb-btn" disabled={!isRunning || running} onClick={runAll}>
+                            <button className="ws-nb-btn" disabled={!isRunning || running} onClick={runCurrentFile}>
                                 ▶ Run Active File
                             </button>
 
@@ -854,15 +832,13 @@ export default function Experiments() {
                                 ▶ Run
                             </button>
 
-                            <button className="ws-nb-btn" onClick={createNewFile}>
-                                + File
-                            </button>
+                            <button className="ws-nb-btn" onClick={createNewFile}>+ File</button>
+
                             <button className="ws-nb-btn" onClick={() => fileInputRef.current?.click()}>
                                 ↑ Upload
                             </button>
-                            <button className="ws-nb-btn" onClick={downloadCurrentFile}>
-                                ↓ Download
-                            </button>
+
+                            <button className="ws-nb-btn" onClick={downloadCurrentFile}>↓ Download</button>
 
                             <input
                                 ref={fileInputRef}
@@ -872,13 +848,13 @@ export default function Experiments() {
                                 onChange={uploadWorkspaceFile}
                             />
 
-                            <button className="ws-nb-btn" onClick={() => {
-                                setRunOutput("");
-                                setStdinByFile((prev) => ({
-                                    ...prev,
-                                    [activeFile]: "",
-                                }));
-                            }}>
+                            <button
+                                className="ws-nb-btn"
+                                onClick={() => {
+                                    setRunOutput("");
+                                    setStdinByFile((prev) => ({ ...prev, [activeFile]: "" }));
+                                }}
+                            >
                                 ⊘ Clear
                             </button>
 
@@ -886,9 +862,23 @@ export default function Experiments() {
                                 {savingFile ? "Saving..." : "Save File"}
                             </button>
 
+                            {/* ── Dataset bridge button ── */}
+                            <button
+                                className="ws-nb-btn ws-nb-btn--dataset"
+                                disabled={loadingDataset}
+                                onClick={loadDatasetIntoWorkspace}
+                                title="Export validated samples from Dataset Hub into data/dataset.csv inside the container"
+                            >
+                                {loadingDataset
+                                    ? "Loading..."
+                                    : datasetInfo
+                                        ? `⟳ Reload Dataset (${datasetInfo.sample_count})`
+                                        : "⬇ Load Dataset"}
+                            </button>
+
                             <button
                                 className="ws-nb-btn ws-nb-btn--save"
-                                disabled={!isRunning}
+                                disabled={!lastMetric && !runOutput}
                                 onClick={() => setShowSaveModal(true)}
                             >
                                 ↑ Save Experiment
@@ -896,6 +886,7 @@ export default function Experiments() {
                         </div>
 
                         <div className="ws-nb-scroll">
+                            {/* Code editor */}
                             <div className="ws-code-editor">
                                 <div className="ws-code-editor-head">
                                     <span>{activeFile || "No file selected"}</span>
@@ -915,37 +906,31 @@ export default function Experiments() {
                                 />
                             </div>
 
+                            {/* stdin */}
                             <div className="ws-code-editor ws-small-block">
                                 <div className="ws-code-editor-head">
                                     <span>Input for input()</span>
                                 </div>
-
                                 <textarea
                                     className="ws-code-textarea ws-code-textarea--stdin"
                                     value={activeStdin}
                                     onChange={(e) =>
-                                        setStdinByFile((prev) => ({
-                                            ...prev,
-                                            [activeFile]: e.target.value,
-                                        }))
+                                        setStdinByFile((prev) => ({ ...prev, [activeFile]: e.target.value }))
                                     }
                                     placeholder={"Example:\nAla"}
                                     spellCheck="false"
                                 />
                             </div>
 
+                            {/* output */}
                             <div className="ws-code-editor ws-small-block">
                                 <div className="ws-code-editor-head">
                                     <span>Output</span>
                                     <button onClick={() => {
                                         setRunOutput("");
-                                        setStdinByFile((prev) => ({
-                                            ...prev,
-                                            [activeFile]: "",
-                                        }));
+                                        setStdinByFile((prev) => ({ ...prev, [activeFile]: "" }));
                                     }}>Clear</button>
                                 </div>
-
                                 <pre className="ws-code-output">
                                     {runOutput || "Run output will appear here."}
                                 </pre>
@@ -953,26 +938,30 @@ export default function Experiments() {
                         </div>
 
                         <div className="ws-statusbar">
-                            <span
-                                className={`ws-status-led ${isRunning ? "ws-status-led--on" : "ws-status-led--off"
-                                    }`}
-                            />
+                            <span className={`ws-status-led ${isRunning ? "ws-status-led--on" : "ws-status-led--off"}`} />
                             <span>STATUS: {kernelStatus}</span>
                             <div className="ws-statusbar-sep" />
                             <span>KERNEL: Python 3.10</span>
                             <div className="ws-statusbar-sep" />
                             <span>UPTIME: {fmtUptime(uptime)}</span>
                             <div className="ws-statusbar-sep" />
+                            {datasetInfo && (
+                                <>
+                                    <span style={{ color: "#22c55e" }}>
+                                        DATASET: {datasetInfo.sample_count} samples loaded
+                                    </span>
+                                    <div className="ws-statusbar-sep" />
+                                </>
+                            )}
                             <span>SAVE: Manual</span>
                         </div>
                     </main>
 
+                    {/* Right panel: env info + git history */}
                     <aside className="ws-envpanel">
                         <div className="ws-pane-title">
                             ENVIRONMENT INFO
-                            <button className="ws-icon-btn" onClick={loadPage}>
-                                ↻
-                            </button>
+                            <button className="ws-icon-btn" onClick={loadPage}>↻</button>
                         </div>
 
                         <div className="ws-env-list">
@@ -997,40 +986,20 @@ export default function Experiments() {
                         <div className="ws-pane-title ws-pane-title--mt">CONTAINER</div>
 
                         <div className="ws-container-info">
-                            <div className="ws-ci-row">
-                                <span>Docker Image</span>
-                                <code>{workspace?.docker_image || "not launched"}</code>
-                            </div>
-
-                            <div className="ws-ci-row">
-                                <span>Container ID</span>
-                                <code>{workspace?.container_id || "not launched"}</code>
-                            </div>
-
-                            <div className="ws-ci-row">
-                                <span>Jupyter URL</span>
-                                <code>{workspace?.notebook_url || "not ready"}</code>
-                            </div>
-
-                            <div className="ws-ci-row">
-                                <span>CPU</span>
-                                <code>{displayCpu}</code>
-                            </div>
-
-                            <div className="ws-ci-row">
-                                <span>RAM</span>
-                                <code>{displayRam}</code>
-                            </div>
-
-                            <div className="ws-ci-row">
-                                <span>GPU</span>
-                                <code>{displayGpu}</code>
-                            </div>
-
-                            <div className="ws-ci-row">
-                                <span>Storage</span>
-                                <code>{displayDisk}</code>
-                            </div>
+                            {[
+                                ["Docker Image", workspace?.docker_image || "not launched"],
+                                ["Container ID", workspace?.container_id || "not launched"],
+                                ["Jupyter URL", workspace?.notebook_url || "not ready"],
+                                ["CPU", displayCpu],
+                                ["RAM", displayRam],
+                                ["GPU", displayGpu],
+                                ["Storage", displayDisk],
+                            ].map(([label, value]) => (
+                                <div key={label} className="ws-ci-row">
+                                    <span>{label}</span>
+                                    <code>{value}</code>
+                                </div>
+                            ))}
                         </div>
 
                         <div className="ws-pane-title ws-pane-title--mt">GIT COMMIT HISTORY</div>
@@ -1044,7 +1013,6 @@ export default function Experiments() {
                                 </div>
                                 <span className="ws-git-time">now</span>
                             </div>
-
                             <div className="ws-git-row">
                                 <span className="ws-git-dot" />
                                 <div className="ws-git-info">
