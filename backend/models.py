@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, Text, ForeignKey
+from sqlalchemy import Column, Float, String, Integer, Boolean, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime
@@ -187,3 +187,19 @@ class ExperimentRun(Base):
     artifact_path = Column(String, nullable=True)
 
     created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
+
+
+class Submission(Base):
+    __tablename__ = "submissions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    competition_id = Column(String, ForeignKey("competitions.id"), nullable=False)
+    user_id = Column(String, ForeignKey("user_profiles.user_id"), nullable=False)
+    team_id = Column(String, nullable=True)
+    model_filename = Column(String, nullable=False)
+    status = Column(String, default="pending")   # pending / running / done / failed
+    score = Column(Float, nullable=True)
+    metric_name = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    submitted_at = Column(String, default=lambda: datetime.utcnow().isoformat())
+    evaluated_at = Column(String, nullable=True)    

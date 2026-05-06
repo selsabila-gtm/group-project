@@ -214,6 +214,11 @@ def stop_and_remove_container(container_name: str):
     if docker_container_exists(container_name):
         run_cmd(["docker", "rm", "-f", container_name])
 
+TIER_LIMITS = {
+    "CPU Basic": {"cpus": "2", "memory": "4g"},
+    "GPU Basic": {"cpus": "4", "memory": "16g"},
+    "GPU Pro":   {"cpus": "8", "memory": "32g"},
+}
 
 def apply_resource_limits(workspace, tier: str):
     tiers = {
@@ -262,12 +267,16 @@ def launch_real_jupyter(competition_id: str, user_id: str, tier: str, workspace)
     if docker_container_exists(container_name):
         stop_and_remove_container(container_name)
 
-    port  = get_free_port()
+    port = get_free_port()
     token = uuid.uuid4().hex
+
+    limits = TIER_LIMITS.get(tier, TIER_LIMITS["CPU Basic"])
 
     cmd = [
         "docker", "run", "-d",
         "--name", container_name,
+        "--cpus", limits["cpus"],       # ← actually enforces CPU limit now
+        "--memory", limits["memory"],   # ← actually enforces RAM limit now
         "-p", f"{port}:8888",
         "-v", f"{str(workspace_path)}:/home/jovyan/work",
         DOCKER_IMAGE,
