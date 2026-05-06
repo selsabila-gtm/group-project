@@ -36,6 +36,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
+from supabase_client import supabase
+from models import CompetitionDataset
 
 from models import (
     Competition,
@@ -94,26 +96,44 @@ def get_workspace_path(competition_id: str, user_id: str) -> Path:
     path.mkdir(parents=True, exist_ok=True)
 
     defaults = {
-        "main_modeling.py": (
-            "# ── Lexivia Workspace ──────────────────────────────────────────\n"
-            "# Dataset is available at: /home/jovyan/work/data/dataset.csv\n"
-            "# Load it with:\n"
-            "#   import pandas as pd\n"
-            "#   df = pd.read_csv('/home/jovyan/work/data/dataset.csv')\n"
-            "#\n"
-            "# When your model is trained, print the metric like this so it\n"
-            "# gets auto-detected and pre-filled in the Save Experiment modal:\n"
-            "#   print('accuracy: 0.94')\n"
-            "# ─────────────────────────────────────────────────────────────\n\n"
-            "import pandas as pd\n\n"
-            "# Load dataset\n"
-            "df = pd.read_csv('/home/jovyan/work/data/dataset.csv')\n"
-            "print('Dataset loaded:', df.shape)\n"
-            "print(df.head())\n"
-        ),
-        "utils.py": "# Helper functions\n",
-        "requirements.txt": "numpy\npandas\nscikit-learn\nmatplotlib\ntorch\ntransformers\n",
-    }
+    "main_modeling.py": (
+        "# ── Lexivia Workspace ─────────────────────────────\n"
+        "# Public dataset is available at:\n"
+        "#   /home/jovyan/work/data/dataset.csv\n"
+        "#\n"
+        "# Load it with:\n"
+        "#   import pandas as pd\n"
+        "#   df = pd.read_csv('/home/jovyan/work/data/dataset.csv')\n"
+        "#\n"
+        "# Your task:\n"
+        "#   Train a model and create predictions.csv\n"
+        "#\n"
+        "# predictions.csv MUST contain:\n"
+        "#   id,prediction\n"
+        "#\n"
+        "# Example:\n"
+        "#   output.to_csv('predictions.csv', index=False)\n"
+        "#\n"
+        "# Accuracy is computed automatically by the backend\n"
+        "# using hidden labels uploaded by the organizer.\n"
+        "# Hidden labels are NEVER visible inside Jupyter.\n"
+        "# ─────────────────────────────────────────────────\n\n"
+        "import pandas as pd\n\n"
+        "df = pd.read_csv('/home/jovyan/work/data/dataset.csv')\n"
+        "print(df.head())\n"
+    ),
+
+    "utils.py": "# Helper functions\n",
+
+    "requirements.txt": (
+        "numpy\n"
+        "pandas\n"
+        "scikit-learn\n"
+        "matplotlib\n"
+        "torch\n"
+        "transformers\n"
+    ),
+}
 
     for filename, content in defaults.items():
         fp = path / filename
@@ -641,19 +661,35 @@ def run_workspace_file(
     if stdin_text and not stdin_text.endswith("\n"):
         stdin_text += "\n"
 
-    result = subprocess.run(
-        [
-            "docker", "exec", "-i", container_name,
-            "python", f"/home/jovyan/work/{filename}",
-        ],
+    try:
+        result = subprocess.run(
+            [
+                "docker", "exec", "-i",
+                "-w", "/home/jovyan/work",
+                container_name,
+                "python", f"/home/jovyan/work/{filename}",
+            ],
         input=stdin_text,
         capture_output=True,
         text=True,
         timeout=600,
     )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(
+            status_code=500,
+            detail="Python execution timed out",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Execution failed: {str(e)}",
+        )
 
     combined_output = result.stdout + "\n" + result.stderr
-    metric_name, metric_value = extract_metric_from_output(combined_output)
+    metric_name, metric_value = compute_accuracy_from_predictions(competition_id, base_path, db)
+
+    if metric_name is None:
+        metric_name, metric_value = extract_metric_from_output(combined_output)
 
     return {
         "stdout":       result.stdout,
@@ -865,7 +901,7 @@ def save_experiment(
         name            = body.get("name") or "Untitled Experiment",
         notes           = body.get("notes") or "",
         metric_name     = body.get("metric_name") or "accuracy",
-        metric_value    = str(body.get("metric_value") or "0.00"),
+        metric_value    = str(body.get("metric_value") if body.get("metric_value") is not None else "0.00"),
         parameters_json = json.dumps(body.get("parameters") or {}),
         artifact_path   = body.get("artifact_path"),
     )
@@ -875,3 +911,91 @@ def save_experiment(
     db.refresh(run)
 
     return run
+
+
+def _read_csv_from_supabase(storage_path: str):
+    import pandas as pd
+    import io
+
+    try:
+        raw = supabase.storage.from_("competition-datasets").download(storage_path)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Hidden dataset download failed: {exc}")
+
+    if isinstance(raw, str):
+        raw = raw.encode("utf-8")
+
+    return pd.read_csv(io.BytesIO(raw))
+
+
+def compute_accuracy_from_predictions(competition_id: str, base_path: Path, db: Session):
+    """
+    Advanced hidden evaluation.
+
+    User workspace contains:
+      predictions.csv -> id,prediction
+
+    Backend-only hidden dataset contains:
+      id,label
+
+    Hidden labels are NEVER written into /home/jovyan/work.
+    """
+
+    predictions_path = base_path / "predictions.csv"
+
+    if not predictions_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="predictions.csv was not created. Your code must create predictions.csv with columns: id,prediction"
+        )
+
+    hidden_dataset = (
+        db.query(CompetitionDataset)
+        .filter(
+            CompetitionDataset.competition_id == competition_id,
+            CompetitionDataset.dataset_type.in_(["hidden_test", "hidden_labels"])
+        )
+        .order_by(CompetitionDataset.uploaded_at.desc())
+        .first()
+    )
+
+    if not hidden_dataset:
+        raise HTTPException(
+            status_code=400,
+            detail="No hidden evaluation dataset found. Organizer must upload hidden_labels.csv with columns: id,label"
+        )
+
+    import pandas as pd
+
+    preds = pd.read_csv(predictions_path)
+    labels = _read_csv_from_supabase(hidden_dataset.storage_path)
+
+    if "id" not in preds.columns or "prediction" not in preds.columns:
+        raise HTTPException(
+            status_code=400,
+            detail="predictions.csv must contain columns: id,prediction",
+        )
+
+    if "id" not in labels.columns or "label" not in labels.columns:
+        raise HTTPException(
+            status_code=400,
+            detail="Hidden dataset must contain columns: id,label",
+        )
+
+    preds["id"] = preds["id"].astype(str)
+    labels["id"] = labels["id"].astype(str)
+
+    merged = labels.merge(preds, on="id", how="inner")
+
+    if merged.empty:
+        raise HTTPException(
+            status_code=400,
+            detail="No matching ids between predictions.csv and hidden labels.",
+        )
+
+    accuracy = (
+        merged["label"].astype(str).str.strip()
+        == merged["prediction"].astype(str).str.strip()
+    ).mean()
+
+    return "accuracy", str(round(float(accuracy), 4))

@@ -85,6 +85,15 @@ function SaveModal({ saving, onClose, onSave, lastMetric }) {
         batch_size: "16",
         epochs: "5",
     });
+    useEffect(() => {
+        if (lastMetric?.name && lastMetric?.value !== undefined) {
+            setForm((prev) => ({
+                ...prev,
+                metric_name: lastMetric.name,
+                metric_value: String(lastMetric.value),
+            }));
+        }
+    }, [lastMetric]);
 
     const update = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
@@ -180,6 +189,7 @@ export default function Experiments() {
     const [runOutput, setRunOutput] = useState("");
     const [kernelStatus, setKernelStatus] = useState("IDLE");
     const [showSaveModal, setShowSaveModal] = useState(false);
+
     const [savingRun, setSavingRun] = useState(false);
     const [toast, setToast] = useState("");
     const [pageError, setPageError] = useState("");
@@ -228,7 +238,14 @@ export default function Experiments() {
 
         const data = await safeJson(res);
 
-        if (!res.ok) throw new Error(data.detail || "Request failed");
+        if (!res.ok) {
+    console.error("API ERROR:", data);
+    throw new Error(
+        typeof data.detail === "string"
+            ? data.detail
+            : JSON.stringify(data.detail || data)
+    );
+}
 
         return data;
     };
@@ -573,18 +590,41 @@ export default function Experiments() {
                 }
             );
 
+            const metricText =
+                data.metric_name && data.metric_value !== undefined
+                    ? `\n\nDetected metric: ${data.metric_name} = ${data.metric_value}`
+                    : "";
+
             setRunOutput(
                 `${data.stdout || ""}` +
                 `${data.stderr ? `\nERROR:\n${data.stderr}` : ""}` +
+                metricText +
                 `${data.exit_code !== undefined ? `\n\nExit code: ${data.exit_code}` : ""}`
             );
 
-            if (data.metric_name && data.metric_value) {
+            if (
+                data.metric_name &&
+                data.metric_value !== undefined &&
+                data.metric_value !== null
+            ) {
                 setLastMetric({ name: data.metric_name, value: data.metric_value });
                 showToast(`Metric detected: ${data.metric_name} = ${data.metric_value}`);
             }
         } catch (err) {
-            setRunOutput(String(err.message || err));
+            console.error(err);
+
+            if (err instanceof TypeError) {
+                setRunOutput(
+                    "Network error while contacting backend.\n\n" +
+                    "Possible causes:\n" +
+                    "- FastAPI server stopped\n" +
+                    "- Docker container crashed\n" +
+                    "- Workspace kernel not running\n" +
+                    "- Backend timed out\n"
+                );
+            } else {
+                setRunOutput(String(err.message || err));
+            }
         } finally {
             setRunning(false);
             setKernelStatus(isRunning ? "RUNNING" : "IDLE");
@@ -607,8 +647,8 @@ export default function Experiments() {
                     body: JSON.stringify({
                         name: form.name,
                         notes: form.notes,
-                        metric_name: form.metric_name,
-                        metric_value: form.metric_value,
+                        metric_name: lastMetric?.name || form.metric_name || "accuracy",
+                        metric_value: lastMetric?.value ?? form.metric_value ?? "",
                         parameters: {
                             learning_rate: form.learning_rate,
                             batch_size: form.batch_size,
