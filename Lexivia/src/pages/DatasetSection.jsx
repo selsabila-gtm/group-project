@@ -37,35 +37,6 @@ const TYPE_LABELS = {
  
 };
 
-/* ─── FormatCard ─── */
-function FormatCard({ fmt }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="ds-format-card">
-      <button type="button" onClick={() => setOpen(o => !o)} className="ds-format-toggle">
-        <div className="ds-flex ds-items-center">
-          <span className="ds-format-ext">{fmt.extension}</span>
-          <span className="ds-format-name">{fmt.name}</span>
-        </div>
-        <svg className={`ds-format-chevron ${open ? "open" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {open && (
-        <div className="ds-format-body">
-          {fmt.notes && <p className="ds-format-notes">{fmt.notes}</p>}
-          {fmt.columns && (
-            <div className="ds-flex ds-items-center ds-gap-2" style={{ flexWrap: "wrap", marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 600 }}>Required columns:</span>
-              {fmt.columns.map(c => <span key={c} className="ds-col-tag">{c}</span>)}
-            </div>
-          )}
-          {fmt.example && <pre className="ds-format-example">{fmt.example}</pre>}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ─── UploadedFileRow ─── */
 function UploadedFileRow({ file, onDelete, token, competitionId }) {
@@ -272,49 +243,10 @@ API           : ${API}`}
   return (
     <div className="ds-root ds-card ds-space-y-6" style={{ paddingBottom: 0 }}>
 
-      {/* ── Header ── */}
-      <div className="ds-header">
-        <div className="ds-header-icon">{config.icon}</div>
-        <div>
-          <h2 className="ds-header-title">{config.label} — Dataset Setup</h2>
-          <p className="ds-header-desc">{config.description}</p>
-        </div>
-      </div>
-
-      {/* ── Participant instructions ── */}
-      <div className="ds-info-banner">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <div>
-          <div className="ds-info-tag">What participants will submit</div>
-          <p className="ds-info-text">{config.participant_instructions}</p>
-        </div>
-      </div>
-
-      {/* ── Accepted formats ── */}
-      <div className="ds-formats">
-        <p className="ds-section-label">Accepted File Formats</p>
-        <div className="ds-space-y-2">
-          {config.formats.map((fmt, i) => <FormatCard key={i} fmt={fmt} />)}
-        </div>
-        <div className="ds-ext-pills">
-          {config.allowed_extensions.map(ext => (
-            <span key={ext} className="ds-ext-pill">{ext}</span>
-          ))}
-          <span className="ds-ext-limit">
-            · Max {config.max_file_size_mb >= 1024
-              ? `${config.max_file_size_mb / 1024} GB`
-              : `${config.max_file_size_mb} MB`}
-          </span>
-        </div>
-      </div>
-
       {/* ── Upload panel ── */}
       <div className="ds-upload-panel">
         <p className="ds-upload-panel-title">Upload Dataset File</p>
-        <p className="ds-upload-panel-sub">{config.hidden_dataset_instructions}</p>
+        <p className="ds-upload-panel-sub">{config?.hidden_dataset_instructions}</p>
 
         {/* Type selector */}
         <div style={{ marginBottom: 16 }}>
@@ -356,7 +288,7 @@ API           : ${API}`}
               const f = e.target.files?.[0];
               if (f) { setFile(f); setUploadError(null); setUploadSuccess(null); }
             }}
-            accept={config.allowed_extensions.join(",")} />
+            accept={(config?.allowed_extensions ?? []).join(",")} />
           {file ? (
             <div>
               <div className="ds-dropzone-icon">
@@ -377,7 +309,7 @@ API           : ${API}`}
                 </svg>
               </div>
               <p className="ds-dropzone-main"><span>Click to upload</span> or drag & drop</p>
-              <p className="ds-dropzone-sub">{config.allowed_extensions.join(", ")}</p>
+              <p className="ds-dropzone-sub">{(config?.allowed_extensions ?? []).join(", ")}</p>
             </div>
           )}
         </div>
