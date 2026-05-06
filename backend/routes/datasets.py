@@ -1,23 +1,24 @@
 """
-routes/datasets.py  (updated)
+routes/datasets.py
 
-CHANGES vs previous version:
-  - Added 6 new task types: TEXT_CLASSIFICATION, NER, SENTIMENT_ANALYSIS,
-    AUDIO_TRANSCRIPTION, SPEECH_EMOTION, AUDIO_EVENT_DETECTION
-  - Every config entry now carries annotation-schema fields that the
-    frontend widgets consume dynamically:
-      TEXT  → labels, entity_types, sentiment_labels, aspect_categories, qa_type, target_ratio
-      AUDIO → emotion_labels, event_types, speakers, with_timestamps, glossary
-  - Legacy keys (TEXT_PROCESSING, AUDIO_SYNTHESIS, TRANSLATION,
-    COGNITIVE_LOGIC, QUESTION_ANSWERING, SUMMARIZATION) kept unchanged.
-  - get_dataset_config normalises task_type before lookup so both
-    "TEXT PROCESSING" and "TEXT_PROCESSING" resolve correctly.
+Changes vs previous version:
+  - Removed legacy aliases (TEXT_PROCESSING, COGNITIVE_LOGIC) from DATASET_CONFIGS.
+  - Removed _ALIASES dict and _normalise() function — task_type is now stored
+    canonically in the DB, no runtime translation needed.
+  - get_dataset_config merges the static base config with the organizer's
+    custom config stored in competition.task_config_json, so widget labels
+    always reflect what the organizer set up.
+  - Added POST /competitions/{id}/prompts/batch — lets organizers seed prompts
+    for AUDIO_SYNTHESIS and SPEECH_EMOTION competitions.
+  - Added PATCH /competitions/{id}/task-config — lets organizers update the
+    task-specific config (labels, entity types, etc.) after creation.
 """
+import json
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
-from models import Competition, CompetitionDataset
+from models import Competition, CompetitionDataset, CompetitionPrompt, CompetitionOrganizer
 from supabase_client import supabase
 from .utils import get_db, get_current_user
 
@@ -25,10 +26,10 @@ router = APIRouter(tags=["datasets"])
 STORAGE_BUCKET = "competition-datasets"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Dataset configs — consumed by the frontend widget system for dynamic labels
+# Base dataset configs — only task types that have a matching widget
 # ─────────────────────────────────────────────────────────────────────────────
 
-DATASET_CONFIGS = {
+DATASET_CONFIGS: dict[str, dict] = {
 
     # ── Text annotation tasks ──────────────────────────────────────────────
 
@@ -38,7 +39,6 @@ DATASET_CONFIGS = {
         "icon": "▤",
         "description": "Participants label raw text samples with one or more categories from the competition's taxonomy.",
         "participant_instructions": "Write or paste a text sample, then assign the appropriate label(s) from the chip selector. Multi-label assignments are supported.",
-        # Widget-consumed fields
         "labels": ["Finance", "Technology", "Healthcare", "Politics", "Sports", "Entertainment", "Science", "Other"],
         "allow_multilabel": True,
         "formats": [
@@ -59,11 +59,10 @@ DATASET_CONFIGS = {
         "icon": "▦",
         "description": "Participants identify and tag named entities (persons, organisations, locations, etc.) within text passages.",
         "participant_instructions": "Paste text into the editor, select entity spans with your mouse, and assign the entity type. Multiple non-overlapping spans per document are supported.",
-        # Widget-consumed fields
         "entity_types": ["PER", "ORG", "LOC", "MISC", "DATE", "MONEY", "PRODUCT"],
         "formats": [
             {"name": "CoNLL-2003 style JSONL", "extension": ".jsonl",
-             "example": '{"text_content": "Apple is based in Cupertino.", "annotation": {"entities": [{"start": 0, "end": 5, "text": "Apple", "label": "ORG"}, {"start": 19, "end": 28, "text": "Cupertino", "label": "LOC"}]}}',
+             "example": '{"text_content": "Apple is based in Cupertino.", "annotation": {"entities": [{"start": 0, "end": 5, "text": "Apple", "label": "ORG"}]}}',
              "notes": "entities is an array of {start, end, text, label} objects."},
         ],
         "hidden_dataset_instructions": "Upload JSONL with ground-truth entity spans. Required: text_content, entities array.",
@@ -76,16 +75,13 @@ DATASET_CONFIGS = {
         "label": "Sentiment Analysis",
         "icon": "◕",
         "description": "Participants annotate text with overall sentiment polarity and optional aspect-level sentiments.",
-        "participant_instructions": "Enter the text, select the overall sentiment, set your confidence level, and optionally tag individual aspect sentiments for product reviews.",
-        # Widget-consumed fields
+        "participant_instructions": "Enter the text, select the overall sentiment, set your confidence level, and optionally tag individual aspect sentiments.",
         "sentiment_labels": ["positive", "negative", "neutral", "mixed"],
         "aspect_categories": ["product", "service", "price", "delivery", "support", "quality", "design"],
         "formats": [
             {"name": "JSONL (preferred)", "extension": ".jsonl",
-             "example": '{"text_content": "Great battery life but poor camera.", "annotation": {"sentiment": "mixed", "confidence": 0.9, "aspects": [{"aspect": "product", "sentiment": "positive"}, {"aspect": "quality", "sentiment": "negative"}]}}',
-             "notes": "confidence is a float 0–1."},
-            {"name": "CSV", "extension": ".csv", "columns": ["text_content", "sentiment", "confidence"],
-             "notes": "For aspect-level annotation, use JSONL."},
+             "example": '{"text_content": "Great battery life but poor camera.", "annotation": {"sentiment": "mixed", "confidence": 0.9}}'},
+            {"name": "CSV", "extension": ".csv", "columns": ["text_content", "sentiment", "confidence"]},
         ],
         "hidden_dataset_instructions": "Upload JSONL with ground-truth sentiment labels. Required: text_content, sentiment.",
         "allowed_extensions": [".jsonl", ".csv", ".txt"],
@@ -99,8 +95,8 @@ DATASET_CONFIGS = {
         "description": "Participants provide human translations of source sentences into target languages.",
         "participant_instructions": "Enter the source text on the left and your translation on the right. Language pair is fixed by the competition.",
         "source_lang": "EN",
-        "target_lang": "AR",
-        "glossary": [],          # list of {src, tgt} objects — populated per competition
+        "target_lang": "FR",
+        "glossary": [],
         "formats": [
             {"name": "JSONL (preferred)", "extension": ".jsonl",
              "example": '{"source": "Hello world", "target": "Bonjour le monde", "source_lang": "en", "target_lang": "fr"}'},
@@ -118,8 +114,7 @@ DATASET_CONFIGS = {
         "icon": "◈",
         "description": "Participants answer questions grounded in a provided context passage.",
         "participant_instructions": "Paste the context, write the question, then provide the answer. For extractive QA, copy the exact span from the context.",
-        # Widget-consumed fields
-        "qa_type": "extractive",    # "extractive" | "generative" | "both"
+        "qa_type": "extractive",
         "formats": [
             {"name": "SQuAD-style JSONL", "extension": ".jsonl",
              "example": '{"context": "Paris is the capital of France.", "question": "What is the capital of France?", "answer": "Paris", "start_index": 0}'},
@@ -136,7 +131,6 @@ DATASET_CONFIGS = {
         "icon": "▤",
         "description": "Participants write concise summaries of provided documents.",
         "participant_instructions": "Paste the source document, then write a summary in the Summary field. Target ~10% of the source length.",
-        # Widget-consumed fields
         "target_ratio": 0.10,
         "max_ratio": 0.15,
         "min_summary_words": 20,
@@ -171,10 +165,9 @@ DATASET_CONFIGS = {
         "label": "Audio Transcription",
         "icon": "◉",
         "description": "Participants transcribe speech audio files verbatim, producing text aligned with the audio.",
-        "participant_instructions": "Record live or upload an audio file, then type the verbatim transcript. Use [HH:MM:SS] timestamps if the competition requires them.",
-        # Widget-consumed fields
-        "speakers": 1,              # >1 enables speaker diarization hints
-        "with_timestamps": False,   # True enables timestamp-aligned transcript mode
+        "participant_instructions": "Record live or upload an audio file, then type the verbatim transcript.",
+        "speakers": 1,
+        "with_timestamps": False,
         "formats": [
             {"name": "JSONL (preferred)", "extension": ".jsonl",
              "example": '{"audio_file": "audio_001.wav", "transcript": "Hello, welcome to the show.", "speaker_count": 1}'},
@@ -191,7 +184,6 @@ DATASET_CONFIGS = {
         "icon": "◕",
         "description": "Participants record utterances with specified emotional expression and annotate the expressed emotion along arousal/valence dimensions.",
         "participant_instructions": "Read the utterance with the target emotion. After recording, select the emotion you expressed and adjust the intensity, arousal, and valence sliders.",
-        # Widget-consumed fields
         "emotion_labels": ["neutral", "happy", "sad", "angry", "surprised", "fearful", "disgusted", "contempt"],
         "formats": [
             {"name": "JSONL (preferred)", "extension": ".jsonl",
@@ -208,87 +200,270 @@ DATASET_CONFIGS = {
         "icon": "▣",
         "description": "Participants annotate temporal boundaries of sound events in audio recordings.",
         "participant_instructions": "Upload or record audio, play it back, and use Mark Start / Mark End to tag each sound event. Assign the event type from the panel.",
-        # Widget-consumed fields
         "event_types": ["speech", "music", "noise", "silence", "applause", "laughter", "alarm", "animal"],
         "formats": [
             {"name": "JAMS / JSONL", "extension": ".jsonl",
-             "example": '{"audio_file": "clip_001.wav", "annotation": {"events": [{"start_time": 0.0, "end_time": 2.5, "label": "speech"}, {"start_time": 3.1, "end_time": 5.0, "label": "music"}]}}'},
+             "example": '{"audio_file": "clip_001.wav", "annotation": {"events": [{"start_time": 0.0, "end_time": 2.5, "label": "speech"}]}}'},
         ],
         "hidden_dataset_instructions": "Upload a ZIP with audio files and a JSONL manifest with ground-truth event timelines.",
         "allowed_extensions": [".zip", ".wav", ".mp3", ".jsonl", ".csv"],
         "max_file_size_mb": 4096,
     },
-
-    # ── Legacy aliases (kept for backward compatibility) ───────────────────
-
-    "TEXT_PROCESSING": {   # maps → TEXT_CLASSIFICATION
-        "task_type": "TEXT_PROCESSING",
-        "label": "Text Processing",
-        "icon": "◎",
-        "description": "Participants collect and annotate raw text data for NLP pipelines.",
-        "participant_instructions": "Submit plain-text samples with classification annotations.",
-        "labels": ["positive", "negative", "neutral", "Finance", "NegativeSentiment", "Mixed"],
-        "formats": [
-            {"name": "JSONL (preferred)", "extension": ".jsonl",
-             "example": '{"text_content": "The battery life is excellent.", "annotation": {"label": "positive"}}'},
-            {"name": "CSV", "extension": ".csv", "columns": ["text_content", "label"]},
-        ],
-        "hidden_dataset_instructions": "Upload JSONL or CSV. Required: text_content, label.",
-        "allowed_extensions": [".jsonl", ".csv", ".txt"],
-        "max_file_size_mb": 500,
-    },
-
-    "COGNITIVE_LOGIC": {   # maps → QUESTION_ANSWERING
-        "task_type": "COGNITIVE_LOGIC",
-        "label": "Cognitive Logic",
-        "icon": "▣",
-        "description": "Participants solve or generate logic puzzles and reasoning chains.",
-        "participant_instructions": "Read the problem, submit step-by-step reasoning in the steps array, and provide the final answer.",
-        "qa_type": "generative",
-        "formats": [
-            {"name": "JSONL (preferred)", "extension": ".jsonl",
-             "example": '{"problem": "If A > B and B > C, is A > C?", "steps": ["A > B (given)", "B > C (given)", "By transitivity A > C"], "answer": "Yes"}'},
-        ],
-        "hidden_dataset_instructions": "Upload JSONL with ground-truth answers. Required: problem, answer, difficulty.",
-        "allowed_extensions": [".jsonl", ".csv", ".txt"],
-        "max_file_size_mb": 200,
-    },
 }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Normalise task_type (handles spaces, mixed case, legacy names)
-# ─────────────────────────────────────────────────────────────────────────────
-
-_ALIASES = {
-    "AUDIO SYNTHESIS":  "AUDIO_SYNTHESIS",
-    "COGNITIVE LOGIC":  "COGNITIVE_LOGIC",
-    "TEXT PROCESSING":  "TEXT_PROCESSING",
-}
-
-def _normalise(raw: str) -> str:
-    t = (raw or "").upper().strip().replace("-", "_")
-    return _ALIASES.get(t, t)
+# Public list consumed by the frontend task-type selector
+SUPPORTED_TASK_TYPES = list(DATASET_CONFIGS.keys())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Routes
 # ─────────────────────────────────────────────────────────────────────────────
 
+@router.get("/task-types")
+def list_task_types():
+    """Returns all supported task types with their display label and icon."""
+    return [
+        {
+            "value": cfg["task_type"],
+            "label": cfg["label"],
+            "icon": cfg["icon"],
+            "description": cfg["description"],
+        }
+        for cfg in DATASET_CONFIGS.values()
+    ]
+
+
 @router.get("/competitions/{competition_id}/dataset-config")
 def get_dataset_config(competition_id: str, db: Session = Depends(get_db)):
+    """
+    Returns the merged config for the competition's task type.
+    Starts from the static base config, then deep-merges the organizer's
+    custom task_config_json on top — so labels, entity types, prompts, etc.
+    all reflect what the organizer set up, not just defaults.
+    """
     competition = db.query(Competition).filter(Competition.id == competition_id).first()
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
-    task_type = _normalise(competition.task_type or "")
-    config = DATASET_CONFIGS.get(task_type)
-    if not config:
+
+    task_type = (competition.task_type or "").upper().strip()
+    base_config = DATASET_CONFIGS.get(task_type)
+    if not base_config:
         raise HTTPException(
             status_code=400,
-            detail=f"No dataset config for task_type='{task_type}'. Supported: {list(DATASET_CONFIGS.keys())}",
+            detail=(
+                f"No widget config for task_type='{task_type}'. "
+                f"Supported: {SUPPORTED_TASK_TYPES}"
+            ),
         )
-    return config
 
+    # Merge organizer overrides on top of base defaults
+    merged = dict(base_config)
+    if competition.task_config_json:
+        try:
+            organizer_config = json.loads(competition.task_config_json)
+            merged.update({k: v for k, v in organizer_config.items() if v is not None})
+        except (json.JSONDecodeError, TypeError):
+            pass  # fall back to base config
+
+    return merged
+
+
+@router.patch("/competitions/{competition_id}/task-config")
+def update_task_config(
+    competition_id: str,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Lets organizers update the task-specific config (labels, entity types,
+    language pair, etc.) for an existing competition.
+
+    Only the organizer may call this. Merges the supplied fields with the
+    existing task_config_json; pass null to reset a field to its default.
+
+    Example body for TEXT_CLASSIFICATION:
+        {"labels": ["Finance", "Sports", "Custom Category"]}
+
+    Example body for TRANSLATION:
+        {"source_lang": "EN", "target_lang": "AR", "glossary": [{"src": "hello", "tgt": "مرحبا"}]}
+    """
+    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    is_organizer = (
+        db.query(CompetitionOrganizer)
+        .filter(
+            CompetitionOrganizer.competition_id == competition_id,
+            CompetitionOrganizer.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not is_organizer:
+        raise HTTPException(status_code=403, detail="Only the organizer can update task config")
+
+    task_type = (competition.task_type or "").upper().strip()
+    if task_type not in DATASET_CONFIGS:
+        raise HTTPException(status_code=400, detail=f"Unsupported task_type: {task_type}")
+
+    # Merge with existing config
+    current = {}
+    if competition.task_config_json:
+        try:
+            current = json.loads(competition.task_config_json)
+        except (json.JSONDecodeError, TypeError):
+            current = {}
+
+    current.update(body)
+    competition.task_config_json = json.dumps(current)
+    db.commit()
+
+    return {"message": "Task config updated", "task_config": current}
+
+
+@router.post("/competitions/{competition_id}/prompts/batch")
+def create_prompts_batch(
+    competition_id: str,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Bulk-creates prompts for AUDIO_SYNTHESIS and SPEECH_EMOTION competitions.
+
+    Body:
+        {
+          "prompts": ["Read this sentence aloud.", "Speak with a happy tone: ..."],
+          "difficulty": "medium",     # optional, applied to all
+          "domain": "general"         # optional, applied to all
+        }
+
+    Only the organizer may call this. Replaces all existing prompts for the
+    competition when replace=true (default false = append).
+    """
+    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    is_organizer = (
+        db.query(CompetitionOrganizer)
+        .filter(
+            CompetitionOrganizer.competition_id == competition_id,
+            CompetitionOrganizer.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not is_organizer:
+        raise HTTPException(status_code=403, detail="Only the organizer can add prompts")
+
+    task_type = (competition.task_type or "").upper().strip()
+    if task_type not in ("AUDIO_SYNTHESIS", "SPEECH_EMOTION"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Prompts only apply to AUDIO_SYNTHESIS and SPEECH_EMOTION, not {task_type}",
+        )
+
+    prompts_text: list[str] = body.get("prompts", [])
+    difficulty: str | None = body.get("difficulty")
+    domain: str | None = body.get("domain")
+    replace: bool = body.get("replace", False)
+
+    if not prompts_text:
+        raise HTTPException(status_code=400, detail="prompts list is required and must not be empty")
+
+    if replace:
+        db.query(CompetitionPrompt).filter(
+            CompetitionPrompt.competition_id == competition_id
+        ).delete()
+
+    new_prompts = [
+        CompetitionPrompt(
+            competition_id=competition_id,
+            content=text.strip(),
+            difficulty=difficulty,
+            domain=domain,
+            used_count=0,
+            created_at=datetime.utcnow(),
+        )
+        for text in prompts_text
+        if text.strip()
+    ]
+
+    db.add_all(new_prompts)
+    db.commit()
+
+    return {
+        "created": len(new_prompts),
+        "total_prompts": db.query(CompetitionPrompt)
+        .filter(CompetitionPrompt.competition_id == competition_id)
+        .count(),
+    }
+
+
+@router.get("/competitions/{competition_id}/prompts")
+def list_prompts(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Returns all prompts for a competition (organizer view)."""
+    prompts = (
+        db.query(CompetitionPrompt)
+        .filter(CompetitionPrompt.competition_id == competition_id)
+        .order_by(CompetitionPrompt.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": str(p.id),
+            "content": p.content,
+            "difficulty": p.difficulty,
+            "domain": p.domain,
+            "used_count": p.used_count,
+        }
+        for p in prompts
+    ]
+
+
+@router.delete("/competitions/{competition_id}/prompts/{prompt_id}")
+def delete_prompt(
+    competition_id: str,
+    prompt_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Deletes a single prompt (organizer only)."""
+    is_organizer = (
+        db.query(CompetitionOrganizer)
+        .filter(
+            CompetitionOrganizer.competition_id == competition_id,
+            CompetitionOrganizer.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not is_organizer:
+        raise HTTPException(status_code=403, detail="Only the organizer can delete prompts")
+
+    prompt = (
+        db.query(CompetitionPrompt)
+        .filter(
+            CompetitionPrompt.id == prompt_id,
+            CompetitionPrompt.competition_id == competition_id,
+        )
+        .first()
+    )
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    db.delete(prompt)
+    db.commit()
+    return {"deleted": prompt_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Hidden dataset upload / list / delete (unchanged logic)
+# ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/competitions/{competition_id}/datasets")
 async def upload_hidden_dataset(
@@ -305,7 +480,7 @@ async def upload_hidden_dataset(
 
     file_bytes = await file.read()
     file_size_mb = len(file_bytes) / (1024 * 1024)
-    task_type = _normalise(competition.task_type or "")
+    task_type = (competition.task_type or "").upper().strip()
     max_mb = DATASET_CONFIGS.get(task_type, {}).get("max_file_size_mb", 500)
     if file_size_mb > max_mb:
         raise HTTPException(
@@ -313,8 +488,8 @@ async def upload_hidden_dataset(
             detail=f"File is {file_size_mb:.1f} MB. Limit for {task_type} is {max_mb} MB.",
         )
 
-    dataset_id   = str(uuid.uuid4())
-    ext          = file.filename.rsplit(".", 1)[-1] if "." in (file.filename or "") else "bin"
+    dataset_id = str(uuid.uuid4())
+    ext = file.filename.rsplit(".", 1)[-1] if "." in (file.filename or "") else "bin"
     storage_path = f"{competition_id}/{dataset_type}/{dataset_id}.{ext}"
 
     try:

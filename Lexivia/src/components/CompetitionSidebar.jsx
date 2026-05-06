@@ -4,7 +4,7 @@ import "./CompetitionSidebar.css";
 const NAV_ITEMS = [
     {
         key: "data-collection",
-        label: "Datasets",
+        label: "Data Collection",
         icon: (
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <ellipse cx="12" cy="5" rx="9" ry="3"/>
@@ -14,20 +14,8 @@ const NAV_ITEMS = [
         ),
     },
     {
-    key: "dataset-hub",
-    label: "Dataset Hub",
-    icon: (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <ellipse cx="12" cy="5" rx="9" ry="3"/>
-            <path d="M3 5v14a9 3 0 0 0 18 0V5"/>
-            <path d="M3 12a9 3 0 0 0 18 0"/>
-            <path d="M9 12l2 2 4-4"/>
-        </svg>
-    ),
-},
-    {
-        key: "annotation",
-        label: "Annotation",
+        key: "dataset-hub",
+        label: "Validation",
         icon: (
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 20h9"/>
@@ -35,6 +23,28 @@ const NAV_ITEMS = [
             </svg>
         ),
     },
+    {
+        key: "experiments",
+        label: "Workspace",
+        icon: (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11l3 3 3-3V3"/>
+                <path d="M3 9h18"/>
+            </svg>
+        ),
+    },
+    
+    {
+        key: "experiments",
+        label: "Models",
+        icon: (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11l3 3 3-3V3"/>
+                <path d="M3 9h18"/>
+            </svg>
+        ),
+    },
+    
     {
         key: "experiments",
         label: "Experiments",

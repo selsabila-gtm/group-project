@@ -6,6 +6,35 @@ import "./Competitions.css";
 
 const PAGE_SIZE = 10;
 
+// Task filter options — value must match what's stored in competitions.task_type
+const TASK_FILTER_OPTIONS = [
+  { value: "ALL TASKS",            label: "ALL TASKS" },
+  { value: "TEXT_CLASSIFICATION",  label: "TEXT CLASSIFICATION" },
+  { value: "NER",                  label: "NER" },
+  { value: "SENTIMENT_ANALYSIS",   label: "SENTIMENT ANALYSIS" },
+  { value: "TRANSLATION",          label: "TRANSLATION" },
+  { value: "QUESTION_ANSWERING",   label: "QUESTION ANSWERING" },
+  { value: "SUMMARIZATION",        label: "SUMMARIZATION" },
+  { value: "AUDIO_SYNTHESIS",      label: "AUDIO SYNTHESIS" },
+  { value: "AUDIO_TRANSCRIPTION",  label: "AUDIO TRANSCRIPTION" },
+  { value: "SPEECH_EMOTION",       label: "SPEECH EMOTION" },
+  { value: "AUDIO_EVENT_DETECTION",label: "AUDIO EVENT DETECTION" },
+];
+
+// Human-readable label for the category chip shown on cards
+const TASK_DISPLAY_LABELS = {
+  TEXT_CLASSIFICATION:   "Text Classification",
+  NER:                   "Named Entity Recognition",
+  SENTIMENT_ANALYSIS:    "Sentiment Analysis",
+  TRANSLATION:           "Translation",
+  QUESTION_ANSWERING:    "Question Answering",
+  SUMMARIZATION:         "Summarization",
+  AUDIO_SYNTHESIS:       "Audio Synthesis",
+  AUDIO_TRANSCRIPTION:   "Audio Transcription",
+  SPEECH_EMOTION:        "Speech Emotion",
+  AUDIO_EVENT_DETECTION: "Audio Event Detection",
+};
+
 function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
 }
@@ -17,9 +46,6 @@ function normalizeRole(role) {
   return "none";
 }
 
-// user_role === "organizer"   -> /competitions/:id/organizer
-// user_role === "participant" -> /competitions/:id/data-collection
-// user_role === "none"        -> /competitions/:id
 function getCardAction(item, navigate) {
   const status = normalizeStatus(item.status);
   const role = normalizeRole(item.user_role);
@@ -57,30 +83,20 @@ function getCardAction(item, navigate) {
 
 function RoleChip({ role }) {
   const normalizedRole = normalizeRole(role);
-
   if (normalizedRole === "none") return null;
 
   const styles = {
-    organizer: { background: "#fff0e6", color: "#b85200" },
+    organizer:   { background: "#fff0e6", color: "#b85200" },
     participant: { background: "#e8f5e9", color: "#2e7d32" },
   };
-
-  const labels = {
-    organizer: "ORGANIZING",
-    participant: "PARTICIPATING",
-  };
+  const labels = { organizer: "ORGANIZING", participant: "PARTICIPATING" };
 
   return (
-    <span
-      style={{
-        fontSize: 10,
-        fontWeight: 700,
-        padding: "2px 8px",
-        borderRadius: 20,
-        letterSpacing: "0.04em",
-        ...styles[normalizedRole],
-      }}
-    >
+    <span style={{
+      fontSize: 10, fontWeight: 700, padding: "2px 8px",
+      borderRadius: 20, letterSpacing: "0.04em",
+      ...styles[normalizedRole],
+    }}>
       {labels[normalizedRole]}
     </span>
   );
@@ -89,7 +105,6 @@ function RoleChip({ role }) {
 function StatusChip({ status }) {
   const normalizedStatus = normalizeStatus(status);
   const isOpen = normalizedStatus === "OPEN";
-
   return (
     <span className={isOpen ? "competition-status open" : "competition-status closed"}>
       {normalizedStatus || "UNKNOWN"}
@@ -107,76 +122,39 @@ function Competitions() {
   const [sortOrder, setSortOrder] = useState(
     localStorage.getItem("competitions_sortOrder") || "newest"
   );
-
   const [competitions, setCompetitions] = useState([]);
   const [search, setSearch] = useState(urlSearch);
   const [searchInput, setSearchInput] = useState(urlSearch);
-
   const [category, setCategory] = useState(
     localStorage.getItem("competitions_category") || "ALL TASKS"
   );
-
-  // Important fix:
-  // Do NOT restore the tab from localStorage.
-  // It can leave the page stuck on "participating" or "organizing" after old messy data.
   const [tab, setTab] = useState("all");
-
   const [offset, setOffset] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
-
   const [viewMode, setViewMode] = useState(
     localStorage.getItem("competitions_viewMode") || "grid"
   );
 
-  const categoryOptions = [
-    "ALL TASKS",
-    "TEXT PROCESSING",
-    "AUDIO SYNTHESIS",
-    "TRANSLATION",
-    "COGNITIVE LOGIC",
-    "QUESTION ANSWERING",
-    "SUMMARIZATION",
-  ];
-
   const token = localStorage.getItem("token");
+  const authHeaders = useMemo(() => (token ? { Authorization: `Bearer ${token}` } : {}), [token]);
 
-  const authHeaders = useMemo(() => {
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  }, [token]);
-
-  useEffect(() => {
-    if (!token) navigate("/login");
-  }, [token, navigate]);
-
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+  useEffect(() => { if (!token) navigate("/login"); }, [token, navigate]);
+  useEffect(() => { window.scrollTo(0, 0); }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const q = params.get("search") || "";
-    setSearch(q);
-    setSearchInput(q);
-    setOffset(0);
+    setSearch(q); setSearchInput(q); setOffset(0);
   }, [location.search]);
 
   useEffect(() => {
     if (location.state?.refreshAll) {
-      setCategory("ALL TASKS");
-      setTab("all");
-      setSearch("");
-      setSearchInput("");
-      setViewMode("grid");
-      setOffset(0);
-
+      setCategory("ALL TASKS"); setTab("all"); setSearch(""); setSearchInput("");
+      setViewMode("grid"); setOffset(0); setSortOrder("newest");
       localStorage.setItem("competitions_category", "ALL TASKS");
       localStorage.setItem("competitions_sortOrder", "newest");
       localStorage.setItem("competitions_viewMode", "grid");
-      localStorage.removeItem("competitions_tab");
-
-      setSortOrder("newest");
-
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location, navigate]);
@@ -184,145 +162,87 @@ function Competitions() {
   useEffect(() => {
     const timer = setTimeout(() => {
       const cleanSearch = searchInput.trim();
-      setOffset(0);
-      setSearch(cleanSearch);
-
+      setOffset(0); setSearch(cleanSearch);
       navigate(
-        cleanSearch
-          ? `/competitions?search=${encodeURIComponent(cleanSearch)}`
-          : "/competitions",
+        cleanSearch ? `/competitions?search=${encodeURIComponent(cleanSearch)}` : "/competitions",
         { replace: true }
       );
     }, 350);
-
     return () => clearTimeout(timer);
   }, [searchInput, navigate]);
 
   useEffect(() => {
     if (!token) return;
-
     const controller = new AbortController();
-
     const params = new URLSearchParams({
-      limit: String(PAGE_SIZE),
-      offset: String(offset),
-      tab,
-      sort: sortOrder,
+      limit: String(PAGE_SIZE), offset: String(offset), tab, sort: sortOrder,
     });
-
     if (search) params.append("search", search);
+    // Pass the raw task_type value (e.g. "TEXT_CLASSIFICATION") — backend matches it directly
     if (category !== "ALL TASKS") params.append("category", category);
 
     setLoading(true);
-
     fetch(`http://127.0.0.1:8000/competitions?${params.toString()}`, {
-      headers: authHeaders,
-      signal: controller.signal,
+      headers: authHeaders, signal: controller.signal,
     })
       .then((res) => {
-        if (res.status === 401) {
-          navigate("/login");
-          return null;
-        }
+        if (res.status === 401) { navigate("/login"); return null; }
         if (!res.ok) throw new Error("Failed to fetch competitions");
         return res.json();
       })
       .then((data) => {
         if (!data) return;
-
         const safeData = Array.isArray(data) ? data : [];
-
-        if (offset === 0) {
-          setCompetitions(safeData);
-          return;
-        }
-
+        if (offset === 0) { setCompetitions(safeData); return; }
         setCompetitions((prev) => {
           const merged = [...prev, ...safeData];
-          return merged.filter(
-            (item, index, self) =>
-              index === self.findIndex((x) => x.id === item.id)
-          );
+          return merged.filter((item, i, self) => i === self.findIndex((x) => x.id === item.id));
         });
       })
       .catch((err) => {
         if (err.name === "AbortError") return;
-        console.error("Competitions fetch error:", err);
         if (offset === 0) setCompetitions([]);
       })
       .finally(() => setLoading(false));
-
     return () => controller.abort();
   }, [token, authHeaders, search, category, tab, offset, sortOrder, navigate]);
 
   useEffect(() => {
     if (!token) return;
-
     const controller = new AbortController();
-
     const params = new URLSearchParams({ tab });
     if (search) params.append("search", search);
     if (category !== "ALL TASKS") params.append("category", category);
 
     fetch(`http://127.0.0.1:8000/competitions/count?${params.toString()}`, {
-      headers: authHeaders,
-      signal: controller.signal,
+      headers: authHeaders, signal: controller.signal,
     })
-      .then((res) => {
-        if (res.status === 401) {
-          navigate("/login");
-          return null;
-        }
-        if (!res.ok) throw new Error("Failed to fetch competition count");
-        return res.json();
-      })
-      .then((data) => {
-        if (data) setTotalCount(Number(data.count || 0));
-      })
-      .catch((err) => {
-        if (err.name === "AbortError") return;
-        console.error("Competition count fetch error:", err);
-        setTotalCount(0);
-      });
-
+      .then((res) => { if (!res.ok) throw new Error(); return res.json(); })
+      .then((data) => { if (data) setTotalCount(Number(data.count || 0)); })
+      .catch(() => setTotalCount(0));
     return () => controller.abort();
   }, [token, authHeaders, search, category, tab, navigate]);
 
-  const handleCategoryChange = (sel) => {
-    setOffset(0);
-    setCategory(sel);
-    localStorage.setItem("competitions_category", sel);
+  const handleCategoryChange = (val) => {
+    setOffset(0); setCategory(val);
+    localStorage.setItem("competitions_category", val);
   };
-
   const handleSortChange = (value) => {
-    setOffset(0);
-    setSortOrder(value);
+    setOffset(0); setSortOrder(value);
     localStorage.setItem("competitions_sortOrder", value);
   };
-
-  const handleTabChange = (sel) => {
-    setOffset(0);
-    setTab(sel);
-    localStorage.removeItem("competitions_tab");
-  };
-
+  const handleTabChange = (sel) => { setOffset(0); setTab(sel); };
   const handleViewModeChange = (mode) => {
-    setViewMode(mode);
-    localStorage.setItem("competitions_viewMode", mode);
+    setViewMode(mode); localStorage.setItem("competitions_viewMode", mode);
   };
-
   const handleLoadMore = () => {
-    if (!loading && competitions.length < totalCount) {
-      setOffset((prev) => prev + PAGE_SIZE);
-    }
+    if (!loading && competitions.length < totalCount) setOffset((p) => p + PAGE_SIZE);
   };
-
   const canLoadMore = competitions.length < totalCount;
 
   return (
     <div className="competitions-shell">
       <Sidebar />
-
       <div className="competitions-main">
         <Topbar
           title="Active Competitions"
@@ -334,71 +254,39 @@ function Competitions() {
           <div className="view-switch-row">
             <div className="sort-control">
               <span>Sort by</span>
-              <select
-                value={sortOrder}
-                onChange={(e) => handleSortChange(e.target.value)}
-              >
+              <select value={sortOrder} onChange={(e) => handleSortChange(e.target.value)}>
                 <option value="newest">Newest first</option>
                 <option value="oldest">Oldest first</option>
                 <option value="unknown_dates">Unknown dates only</option>
               </select>
             </div>
-
             <div className="grid-list-switch">
-              <button
-                type="button"
-                className={viewMode === "grid" ? "active" : ""}
-                onClick={() => handleViewModeChange("grid")}
-              >
-                Grid View
-              </button>
-              <button
-                type="button"
-                className={viewMode === "list" ? "active" : ""}
-                onClick={() => handleViewModeChange("list")}
-              >
-                List View
-              </button>
+              <button type="button" className={viewMode === "grid" ? "active" : ""} onClick={() => handleViewModeChange("grid")}>Grid View</button>
+              <button type="button" className={viewMode === "list" ? "active" : ""} onClick={() => handleViewModeChange("list")}>List View</button>
             </div>
           </div>
 
           <div className="competitions-toolbar">
             <div className="task-filters">
               <span className="filter-title">FILTER BY TASK</span>
-              {categoryOptions.map((option) => (
+              {TASK_FILTER_OPTIONS.map((opt) => (
                 <button
-                  key={option}
+                  key={opt.value}
                   type="button"
-                  className={category === option ? "active" : ""}
-                  onClick={() => handleCategoryChange(option)}
+                  className={category === opt.value ? "active" : ""}
+                  onClick={() => handleCategoryChange(opt.value)}
                 >
-                  {option}
+                  {opt.label}
                 </button>
               ))}
             </div>
 
             <div className="view-tabs">
-              <button
-                type="button"
-                className={tab === "all" ? "active" : ""}
-                onClick={() => handleTabChange("all")}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                className={tab === "participating" ? "active" : ""}
-                onClick={() => handleTabChange("participating")}
-              >
-                Participating
-              </button>
-              <button
-                type="button"
-                className={tab === "organizing" ? "active" : ""}
-                onClick={() => handleTabChange("organizing")}
-              >
-                Organizing
-              </button>
+              {["all", "participating", "organizing"].map((t) => (
+                <button key={t} type="button" className={tab === t ? "active" : ""} onClick={() => handleTabChange(t)}>
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -409,13 +297,9 @@ function Competitions() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               style={{
-                width: "320px",
-                padding: "12px 14px",
-                borderRadius: "10px",
-                border: "1px solid #dde4f6",
-                background: "#ffffff",
-                fontSize: "14px",
-                outline: "none",
+                width: "320px", padding: "12px 14px", borderRadius: "10px",
+                border: "1px solid #dde4f6", background: "#ffffff",
+                fontSize: "14px", outline: "none",
               }}
             />
           </div>
@@ -429,6 +313,8 @@ function Competitions() {
               ) : (
                 competitions.map((item) => {
                   const action = getCardAction(item, navigate);
+                  // Use human-readable label from the map, fall back to raw task_type
+                  const categoryLabel = TASK_DISPLAY_LABELS[item.category] || item.category;
 
                   return (
                     <div
@@ -436,8 +322,7 @@ function Competitions() {
                       className={item.muted ? "competition-card muted" : "competition-card"}
                     >
                       <div className="competition-top">
-                        <span className="competition-category">{item.category}</span>
-
+                        <span className="competition-category">{categoryLabel}</span>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <RoleChip role={item.user_role} />
                           <StatusChip status={item.status} />
@@ -460,11 +345,7 @@ function Competitions() {
 
                       <div className="competition-footer">
                         <span>{item.footer}</span>
-                        <button
-                          type="button"
-                          className={action.className}
-                          onClick={action.onClick}
-                        >
+                        <button type="button" className={action.className} onClick={action.onClick}>
                           {action.label}
                         </button>
                       </div>

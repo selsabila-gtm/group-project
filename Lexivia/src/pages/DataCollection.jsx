@@ -2,31 +2,23 @@
  * DataCollection.jsx  —  orchestrator only
  *
  * Responsibilities:
- *   1. Fetch competition metadata + dataset config (for dynamic labels)
+ *   1. Fetch competition metadata + dataset config (dynamic labels from organizer)
  *   2. Poll stats (my-stats, team-stats, sample count)
  *   3. Route to the correct annotation widget based on task_type
  *   4. Handle the universal submit (text vs audio)
  *   5. Render the shared layout (sidebar, topbar, stats panel, tabs)
  *
- * NO annotation logic lives here — all of that is in ./widgets/*.jsx
- *
- * Supported task_type → widget mapping
- * ─────────────────────────────────────
- *  TEXT_CLASSIFICATION  → TextClassificationWidget
- *  NER                  → NERWidget
- *  SENTIMENT_ANALYSIS   → SentimentWidget
- *  TRANSLATION          → TranslationWidget
- *  QUESTION_ANSWERING   → QuestionAnsweringWidget
- *  SUMMARIZATION        → SummarizationWidget
- *  AUDIO_SYNTHESIS      → AudioSynthesisWidget
- *  AUDIO_TRANSCRIPTION  → AudioTranscriptionWidget
- *  SPEECH_EMOTION       → SpeechEmotionWidget
- *  AUDIO_EVENT_DETECTION→ AudioEventDetectionWidget
- *
- *  Legacy aliases (kept for backward compatibility):
- *  TEXT_PROCESSING → TextClassificationWidget
- *  AUDIO SYNTHESIS → AudioSynthesisWidget
- *  COGNITIVE LOGIC → QuestionAnsweringWidget
+ * Widget mapping (task_type → widget):
+ *   TEXT_CLASSIFICATION   → TextClassificationWidget
+ *   NER                   → NERWidget
+ *   SENTIMENT_ANALYSIS    → SentimentWidget
+ *   TRANSLATION           → TranslationWidget
+ *   QUESTION_ANSWERING    → QuestionAnsweringWidget
+ *   SUMMARIZATION         → SummarizationWidget
+ *   AUDIO_SYNTHESIS       → AudioSynthesisWidget
+ *   AUDIO_TRANSCRIPTION   → AudioTranscriptionWidget
+ *   SPEECH_EMOTION        → SpeechEmotionWidget
+ *   AUDIO_EVENT_DETECTION → AudioEventDetectionWidget
  */
 
 import { useEffect, useState } from "react";
@@ -34,7 +26,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import CompetitionSidebar from "../components/CompetitionSidebar";
 import "./DataCollection.css";
 
-// ── Widget imports ────────────────────────────────────────────
 import TextClassificationWidget  from "./widgets/TextClassificationWidget";
 import NERWidget                  from "./widgets/NERWidget";
 import SentimentWidget            from "./widgets/SentimentWidget";
@@ -53,20 +44,7 @@ function authHeader() {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
-// ── Task-type normaliser (handles spaces, case, legacy names) ─
-function normaliseTaskType(raw = "") {
-  const t = raw.toUpperCase().replace(/\s+/g, "_").replace(/-/g, "_");
-  const ALIASES = {
-    TEXT_PROCESSING: "TEXT_CLASSIFICATION",
-    AUDIO_SYNTHESIS_LEGACY: "AUDIO_SYNTHESIS",
-    "AUDIO SYNTHESIS": "AUDIO_SYNTHESIS",
-    COGNITIVE_LOGIC: "QUESTION_ANSWERING",
-    "COGNITIVE LOGIC": "QUESTION_ANSWERING",
-  };
-  return ALIASES[t] || t;
-}
-
-// ── Widget registry ───────────────────────────────────────────
+// Widget registry — task_type values must exactly match what's stored in DB
 const WIDGET_MAP = {
   TEXT_CLASSIFICATION:   TextClassificationWidget,
   NER:                   NERWidget,
@@ -80,7 +58,20 @@ const WIDGET_MAP = {
   AUDIO_EVENT_DETECTION: AudioEventDetectionWidget,
 };
 
-// ── CompetitionTopbar (unchanged from original) ───────────────
+const TASK_LABELS = {
+  TEXT_CLASSIFICATION:   "Text Classification",
+  NER:                   "Named Entity Recognition",
+  SENTIMENT_ANALYSIS:    "Sentiment Analysis",
+  TRANSLATION:           "Translation",
+  QUESTION_ANSWERING:    "Question Answering",
+  SUMMARIZATION:         "Summarization",
+  AUDIO_SYNTHESIS:       "Audio Synthesis",
+  AUDIO_TRANSCRIPTION:   "Audio Transcription",
+  SPEECH_EMOTION:        "Speech Emotion",
+  AUDIO_EVENT_DETECTION: "Audio Event Detection",
+};
+
+// ── CompetitionTopbar ─────────────────────────────────────────
 function CompetitionTopbar({ competition }) {
   return (
     <div className="comp-topbar">
@@ -89,9 +80,7 @@ function CompetitionTopbar({ competition }) {
         <span className="comp-lab-badge">LAB ACTIVE</span>
         <nav className="comp-topbar-tabs">
           {["Overview", "Rules", "Resources"].map((t, i) => (
-            <button key={t} type="button" className={`comp-topbar-tab ${i === 0 ? "active" : ""}`}>
-              {t}
-            </button>
+            <button key={t} type="button" className={`comp-topbar-tab ${i === 0 ? "active" : ""}`}>{t}</button>
           ))}
         </nav>
       </div>
@@ -107,12 +96,9 @@ function CompetitionTopbar({ competition }) {
   );
 }
 
-// ── TeamProgress panel (unchanged from original) ──────────────
+// ── TeamProgress panel ────────────────────────────────────────
 function TeamProgress({ myStats, teamStats, quota }) {
-  const pct = quota > 0
-    ? Math.min(100, Math.round(((teamStats.total || 0) / quota) * 100))
-    : 0;
-
+  const pct = quota > 0 ? Math.min(100, Math.round(((teamStats.total || 0) / quota) * 100)) : 0;
   return (
     <div className="dc-right-panel">
       <div className="dc-panel-card">
@@ -187,12 +173,7 @@ function CollectionTabs({ active, onChange }) {
   return (
     <div className="dc-tabs">
       {TABS.map((t) => (
-        <button
-          key={t}
-          type="button"
-          className={`dc-tab ${active === t ? "active" : ""}`}
-          onClick={() => onChange(t)}
-        >
+        <button key={t} type="button" className={`dc-tab ${active === t ? "active" : ""}`} onClick={() => onChange(t)}>
           {t}
         </button>
       ))}
@@ -200,46 +181,30 @@ function CollectionTabs({ active, onChange }) {
   );
 }
 
-// ── Task-type display label ───────────────────────────────────
-const TASK_LABELS = {
-  TEXT_CLASSIFICATION:   "Text Classification",
-  NER:                   "Named Entity Recognition",
-  SENTIMENT_ANALYSIS:    "Sentiment Analysis",
-  TRANSLATION:           "Translation",
-  QUESTION_ANSWERING:    "Question Answering",
-  SUMMARIZATION:         "Summarization",
-  AUDIO_SYNTHESIS:       "Audio Synthesis",
-  AUDIO_TRANSCRIPTION:   "Audio Transcription",
-  SPEECH_EMOTION:        "Speech Emotion",
-  AUDIO_EVENT_DETECTION: "Audio Event Detection",
-};
-
 // ─────────────────────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────────────────────
 function DataCollection() {
-  const params        = useParams();
+  const params = useParams();
   const competitionId = params.id ?? params.competitionId;
-  const navigate      = useNavigate();
+  const navigate = useNavigate();
 
-  const [competition,  setCompetition]  = useState(null);
-  const [datasetConfig, setDatasetConfig] = useState(null); // dynamic labels/config
-  const [myStats,      setMyStats]      = useState({ validated: 0, flagged: 0 });
-  const [teamStats,    setTeamStats]    = useState({ total: 0, members: [] });
-  const [totalSamples, setTotalSamples] = useState(0);
-  const [activeTab,    setActiveTab]    = useState("Manual Entry");
-  const [submitting,   setSubmitting]   = useState(false);
-  const [toast,        setToast]        = useState(null);
+  const [competition,   setCompetition]   = useState(null);
+  const [datasetConfig, setDatasetConfig] = useState(null);
+  const [myStats,       setMyStats]       = useState({ validated: 0, flagged: 0 });
+  const [teamStats,     setTeamStats]     = useState({ total: 0, members: [] });
+  const [totalSamples,  setTotalSamples]  = useState(0);
+  const [activeTab,     setActiveTab]     = useState("Manual Entry");
+  const [submitting,    setSubmitting]    = useState(false);
+  const [toast,         setToast]         = useState(null);
 
-  // ── Load competition + dataset config ─────────────────────
+  // Load competition + dataset config (which merges organizer overrides)
   useEffect(() => {
     const h = authHeader();
-
     fetch(`${API}/competitions/${competitionId}`, { headers: h })
       .then((r) => r.json())
       .then((comp) => {
         setCompetition(comp);
-        // Immediately fetch dataset config once we know the competition
         return fetch(`${API}/competitions/${competitionId}/dataset-config`, { headers: h });
       })
       .then((r) => r.ok ? r.json() : null)
@@ -247,7 +212,7 @@ function DataCollection() {
       .catch(console.error);
   }, [competitionId]);
 
-  // ── Poll stats every 15 s ─────────────────────────────────
+  // Poll stats every 15 s
   useEffect(() => {
     const load = () => {
       const h = authHeader();
@@ -263,7 +228,7 @@ function DataCollection() {
     return () => clearInterval(iv);
   }, [competitionId]);
 
-  // ── Universal submit ──────────────────────────────────────
+  // Universal submit handler
   const handleSubmit = async ({ text_content, annotation, audio_blob, audio_duration }) => {
     setSubmitting(true);
     try {
@@ -297,44 +262,36 @@ function DataCollection() {
       setTeamStats((s) => ({ ...s, total: (s.total || 0) + 1 }));
       setToast("✓ Sample committed successfully");
     } catch (err) {
-      console.error(err);
       setToast(`⚠ ${err.message || "Submission failed — please retry"}`);
     } finally {
       setSubmitting(false);
     }
   };
 
-  // ── Widget router ─────────────────────────────────────────
+  // Widget router — task_type is used directly, no aliases needed
   const renderWidget = () => {
     if (!competition) return <div className="dc-widget dc-placeholder">Loading…</div>;
 
     if (activeTab === "Bulk Import")
-      return (
-        <BulkImportPanel
-          competitionId={competitionId}
-          taskType={normaliseTaskType(competition.task_type)}
-        />
-      );
+      return <BulkImportPanel competitionId={competitionId} taskType={competition.task_type} />;
 
     if (activeTab === "Scraping Assistant")
       return <div className="dc-widget dc-placeholder">🔧 Scraping Assistant coming soon</div>;
 
-    const taskType = normaliseTaskType(competition.task_type);
-    const Widget   = WIDGET_MAP[taskType] || TextClassificationWidget;
+    const Widget = WIDGET_MAP[competition.task_type] || TextClassificationWidget;
 
     return (
       <Widget
         competition={competition}
-        config={datasetConfig}    // ← dynamic labels/config from backend
+        config={datasetConfig}   // ← merged config: base defaults + organizer overrides
         onSubmit={handleSubmit}
         submitting={submitting}
       />
     );
   };
 
-  const taskType    = normaliseTaskType(competition?.task_type);
-  const taskLabel   = TASK_LABELS[taskType] || competition?.task_type || "Data Collection";
-  const quota       = competition?.prize_pool || 5000;
+  const taskLabel = TASK_LABELS[competition?.task_type] || competition?.task_type || "Data Collection";
+  const quota = competition?.prize_pool || 5000;
 
   return (
     <div className="dc-shell">
@@ -348,7 +305,6 @@ function DataCollection() {
         <CompetitionTopbar competition={competition} />
 
         <div className="dc-body">
-          {/* Page header */}
           <div className="dc-header">
             <div>
               <h1 className="dc-title">{taskLabel}</h1>
@@ -377,7 +333,6 @@ function DataCollection() {
             </div>
           </div>
 
-          {/* Two-column layout */}
           <div className="dc-content">
             <div className="dc-left">
               <CollectionTabs active={activeTab} onChange={setActiveTab} />
