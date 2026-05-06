@@ -54,6 +54,11 @@ class Competition(Base):
     validation_date = Column(String, nullable=True)
     freeze_date = Column(String, nullable=True)
 
+    # ── Task-specific dataset / annotation configuration set by the organizer ──
+    # Stored as a JSON string. Served via GET /competitions/{id}/dataset-config.
+    # Shape varies by task_type — see competitions.py TASK_CONFIG_DEFAULTS.
+    dataset_config = Column(Text, nullable=True, default="{}")
+
     datasets = relationship(
         "CompetitionDataset",
         back_populates="competition",

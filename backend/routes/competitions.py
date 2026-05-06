@@ -1,5 +1,20 @@
+"""
+routes/competitions.py
+
+Changes vs previous version:
+  - Competition.dataset_config is now saved from data.task_config on create/update/draft.
+  - New GET /competitions/{id}/dataset-config endpoint merges organizer config with
+    per-task defaults and serves it to DataCollection widgets.
+  - Audio prompt tasks (AUDIO_SYNTHESIS, SPEECH_EMOTION) automatically seed the
+    competition_prompts table from task_config["prompts"] on create/update.
+
+schemas.py NOTE: add to CompetitionCreateIn:
+    task_config: Optional[dict] = None
+"""
+
 import json
 from datetime import datetime, date
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -9,6 +24,7 @@ from models import (
     Competition,
     CompetitionOrganizer,
     CompetitionParticipant,
+    CompetitionPrompt,
     DashboardStat,
     RecentCompetition,
     CompetitionDataset,
@@ -17,6 +33,62 @@ from schemas import CompetitionCreateIn, CompetitionActionOut
 from .utils import get_db, get_current_user, get_icon_for_task
 
 router = APIRouter(tags=["competitions"])
+
+# ── Per-task fallback defaults ─────────────────────────────────────────────────
+# Used when the organizer hasn't configured a field yet, or for older competitions
+# that predate the task-config feature.
+TASK_CONFIG_DEFAULTS: dict[str, dict] = {
+    "TEXT_CLASSIFICATION": {
+        "labels": ["Finance", "Technology", "Healthcare", "Politics",
+                   "Sports", "Entertainment", "Science", "Other"],
+        "description": "",
+    },
+    "NER": {
+        "entity_types": ["PER", "ORG", "LOC", "MISC", "DATE", "MONEY", "PRODUCT"],
+        "description": "",
+    },
+    "SENTIMENT_ANALYSIS": {
+        "sentiment_labels": ["positive", "negative", "neutral", "mixed"],
+        "aspect_categories": ["product", "service", "price", "delivery", "support"],
+        "description": "",
+    },
+    "TRANSLATION": {
+        "source_lang": "EN",
+        "target_lang": "AR",
+        "glossary": [],
+        "description": "",
+    },
+    "QUESTION_ANSWERING": {
+        "qa_type": "extractive",
+        "description": "",
+    },
+    "SUMMARIZATION": {
+        "target_ratio": 0.1,
+        "max_ratio": 0.15,
+        "min_summary_words": 20,
+        "description": "",
+    },
+    "AUDIO_SYNTHESIS": {
+        "description": "",
+    },
+    "AUDIO_TRANSCRIPTION": {
+        "speakers": 1,
+        "with_timestamps": False,
+        "description": "",
+    },
+    "SPEECH_EMOTION": {
+        "emotion_labels": ["neutral", "happy", "sad", "angry",
+                           "surprised", "fearful", "disgusted", "contempt"],
+        "description": "",
+    },
+    "AUDIO_EVENT_DETECTION": {
+        "event_types": ["speech", "music", "noise", "silence",
+                        "applause", "laughter", "alarm", "animal"],
+        "description": "",
+    },
+}
+
+PROMPT_TASKS = {"AUDIO_SYNTHESIS", "SPEECH_EMOTION"}
 
 
 def parse_date(value):
@@ -74,7 +146,7 @@ def competition_display_dict(competition: Competition) -> dict:
             "stat2_value": competition.end_date or "TBD",
             "footer": footer,
             "muted": False,
-            "datasets_json": "[]",  # compatibility for old frontend; real source is competition_datasets
+            "datasets_json": "[]",
         }
     )
 
@@ -86,6 +158,7 @@ def delete_competition_related_rows(db: Session, competition_id: str):
     db.execute(text("DELETE FROM competition_participants WHERE competition_id = :cid"), {"cid": competition_id})
     db.execute(text("DELETE FROM competition_organizers WHERE competition_id = :cid"), {"cid": competition_id})
     db.execute(text("DELETE FROM recent_competitions WHERE competition_id = :cid"), {"cid": competition_id})
+    db.execute(text("DELETE FROM competition_prompts WHERE competition_id = :cid"), {"cid": competition_id})
 
 
 def validate_competition_payload(data: CompetitionCreateIn):
@@ -147,7 +220,19 @@ def validate_competition_payload(data: CompetitionCreateIn):
         raise HTTPException(status_code=400, detail="Freeze date cannot be before validation date")
 
 
+def _merge_task_config(task_type: str, organizer_config: dict) -> dict:
+    """Merge organizer overrides on top of per-task defaults."""
+    defaults = dict(TASK_CONFIG_DEFAULTS.get(task_type or "", {}))
+    defaults.update(organizer_config or {})
+    return defaults
+
+
 def build_competition_record(data: CompetitionCreateIn, is_draft: bool) -> Competition:
+    task_config = getattr(data, "task_config", None) or {}
+    merged = _merge_task_config(data.task_type, task_config)
+    # Strip the "prompts" key from dataset_config — prompts live in competition_prompts table
+    config_to_store = {k: v for k, v in merged.items() if k != "prompts"}
+
     return Competition(
         title=data.competition_name,
         description=data.description,
@@ -172,7 +257,34 @@ def build_competition_record(data: CompetitionCreateIn, is_draft: bool) -> Compe
         milestones_json=json.dumps(data.milestones or []),
         validation_date=data.validation_date,
         freeze_date=data.freeze_date,
+        dataset_config=json.dumps(config_to_store),
     )
+
+
+def _seed_prompts(db: Session, competition_id: str, task_type: str, task_config: dict):
+    """
+    If task_type requires prompts (AUDIO_SYNTHESIS, SPEECH_EMOTION) and the
+    organizer supplied them, wipe existing prompts and re-seed from the config.
+    """
+    if task_type not in PROMPT_TASKS:
+        return
+    raw_prompts = task_config.get("prompts") or []
+    if not raw_prompts:
+        return
+
+    db.execute(
+        text("DELETE FROM competition_prompts WHERE competition_id = :cid"),
+        {"cid": competition_id},
+    )
+    for content in raw_prompts:
+        content = content.strip()
+        if content:
+            db.add(CompetitionPrompt(
+                competition_id=competition_id,
+                content=content,
+                used_count=0,
+                created_at=datetime.utcnow().isoformat(),
+            ))
 
 
 def apply_competition_filters(query, db, search, category, tab, current_user):
@@ -249,6 +361,52 @@ def get_user_role(db: Session, competition_id: str, user_id: str):
     return "none"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Dataset-config endpoint  ← used by DataCollection.jsx to populate widgets
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/competitions/{competition_id}/dataset-config")
+def get_dataset_config(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Returns the merged task configuration for the competition.
+    Organizer-supplied values override per-task defaults.
+    Also injects prompt_count for audio tasks.
+    """
+    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    task_type = (competition.task_type or "").upper()
+
+    # Load organizer config stored on the competition
+    try:
+        stored = json.loads(competition.dataset_config or "{}")
+    except (json.JSONDecodeError, TypeError):
+        stored = {}
+
+    # Merge with defaults (organizer config wins for any key it provides)
+    merged = _merge_task_config(task_type, stored)
+
+    # For audio prompt tasks: expose how many prompts are available
+    if task_type in PROMPT_TASKS:
+        prompt_count = (
+            db.query(CompetitionPrompt)
+            .filter(CompetitionPrompt.competition_id == competition_id)
+            .count()
+        )
+        merged["prompt_count"] = prompt_count
+
+    return merged
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Competition count
+# ─────────────────────────────────────────────────────────────────────────────
+
 @router.get("/competitions/count")
 def get_competitions_count(
     search: str | None = None,
@@ -270,6 +428,10 @@ def get_competitions_count(
     return {"count": len(competitions)}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Draft
+# ─────────────────────────────────────────────────────────────────────────────
+
 @router.post("/competitions/draft", response_model=CompetitionActionOut)
 def save_competition_draft(
     data: CompetitionCreateIn,
@@ -290,11 +452,18 @@ def save_competition_draft(
         )
     )
 
+    task_config = getattr(data, "task_config", None) or {}
+    _seed_prompts(db, competition.id, data.task_type or "", task_config)
+
     db.commit()
     db.refresh(competition)
 
     return {"message": "Competition draft saved successfully", "competition_id": competition.id}
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Create
+# ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/competitions/create", response_model=CompetitionActionOut)
 def create_competition(
@@ -318,7 +487,6 @@ def create_competition(
     )
 
     status = compute_competition_status(competition)
-
     db.add(
         RecentCompetition(
             user_id=current_user.id,
@@ -332,12 +500,19 @@ def create_competition(
         )
     )
 
+    task_config = getattr(data, "task_config", None) or {}
+    _seed_prompts(db, competition.id, data.task_type or "", task_config)
+
     update_dashboard_stat_for_user(db, current_user.id)
     db.commit()
     db.refresh(competition)
 
     return {"message": "Competition created successfully", "competition_id": competition.id}
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# List / search
+# ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/competitions")
 def get_competitions(
@@ -372,7 +547,7 @@ def get_competitions(
         wanted = status.upper()
         competitions = [comp for comp in competitions if compute_competition_status(comp) == wanted]
 
-    competitions = competitions[offset : offset + limit]
+    competitions = competitions[offset: offset + limit]
 
     if not competitions:
         return []
@@ -394,7 +569,6 @@ def get_competitions(
     }
 
     result = []
-
     for comp in competitions:
         d = competition_display_dict(comp)
 
@@ -410,6 +584,10 @@ def get_competitions(
     return result
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Is-joined
+# ─────────────────────────────────────────────────────────────────────────────
+
 @router.get("/competitions/{competition_id}/is-joined")
 def is_joined_competition(
     competition_id: str,
@@ -419,6 +597,10 @@ def is_joined_competition(
     role = get_user_role(db, competition_id, current_user.id)
     return {"joined": role == "participant", "user_role": role}
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Join
+# ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/competitions/{competition_id}/join")
 def join_competition(
@@ -479,6 +661,10 @@ def join_competition(
     return {"message": "Joined competition successfully"}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Monitoring
+# ─────────────────────────────────────────────────────────────────────────────
+
 @router.get("/competitions/{competition_id}/monitoring")
 def get_competition_monitoring(
     competition_id: str,
@@ -514,6 +700,10 @@ def get_competition_monitoring(
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Get single competition
+# ─────────────────────────────────────────────────────────────────────────────
+
 @router.get("/competitions/{competition_id}")
 def get_competition_details(
     competition_id: str,
@@ -538,6 +728,10 @@ def get_competition_details(
 
     return d
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Update
+# ─────────────────────────────────────────────────────────────────────────────
 
 @router.put("/competitions/{competition_id}/update")
 def update_competition(
@@ -590,6 +784,15 @@ def update_competition(
     competition.freeze_date = data.freeze_date
     competition.is_draft = False
 
+    # Save updated task config
+    task_config = getattr(data, "task_config", None) or {}
+    merged = _merge_task_config(data.task_type, task_config)
+    config_to_store = {k: v for k, v in merged.items() if k != "prompts"}
+    competition.dataset_config = json.dumps(config_to_store)
+
+    # Re-seed prompts if applicable
+    _seed_prompts(db, competition_id, data.task_type or "", task_config)
+
     real_status = compute_competition_status(competition)
 
     recent_rows = db.query(RecentCompetition).filter(RecentCompetition.competition_id == competition_id).all()
@@ -619,6 +822,10 @@ def update_competition(
 
     return {"message": "Competition updated successfully"}
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Delete
+# ─────────────────────────────────────────────────────────────────────────────
 
 @router.delete("/competitions/{competition_id}")
 def delete_competition(

@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./CreateCompetition.css";
 import DatasetSection from "./DatasetSection";
-import { supabase } from "../config/supabase"; // adjust path if needed
+import { supabase } from "../config/supabase";
 
 /** Always returns a fresh, valid access token from Supabase session */
 async function getFreshToken() {
@@ -14,6 +14,7 @@ async function getFreshToken() {
 
 const steps = [
     "Basic Info",
+    "Task Config",   // ← new step
     "Evaluation",
     "Rules",
     "Complexity",
@@ -21,13 +22,18 @@ const steps = [
     "Milestones",
 ];
 
+// Task types now use exact DB values so they round-trip through the API correctly.
 const taskTypes = [
-    "TEXT PROCESSING",
-    "AUDIO SYNTHESIS",
-    "TRANSLATION",
-    "COGNITIVE LOGIC",
-    "QUESTION ANSWERING",
-    "SUMMARIZATION",
+    { value: "TEXT_CLASSIFICATION",   label: "Text Classification" },
+    { value: "NER",                   label: "Named Entity Recognition" },
+    { value: "SENTIMENT_ANALYSIS",    label: "Sentiment Analysis" },
+    { value: "TRANSLATION",           label: "Translation" },
+    { value: "QUESTION_ANSWERING",    label: "Question Answering" },
+    { value: "SUMMARIZATION",         label: "Summarization" },
+    { value: "AUDIO_SYNTHESIS",       label: "Audio Synthesis" },
+    { value: "AUDIO_TRANSCRIPTION",   label: "Audio Transcription" },
+    { value: "SPEECH_EMOTION",        label: "Speech Emotion" },
+    { value: "AUDIO_EVENT_DETECTION", label: "Audio Event Detection" },
 ];
 
 const primaryMetrics = [
@@ -82,6 +88,40 @@ const PREDEFINED_SKILLS = [
     "Prompt Engineering",
 ];
 
+// ── Default task configs ───────────────────────────────────────────────────
+function getDefaultTaskConfig(taskType) {
+    switch (taskType) {
+        case "TEXT_CLASSIFICATION":
+            return { labels: ["Finance", "Technology", "Healthcare", "Politics", "Sports", "Entertainment", "Science", "Other"] };
+        case "NER":
+            return { entity_types: ["PER", "ORG", "LOC", "MISC", "DATE", "MONEY"] };
+        case "SENTIMENT_ANALYSIS":
+            return {
+                sentiment_labels: ["positive", "negative", "neutral", "mixed"],
+                aspect_categories: ["product", "service", "price", "delivery", "support"],
+            };
+        case "TRANSLATION":
+            return { source_lang: "EN", target_lang: "AR", glossary_raw: "" };
+        case "QUESTION_ANSWERING":
+            return { qa_type: "extractive" };
+        case "SUMMARIZATION":
+            return { target_ratio: 0.1, max_ratio: 0.15, min_summary_words: 20 };
+        case "AUDIO_SYNTHESIS":
+            return { prompts: [] };
+        case "AUDIO_TRANSCRIPTION":
+            return { speakers: 1, with_timestamps: false };
+        case "SPEECH_EMOTION":
+            return {
+                emotion_labels: ["neutral", "happy", "sad", "angry", "surprised", "fearful", "disgusted"],
+                prompts: [],
+            };
+        case "AUDIO_EVENT_DETECTION":
+            return { event_types: ["speech", "music", "noise", "silence", "applause", "laughter", "alarm"] };
+        default:
+            return {};
+    }
+}
+
 const initialForm = {
     competitionName: "",
     taskType: "",
@@ -106,6 +146,9 @@ const initialForm = {
 
     complexityLevel: 0,
 
+    // Task-specific annotation config set by organizer
+    taskConfig: {},
+
     datasets: [],
     milestones: [],
     validationDate: "",
@@ -124,6 +167,23 @@ function safeArrayJson(value) {
 }
 
 function mapCompetitionToForm(c) {
+    let taskConfig = {};
+    try {
+        if (c.dataset_config) {
+            const raw = typeof c.dataset_config === "string" ? JSON.parse(c.dataset_config) : c.dataset_config;
+            taskConfig = raw || {};
+        }
+    } catch {
+        taskConfig = {};
+    }
+    // Re-inflate glossary_raw for the TRANSLATION form UI
+    if (c.task_type === "TRANSLATION" && Array.isArray(taskConfig.glossary)) {
+        taskConfig.glossary_raw = taskConfig.glossary.map((g) => `${g.src} → ${g.tgt}`).join("\n");
+        delete taskConfig.glossary;
+    }
+    // Re-inflate prompts array for audio tasks
+    if (!taskConfig.prompts) taskConfig.prompts = [];
+
     return {
         competitionName: c.title || "",
         taskType: c.task_type || c.category || "",
@@ -148,11 +208,41 @@ function mapCompetitionToForm(c) {
 
         complexityLevel: c.complexity_level ?? 0,
 
+        taskConfig: Object.keys(taskConfig).length
+            ? taskConfig
+            : getDefaultTaskConfig(c.task_type || ""),
+
         datasets: [],
         milestones: safeArrayJson(c.milestones_json),
         validationDate: c.validation_date || "",
         freezeDate: c.freeze_date || "",
     };
+}
+
+// ── Serialize taskConfig for API payload ──────────────────────────────────────
+function serializeTaskConfig(taskType, taskConfig) {
+    if (!taskConfig) return {};
+    const cfg = { ...taskConfig };
+
+    // Convert glossary_raw ("EN term → AR term" lines) to [{src, tgt}] array
+    if (taskType === "TRANSLATION" && typeof cfg.glossary_raw === "string") {
+        cfg.glossary = cfg.glossary_raw
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean)
+            .map((l) => {
+                const [src, tgt] = l.split("→").map((s) => s.trim());
+                return { src: src || l, tgt: tgt || "" };
+            });
+        delete cfg.glossary_raw;
+    }
+
+    // Convert prompts from string (textarea) to array if needed
+    if (typeof cfg.prompts === "string") {
+        cfg.prompts = cfg.prompts.split("\n").map((s) => s.trim()).filter(Boolean);
+    }
+
+    return cfg;
 }
 
 function CreateCompetition({ editMode = false }) {
@@ -169,7 +259,6 @@ function CreateCompetition({ editMode = false }) {
     const [errors, setErrors] = useState({});
     const [skillsOpen, setSkillsOpen] = useState(false);
 
-    // ✅ ADDED: real competition ID from draft save — this is what DatasetSection needs
     const [savedCompetitionId, setSavedCompetitionId] = useState(
         isEditMode ? competitionId : null
     );
@@ -200,11 +289,7 @@ function CreateCompetition({ editMode = false }) {
 
                 const res = await fetch(
                     `http://127.0.0.1:8000/competitions/${competitionId}`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                        },
-                    }
+                    { headers: { Authorization: `Bearer ${token}` } }
                 );
 
                 const data = await res.json();
@@ -226,13 +311,13 @@ function CreateCompetition({ editMode = false }) {
         loadCompetitionForEdit();
     }, [isEditMode, location.state, competitionId, navigate]);
 
-    // ✅ ADDED: auto-save draft when user reaches step 4 so we get a real competition ID
+    // Auto-save draft when reaching Datasets step (index 5 in 7-step wizard)
     useEffect(() => {
-        if (currentStep !== 4) return;   // only on Datasets step
-        if (isEditMode) return;           // edit mode already has an ID
-        if (savedCompetitionId) return;   // already saved
+        if (currentStep !== 5) return;
+        if (isEditMode) return;
+        if (savedCompetitionId) return;
 
-        async function saveDraft() {
+        async function saveDraftAuto() {
             const token = await getFreshToken();
             if (!token) return;
 
@@ -249,15 +334,12 @@ function CreateCompetition({ editMode = false }) {
                     body: JSON.stringify(buildPayload()),
                 });
                 const data = await r.json();
-                if (!r.ok) {
-                    throw new Error(data.detail || `HTTP ${r.status}`);
-                }
-                // backend returns { competition_id: "..." }
+                if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
                 const id = data.id || data.competition_id;
                 if (id) {
                     setSavedCompetitionId(id);
                 } else {
-                    setDraftError("Draft saved but no ID returned. Check backend response.");
+                    setDraftError("Draft saved but no ID returned.");
                     console.error("Draft response missing id:", data);
                 }
             } catch (err) {
@@ -268,7 +350,7 @@ function CreateCompetition({ editMode = false }) {
             }
         }
 
-        saveDraft();
+        saveDraftAuto();
     }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const clearFieldError = (field) => {
@@ -280,18 +362,27 @@ function CreateCompetition({ editMode = false }) {
     };
 
     const updateField = (field, value) => {
+        setForm((prev) => {
+            const next = { ...prev, [field]: value };
+            // When task type changes, reset taskConfig to the new task's defaults
+            if (field === "taskType") {
+                next.taskConfig = getDefaultTaskConfig(value);
+            }
+            return next;
+        });
+        clearFieldError(field);
+    };
+
+    const updateTaskConfig = (key, value) => {
         setForm((prev) => ({
             ...prev,
-            [field]: value,
+            taskConfig: { ...prev.taskConfig, [key]: value },
         }));
-
-        clearFieldError(field);
     };
 
     const toggleSkill = (skill) => {
         setForm((prev) => {
             const exists = prev.requiredSkills.includes(skill);
-
             return {
                 ...prev,
                 requiredSkills: exists
@@ -302,16 +393,9 @@ function CreateCompetition({ editMode = false }) {
     };
 
     const addDataset = () => {
-        const newDataset = {
-            id: Date.now(),
-            name: "",
-            type: "",
-            visibility: "Private",
-        };
-
         setForm((prev) => ({
             ...prev,
-            datasets: [...prev.datasets, newDataset],
+            datasets: [...prev.datasets, { id: Date.now(), name: "", type: "", visibility: "Private" }],
         }));
     };
 
@@ -322,7 +406,6 @@ function CreateCompetition({ editMode = false }) {
                 item.id === id ? { ...item, [field]: value } : item
             ),
         }));
-
         clearFieldError(`datasetName-${id}`);
         clearFieldError(`datasetType-${id}`);
     };
@@ -335,15 +418,9 @@ function CreateCompetition({ editMode = false }) {
     };
 
     const addMilestone = () => {
-        const newMilestone = {
-            id: Date.now(),
-            title: "",
-            date: "",
-        };
-
         setForm((prev) => ({
             ...prev,
-            milestones: [...prev.milestones, newMilestone],
+            milestones: [...prev.milestones, { id: Date.now(), title: "", date: "" }],
         }));
     };
 
@@ -367,139 +444,72 @@ function CreateCompetition({ editMode = false }) {
         const nextErrors = {};
 
         if (step === 0) {
-            if (!form.competitionName.trim()) {
+            if (!form.competitionName.trim())
                 nextErrors.competitionName = "Competition name is required.";
-            }
-
-            if (!form.taskType) {
+            if (!form.taskType)
                 nextErrors.taskType = "Task type is required.";
-            }
-
-            if (!form.description.trim()) {
+            if (!form.description.trim())
                 nextErrors.description = "Description is required.";
-            }
-
-            if (
-                form.startDate &&
-                form.endDate &&
-                new Date(form.endDate) < new Date(form.startDate)
-            ) {
+            if (form.startDate && form.endDate && new Date(form.endDate) < new Date(form.startDate))
                 nextErrors.endDate = "End date must be after start date.";
-            }
-
-            if (form.prizePool !== "" && Number(form.prizePool) < 0) {
+            if (form.prizePool !== "" && Number(form.prizePool) < 0)
                 nextErrors.prizePool = "Prize pool cannot be negative.";
-            }
         }
 
+        // Step 1 — Task Config: validate audio tasks have at least one prompt
         if (step === 1) {
-            if (!form.primaryMetric) {
-                nextErrors.primaryMetric = "Primary metric is required.";
+            const audioPromptTasks = ["AUDIO_SYNTHESIS", "SPEECH_EMOTION"];
+            if (audioPromptTasks.includes(form.taskType)) {
+                const prompts = Array.isArray(form.taskConfig.prompts)
+                    ? form.taskConfig.prompts
+                    : (form.taskConfig.prompts || "").split("\n").filter(Boolean);
+                if (!prompts.length)
+                    nextErrors.prompts = "At least one prompt sentence is required for this task type.";
             }
         }
 
         if (step === 2) {
-            if (form.maxTeams !== "" && Number(form.maxTeams) < 0) {
-                nextErrors.maxTeams = "Maximum teams cannot be negative.";
-            }
-
-            if (form.minMembers !== "" && Number(form.minMembers) <= 0) {
-                nextErrors.minMembers = "Minimum members must be greater than 0.";
-            }
-
-            if (form.maxMembers !== "" && Number(form.maxMembers) <= 0) {
-                nextErrors.maxMembers = "Maximum members must be greater than 0.";
-            }
-
-            if (
-                form.minMembers !== "" &&
-                form.maxMembers !== "" &&
-                Number(form.minMembers) > Number(form.maxMembers)
-            ) {
-                nextErrors.maxMembers = "Max members must be greater than min members.";
-            }
-
-            if (
-                form.maxSubmissionsPerDay !== "" &&
-                Number(form.maxSubmissionsPerDay) <= 0
-            ) {
-                nextErrors.maxSubmissionsPerDay =
-                    "Max submissions per day must be greater than 0.";
-            }
-
-            if (
-                form.mergeDeadline &&
-                form.startDate &&
-                new Date(form.mergeDeadline) < new Date(form.startDate)
-            ) {
-                nextErrors.mergeDeadline = "Merge deadline cannot be before start date.";
-            }
-
-            if (
-                form.mergeDeadline &&
-                form.endDate &&
-                new Date(form.mergeDeadline) > new Date(form.endDate)
-            ) {
-                nextErrors.mergeDeadline = "Merge deadline cannot be after end date.";
-            }
+            if (!form.primaryMetric)
+                nextErrors.primaryMetric = "Primary metric is required.";
         }
 
-        if (step === 4) {
-            form.datasets.forEach((dataset, index) => {
-                if (!dataset.name.trim()) {
-                    nextErrors[`datasetName-${dataset.id}`] =
-                        `Dataset ${index + 1} name is required.`;
-                }
-
-                if (!dataset.type.trim()) {
-                    nextErrors[`datasetType-${dataset.id}`] =
-                        `Dataset ${index + 1} type is required.`;
-                }
-            });
+        if (step === 3) {
+            if (form.maxTeams !== "" && Number(form.maxTeams) < 0)
+                nextErrors.maxTeams = "Maximum teams cannot be negative.";
+            if (form.minMembers !== "" && Number(form.minMembers) <= 0)
+                nextErrors.minMembers = "Minimum members must be greater than 0.";
+            if (form.maxMembers !== "" && Number(form.maxMembers) <= 0)
+                nextErrors.maxMembers = "Maximum members must be greater than 0.";
+            if (form.minMembers !== "" && form.maxMembers !== "" && Number(form.minMembers) > Number(form.maxMembers))
+                nextErrors.maxMembers = "Max members must be greater than min members.";
+            if (form.maxSubmissionsPerDay !== "" && Number(form.maxSubmissionsPerDay) <= 0)
+                nextErrors.maxSubmissionsPerDay = "Max submissions per day must be greater than 0.";
+            if (form.mergeDeadline && form.startDate && new Date(form.mergeDeadline) < new Date(form.startDate))
+                nextErrors.mergeDeadline = "Merge deadline cannot be before start date.";
+            if (form.mergeDeadline && form.endDate && new Date(form.mergeDeadline) > new Date(form.endDate))
+                nextErrors.mergeDeadline = "Merge deadline cannot be after end date.";
         }
 
         if (step === 5) {
-            if (
-                form.validationDate &&
-                form.startDate &&
-                new Date(form.validationDate) < new Date(form.startDate)
-            ) {
-                nextErrors.validationDate =
-                    "Validation date cannot be before start date.";
-            }
+            form.datasets.forEach((dataset, index) => {
+                if (!dataset.name.trim())
+                    nextErrors[`datasetName-${dataset.id}`] = `Dataset ${index + 1} name is required.`;
+                if (!dataset.type.trim())
+                    nextErrors[`datasetType-${dataset.id}`] = `Dataset ${index + 1} type is required.`;
+            });
+        }
 
-            if (
-                form.validationDate &&
-                form.endDate &&
-                new Date(form.validationDate) > new Date(form.endDate)
-            ) {
-                nextErrors.validationDate =
-                    "Validation date cannot be after competition end date.";
-            }
-
-            if (
-                form.freezeDate &&
-                form.startDate &&
-                new Date(form.freezeDate) < new Date(form.startDate)
-            ) {
+        if (step === 6) {
+            if (form.validationDate && form.startDate && new Date(form.validationDate) < new Date(form.startDate))
+                nextErrors.validationDate = "Validation date cannot be before start date.";
+            if (form.validationDate && form.endDate && new Date(form.validationDate) > new Date(form.endDate))
+                nextErrors.validationDate = "Validation date cannot be after competition end date.";
+            if (form.freezeDate && form.startDate && new Date(form.freezeDate) < new Date(form.startDate))
                 nextErrors.freezeDate = "Freeze date cannot be before start date.";
-            }
-
-            if (
-                form.freezeDate &&
-                form.validationDate &&
-                new Date(form.freezeDate) < new Date(form.validationDate)
-            ) {
+            if (form.freezeDate && form.validationDate && new Date(form.freezeDate) < new Date(form.validationDate))
                 nextErrors.freezeDate = "Freeze date cannot be before validation date.";
-            }
-
-            if (
-                form.freezeDate &&
-                form.endDate &&
-                new Date(form.freezeDate) > new Date(form.endDate)
-            ) {
+            if (form.freezeDate && form.endDate && new Date(form.freezeDate) > new Date(form.endDate))
                 nextErrors.freezeDate = "Freeze date cannot be after competition end date.";
-            }
         }
 
         setErrors(nextErrors);
@@ -522,10 +532,7 @@ function CreateCompetition({ editMode = false }) {
         max_members: form.maxMembers === "" ? null : Number(form.maxMembers),
         merge_deadline: form.mergeDeadline || null,
         required_skills: form.requiredSkills,
-        max_submissions_per_day:
-            form.maxSubmissionsPerDay === ""
-                ? null
-                : Number(form.maxSubmissionsPerDay),
+        max_submissions_per_day: form.maxSubmissionsPerDay === "" ? null : Number(form.maxSubmissionsPerDay),
         allow_external_data: form.allowExternalData,
         allow_pretrained_models: form.allowPretrainedModels,
         require_code_sharing: form.requireCodeSharing,
@@ -536,6 +543,9 @@ function CreateCompetition({ editMode = false }) {
         milestones: form.milestones,
         validation_date: form.validationDate || null,
         freeze_date: form.freezeDate || null,
+
+        // Task-specific annotation config for this competition's widgets
+        task_config: serializeTaskConfig(form.taskType, form.taskConfig),
     });
 
     const saveDraft = async () => {
@@ -543,33 +553,17 @@ function CreateCompetition({ editMode = false }) {
 
         try {
             setSubmitting(true);
-
             const token = await getFreshToken();
-
-            if (!token) {
-                alert("You must login first.");
-                navigate("/login");
-                return;
-            }
+            if (!token) { alert("You must login first."); navigate("/login"); return; }
 
             const res = await fetch("http://127.0.0.1:8000/competitions/draft", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify(buildPayload()),
             });
 
             const data = await res.json();
-
-            if (!res.ok) {
-                throw new Error(
-                    typeof data.detail === "string"
-                        ? data.detail
-                        : JSON.stringify(data.detail || data, null, 2)
-                );
-            }
+            if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data, null, 2));
 
             const id = data.id || data.competition_id;
             if (id) setSavedCompetitionId(id);
@@ -593,16 +587,9 @@ function CreateCompetition({ editMode = false }) {
 
         try {
             setSubmitting(true);
-
             const token = await getFreshToken();
+            if (!token) { alert("You must login first."); navigate("/login"); return; }
 
-            if (!token) {
-                alert("You must login first.");
-                navigate("/login");
-                return;
-            }
-
-            // ✅ if draft was already saved, update it — avoids creating a duplicate
             const url = isEditMode
                 ? `http://127.0.0.1:8000/competitions/${competitionId}/update`
                 : savedCompetitionId
@@ -613,33 +600,17 @@ function CreateCompetition({ editMode = false }) {
 
             const res = await fetch(url, {
                 method,
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify(buildPayload()),
             });
 
             const data = await res.json();
+            if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data, null, 2));
 
-            if (!res.ok) {
-                throw new Error(
-                    typeof data.detail === "string"
-                        ? data.detail
-                        : JSON.stringify(data.detail || data, null, 2)
-                );
-            }
-
-            alert(
-                isEditMode
-                    ? "Competition updated successfully"
-                    : "Competition created successfully"
-            );
+            alert(isEditMode ? "Competition updated successfully" : "Competition created successfully");
 
             if (isEditMode) {
-                navigate(`/competitions/${competitionId}/organizer`, {
-                    state: { refreshed: true },
-                });
+                navigate(`/competitions/${competitionId}/organizer`, { state: { refreshed: true } });
             } else {
                 navigate("/competitions", { state: { refreshAll: true } });
             }
@@ -652,31 +623,25 @@ function CreateCompetition({ editMode = false }) {
     };
 
     const handleCancel = () => {
-        if (isEditMode) {
-            navigate(`/competitions/${competitionId}/organizer`);
-        } else {
-            navigate("/competitions");
-        }
+        if (isEditMode) navigate(`/competitions/${competitionId}/organizer`);
+        else navigate("/competitions");
     };
 
     const handleNext = () => {
         if (!validateStep(currentStep)) return;
-
-        if (currentStep < steps.length - 1) {
-            setCurrentStep((prev) => prev + 1);
-        }
+        if (currentStep < steps.length - 1) setCurrentStep((prev) => prev + 1);
     };
 
     const handlePrevious = () => {
-        if (currentStep > 0) {
-            setCurrentStep((prev) => prev - 1);
-        }
+        if (currentStep > 0) setCurrentStep((prev) => prev - 1);
     };
 
     const ErrorMessage = ({ name }) => {
         if (!errors[name]) return null;
         return <span className="field-error">{errors[name]}</span>;
     };
+
+    // ── Render helpers ─────────────────────────────────────────────────────────
 
     const renderBasicInfo = () => (
         <div className="create-card">
@@ -700,10 +665,8 @@ function CreateCompetition({ editMode = false }) {
                     onChange={(e) => updateField("taskType", e.target.value)}
                 >
                     <option value="">Select task type</option>
-                    {taskTypes.map((task) => (
-                        <option key={task} value={task}>
-                            {task}
-                        </option>
+                    {taskTypes.map((t) => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                 </select>
                 <ErrorMessage name="taskType" />
@@ -760,6 +723,390 @@ function CreateCompetition({ editMode = false }) {
         </div>
     );
 
+    // ── Task Config step ───────────────────────────────────────────────────────
+    const renderTaskConfig = () => {
+        const taskType = form.taskType;
+        const cfg = form.taskConfig;
+
+        // Converts an array → newline-separated string for textarea
+        const asText = (key, defaultLines = []) => {
+            const val = cfg[key];
+            if (Array.isArray(val)) return val.join("\n");
+            if (typeof val === "string") return val;
+            return defaultLines.join("\n");
+        };
+
+        // Saves newline-separated textarea back as array
+        const onTextareaLines = (key) => (e) =>
+            updateTaskConfig(key, e.target.value.split("\n").map((s) => s.trimEnd()));
+
+        if (!taskType) {
+            return (
+                <div className="create-card">
+                    <div className="tc-empty">
+                        <span className="tc-empty-icon">↑</span>
+                        <p>Select a Task Type in Step 1 to configure annotation settings.</p>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="create-card">
+                <h3 className="create-card-title">Task Configuration</h3>
+                <p className="create-card-subtitle">
+                    These settings are shown to contributors in the Data Collection widget.
+                    Defaults are pre-filled — edit them to match your dataset's scope.
+                </p>
+
+                {/* ── TEXT_CLASSIFICATION ──────────────────────────── */}
+                {taskType === "TEXT_CLASSIFICATION" && (
+                    <>
+                        <div className="create-section">
+                            <label>Classification Labels <span className="required-star">*</span></label>
+                            <textarea
+                                rows={6}
+                                placeholder={"Finance\nTechnology\nHealthcare\n..."}
+                                value={asText("labels", ["Finance", "Technology", "Healthcare"])}
+                                onChange={onTextareaLines("labels")}
+                            />
+                            <small>One label per line. Contributors will choose from these labels when annotating text.</small>
+                        </div>
+                        <div className="create-section">
+                            <label>Instructions for contributors</label>
+                            <textarea
+                                rows={2}
+                                placeholder="Optional guidance shown to contributors in the widget..."
+                                value={cfg.description || ""}
+                                onChange={(e) => updateTaskConfig("description", e.target.value)}
+                            />
+                        </div>
+                    </>
+                )}
+
+                {/* ── NER ──────────────────────────────────────────── */}
+                {taskType === "NER" && (
+                    <>
+                        <div className="create-section">
+                            <label>Entity Types <span className="required-star">*</span></label>
+                            <textarea
+                                rows={5}
+                                placeholder={"PER\nORG\nLOC\nDATE\n..."}
+                                value={asText("entity_types", ["PER", "ORG", "LOC", "MISC"])}
+                                onChange={onTextareaLines("entity_types")}
+                            />
+                            <small>One entity type per line. Use short uppercase codes (e.g. PER, ORG, LOC).</small>
+                        </div>
+                        <div className="create-section">
+                            <label>Instructions for contributors</label>
+                            <textarea
+                                rows={2}
+                                placeholder="e.g., Only tag proper nouns; do not tag common nouns..."
+                                value={cfg.description || ""}
+                                onChange={(e) => updateTaskConfig("description", e.target.value)}
+                            />
+                        </div>
+                    </>
+                )}
+
+                {/* ── SENTIMENT_ANALYSIS ───────────────────────────── */}
+                {taskType === "SENTIMENT_ANALYSIS" && (
+                    <>
+                        <div className="create-section">
+                            <label>Sentiment Labels <span className="required-star">*</span></label>
+                            <textarea
+                                rows={4}
+                                placeholder={"positive\nnegative\nneutral\nmixed"}
+                                value={asText("sentiment_labels", ["positive", "negative", "neutral", "mixed"])}
+                                onChange={onTextareaLines("sentiment_labels")}
+                            />
+                            <small>One label per line. These appear as clickable sentiment buttons.</small>
+                        </div>
+                        <div className="create-section">
+                            <label>Aspect Categories</label>
+                            <textarea
+                                rows={4}
+                                placeholder={"product\nservice\nprice\ndelivery"}
+                                value={asText("aspect_categories", ["product", "service", "price", "delivery"])}
+                                onChange={onTextareaLines("aspect_categories")}
+                            />
+                            <small>Optional. One aspect per line for fine-grained annotation. Leave blank to disable aspect annotation.</small>
+                        </div>
+                    </>
+                )}
+
+                {/* ── TRANSLATION ──────────────────────────────────── */}
+                {taskType === "TRANSLATION" && (
+                    <>
+                        <div className="create-two-col">
+                            <div className="create-section">
+                                <label>Source Language <span className="required-star">*</span></label>
+                                <input
+                                    type="text"
+                                    placeholder="EN"
+                                    maxLength={10}
+                                    value={cfg.source_lang || "EN"}
+                                    onChange={(e) => updateTaskConfig("source_lang", e.target.value.toUpperCase())}
+                                />
+                                <small>ISO 639-1 code (e.g. EN, FR, ZH)</small>
+                            </div>
+                            <div className="create-section">
+                                <label>Target Language <span className="required-star">*</span></label>
+                                <input
+                                    type="text"
+                                    placeholder="AR"
+                                    maxLength={10}
+                                    value={cfg.target_lang || "AR"}
+                                    onChange={(e) => updateTaskConfig("target_lang", e.target.value.toUpperCase())}
+                                />
+                                <small>ISO 639-1 code (e.g. AR, DE, JA)</small>
+                            </div>
+                        </div>
+                        <div className="create-section">
+                            <label>Glossary Terms</label>
+                            <textarea
+                                rows={5}
+                                placeholder={"machine learning → تعلم الآلة\nneural network → شبكة عصبية"}
+                                value={cfg.glossary_raw || ""}
+                                onChange={(e) => updateTaskConfig("glossary_raw", e.target.value)}
+                            />
+                            <small>Optional. One entry per line in format: <code>source term → target term</code>. Shown as hints to contributors.</small>
+                        </div>
+                    </>
+                )}
+
+                {/* ── QUESTION_ANSWERING ───────────────────────────── */}
+                {taskType === "QUESTION_ANSWERING" && (
+                    <>
+                        <div className="create-section">
+                            <label>QA Mode <span className="required-star">*</span></label>
+                            <div className="tc-radio-group">
+                                {[
+                                    { value: "extractive", label: "Extractive", desc: "Answers must be exact spans copied from the context passage." },
+                                    { value: "generative", label: "Generative", desc: "Contributors write answers freely in their own words." },
+                                ].map((opt) => (
+                                    <label key={opt.value} className={`tc-radio-option ${cfg.qa_type === opt.value ? "selected" : ""}`}>
+                                        <input
+                                            type="radio"
+                                            name="qa_type"
+                                            value={opt.value}
+                                            checked={cfg.qa_type === opt.value}
+                                            onChange={() => updateTaskConfig("qa_type", opt.value)}
+                                        />
+                                        <div>
+                                            <strong>{opt.label}</strong>
+                                            <span>{opt.desc}</span>
+                                        </div>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="create-section">
+                            <label>Instructions for contributors</label>
+                            <textarea
+                                rows={2}
+                                placeholder="e.g., Write questions that can only be answered from the passage provided..."
+                                value={cfg.description || ""}
+                                onChange={(e) => updateTaskConfig("description", e.target.value)}
+                            />
+                        </div>
+                    </>
+                )}
+
+                {/* ── SUMMARIZATION ────────────────────────────────── */}
+                {taskType === "SUMMARIZATION" && (
+                    <>
+                        <div className="create-three-col">
+                            <div className="create-section">
+                                <label>Target Compression Ratio</label>
+                                <input
+                                    type="number"
+                                    step="0.01" min="0.01" max="1"
+                                    placeholder="0.10"
+                                    value={cfg.target_ratio ?? 0.1}
+                                    onChange={(e) => updateTaskConfig("target_ratio", parseFloat(e.target.value) || 0.1)}
+                                />
+                                <small>Target summary length as fraction of source (0.10 = 10%)</small>
+                            </div>
+                            <div className="create-section">
+                                <label>Maximum Ratio</label>
+                                <input
+                                    type="number"
+                                    step="0.01" min="0.01" max="1"
+                                    placeholder="0.15"
+                                    value={cfg.max_ratio ?? 0.15}
+                                    onChange={(e) => updateTaskConfig("max_ratio", parseFloat(e.target.value) || 0.15)}
+                                />
+                                <small>Hard cap — summaries above this ratio are flagged.</small>
+                            </div>
+                            <div className="create-section">
+                                <label>Minimum Words</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    placeholder="20"
+                                    value={cfg.min_summary_words ?? 20}
+                                    onChange={(e) => updateTaskConfig("min_summary_words", parseInt(e.target.value, 10) || 20)}
+                                />
+                                <small>Floor for summary word count regardless of ratio.</small>
+                            </div>
+                        </div>
+                        <div className="create-section">
+                            <label>Instructions for contributors</label>
+                            <textarea
+                                rows={2}
+                                placeholder="e.g., Preserve factual accuracy; do not introduce information not in the source..."
+                                value={cfg.description || ""}
+                                onChange={(e) => updateTaskConfig("description", e.target.value)}
+                            />
+                        </div>
+                    </>
+                )}
+
+                {/* ── AUDIO_SYNTHESIS ─────────────────────────────── */}
+                {taskType === "AUDIO_SYNTHESIS" && (
+                    <>
+                        <div className="create-section">
+                            <label>
+                                Reading Prompts <span className="required-star">*</span>
+                                <span style={{ fontWeight: 400, color: "#6f778c", marginLeft: 8 }}>
+                                    — contributors read these aloud
+                                </span>
+                            </label>
+                            <textarea
+                                rows={10}
+                                className={errors.prompts ? "input-error" : ""}
+                                placeholder={"The geometric precision of the algorithm allows for instantaneous detection of phonetic anomalies.\nShe sold seashells by the seashore on a warm summer afternoon.\nThe quick brown fox jumps over the lazy dog near the old mill."}
+                                value={Array.isArray(cfg.prompts) ? cfg.prompts.join("\n") : (cfg.prompts || "")}
+                                onChange={(e) => updateTaskConfig("prompts", e.target.value.split("\n").map((s) => s.trimEnd()))}
+                            />
+                            <small>
+                                One sentence per line. Each submission uses the next prompt in rotation.
+                                {Array.isArray(cfg.prompts) ? ` — ${cfg.prompts.filter(Boolean).length} prompt(s) defined` : ""}
+                            </small>
+                            <ErrorMessage name="prompts" />
+                        </div>
+                        <div className="create-section">
+                            <label>Instructions for contributors</label>
+                            <textarea
+                                rows={2}
+                                placeholder="e.g., Read clearly at a natural pace; avoid background noise..."
+                                value={cfg.description || ""}
+                                onChange={(e) => updateTaskConfig("description", e.target.value)}
+                            />
+                        </div>
+                    </>
+                )}
+
+                {/* ── AUDIO_TRANSCRIPTION ─────────────────────────── */}
+                {taskType === "AUDIO_TRANSCRIPTION" && (
+                    <>
+                        <div className="create-two-col">
+                            <div className="create-section">
+                                <label>Number of Speakers</label>
+                                <input
+                                    type="number" min="1" max="20"
+                                    value={cfg.speakers ?? 1}
+                                    onChange={(e) => updateTaskConfig("speakers", parseInt(e.target.value, 10) || 1)}
+                                />
+                                <small>How many distinct speakers appear in the audio.</small>
+                            </div>
+                            <div className="create-section" style={{ justifyContent: "flex-end" }}>
+                                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                                    <span className="switch">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!cfg.with_timestamps}
+                                            onChange={(e) => updateTaskConfig("with_timestamps", e.target.checked)}
+                                        />
+                                        <span className="slider" />
+                                    </span>
+                                    <div>
+                                        <strong>Require Timestamps</strong>
+                                        <p style={{ margin: 0, fontSize: 12, color: "#6b7280" }}>
+                                            Contributors mark times in [MM:SS] format
+                                        </p>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        <div className="create-section">
+                            <label>Instructions for contributors</label>
+                            <textarea
+                                rows={2}
+                                placeholder="e.g., Include all filler words (uh, um); mark unclear speech with [inaudible]..."
+                                value={cfg.description || ""}
+                                onChange={(e) => updateTaskConfig("description", e.target.value)}
+                            />
+                        </div>
+                    </>
+                )}
+
+                {/* ── SPEECH_EMOTION ──────────────────────────────── */}
+                {taskType === "SPEECH_EMOTION" && (
+                    <>
+                        <div className="create-section">
+                            <label>Emotion Labels <span className="required-star">*</span></label>
+                            <textarea
+                                rows={5}
+                                placeholder={"neutral\nhappy\nsad\nangry\nsurprised"}
+                                value={asText("emotion_labels", ["neutral", "happy", "sad", "angry", "surprised", "fearful"])}
+                                onChange={onTextareaLines("emotion_labels")}
+                            />
+                            <small>One emotion per line. Contributors assign one of these after recording.</small>
+                        </div>
+                        <div className="create-section">
+                            <label>
+                                Utterance Prompts <span className="required-star">*</span>
+                                <span style={{ fontWeight: 400, color: "#6f778c", marginLeft: 8 }}>
+                                    — contributors read these with the target emotion
+                                </span>
+                            </label>
+                            <textarea
+                                rows={8}
+                                className={errors.prompts ? "input-error" : ""}
+                                placeholder={"I can't believe this actually worked out the way I hoped.\nEverything seems to be falling apart today.\nWe finally got the results — they exceeded all expectations."}
+                                value={Array.isArray(cfg.prompts) ? cfg.prompts.join("\n") : (cfg.prompts || "")}
+                                onChange={(e) => updateTaskConfig("prompts", e.target.value.split("\n").map((s) => s.trimEnd()))}
+                            />
+                            <small>
+                                One utterance per line. Should be emotionally ambiguous sentences that
+                                can be delivered in different emotional tones.
+                                {Array.isArray(cfg.prompts) ? ` — ${cfg.prompts.filter(Boolean).length} prompt(s) defined` : ""}
+                            </small>
+                            <ErrorMessage name="prompts" />
+                        </div>
+                    </>
+                )}
+
+                {/* ── AUDIO_EVENT_DETECTION ───────────────────────── */}
+                {taskType === "AUDIO_EVENT_DETECTION" && (
+                    <>
+                        <div className="create-section">
+                            <label>Event Types <span className="required-star">*</span></label>
+                            <textarea
+                                rows={6}
+                                placeholder={"speech\nmusic\nnoise\nsilence\napplause\nalarm"}
+                                value={asText("event_types", ["speech", "music", "noise", "silence", "applause", "alarm"])}
+                                onChange={onTextareaLines("event_types")}
+                            />
+                            <small>One event type per line. Contributors mark segments of audio with these labels.</small>
+                        </div>
+                        <div className="create-section">
+                            <label>Instructions for contributors</label>
+                            <textarea
+                                rows={2}
+                                placeholder="e.g., Mark overlapping events separately; minimum segment length is 0.5s..."
+                                value={cfg.description || ""}
+                                onChange={(e) => updateTaskConfig("description", e.target.value)}
+                            />
+                        </div>
+                    </>
+                )}
+            </div>
+        );
+    };
+
     const renderEvaluation = () => (
         <div className="create-card">
             <h3 className="create-card-title">Evaluation Metrics</h3>
@@ -776,9 +1123,7 @@ function CreateCompetition({ editMode = false }) {
                 >
                     <option value="">Select primary metric</option>
                     {primaryMetrics.map((metric) => (
-                        <option key={metric} value={metric}>
-                            {metric}
-                        </option>
+                        <option key={metric} value={metric}>{metric}</option>
                     ))}
                 </select>
                 <small>Main metric used for leaderboard ranking.</small>
@@ -793,9 +1138,7 @@ function CreateCompetition({ editMode = false }) {
                 >
                     <option value="">Select secondary metric</option>
                     {primaryMetrics.map((metric) => (
-                        <option key={metric} value={metric}>
-                            {metric}
-                        </option>
+                        <option key={metric} value={metric}>{metric}</option>
                     ))}
                 </select>
                 <small>Optional tie-breaker metric.</small>
@@ -814,7 +1157,7 @@ function CreateCompetition({ editMode = false }) {
 
     const renderRules = () => (
         <div className="create-card">
-            <h3 className="create-card-title">Competition Rules & Requirements</h3>
+            <h3 className="create-card-title">Competition Rules &amp; Requirements</h3>
             <p className="create-card-subtitle">
                 Optional settings for team limits, skills, and submission rules.
             </p>
@@ -894,7 +1237,6 @@ function CreateCompetition({ editMode = false }) {
                         <div className="skills-dropdown">
                             {PREDEFINED_SKILLS.map((skill) => {
                                 const selected = form.requiredSkills.includes(skill);
-
                                 return (
                                     <button
                                         key={skill}
@@ -936,9 +1278,7 @@ function CreateCompetition({ editMode = false }) {
                         type="number"
                         placeholder="e.g., 5"
                         value={form.maxSubmissionsPerDay}
-                        onChange={(e) =>
-                            updateField("maxSubmissionsPerDay", e.target.value)
-                        }
+                        onChange={(e) => updateField("maxSubmissionsPerDay", e.target.value)}
                     />
                     <small>Optional. Leave empty for no daily limit.</small>
                     <ErrorMessage name="maxSubmissionsPerDay" />
@@ -950,13 +1290,8 @@ function CreateCompetition({ editMode = false }) {
                         <p>Can participants use datasets not provided by organizers?</p>
                     </div>
                     <label className="switch">
-                        <input
-                            type="checkbox"
-                            checked={form.allowExternalData}
-                            onChange={(e) =>
-                                updateField("allowExternalData", e.target.checked)
-                            }
-                        />
+                        <input type="checkbox" checked={form.allowExternalData}
+                            onChange={(e) => updateField("allowExternalData", e.target.checked)} />
                         <span className="slider"></span>
                     </label>
                 </div>
@@ -967,13 +1302,8 @@ function CreateCompetition({ editMode = false }) {
                         <p>Can participants use pre-trained models such as BERT or GPT?</p>
                     </div>
                     <label className="switch">
-                        <input
-                            type="checkbox"
-                            checked={form.allowPretrainedModels}
-                            onChange={(e) =>
-                                updateField("allowPretrainedModels", e.target.checked)
-                            }
-                        />
+                        <input type="checkbox" checked={form.allowPretrainedModels}
+                            onChange={(e) => updateField("allowPretrainedModels", e.target.checked)} />
                         <span className="slider"></span>
                     </label>
                 </div>
@@ -984,20 +1314,15 @@ function CreateCompetition({ editMode = false }) {
                         <p>Must winners share their code and solution?</p>
                     </div>
                     <label className="switch">
-                        <input
-                            type="checkbox"
-                            checked={form.requireCodeSharing}
-                            onChange={(e) =>
-                                updateField("requireCodeSharing", e.target.checked)
-                            }
-                        />
+                        <input type="checkbox" checked={form.requireCodeSharing}
+                            onChange={(e) => updateField("requireCodeSharing", e.target.checked)} />
                         <span className="slider"></span>
                     </label>
                 </div>
             </div>
 
             <div className="create-section">
-                <label>Additional Rules & Guidelines</label>
+                <label>Additional Rules &amp; Guidelines</label>
                 <textarea
                     rows="3"
                     placeholder="Specify extra rules, ethics requirements, prize distribution terms..."
@@ -1011,9 +1336,7 @@ function CreateCompetition({ editMode = false }) {
     const renderComplexity = () => (
         <div className="create-card">
             <h3 className="create-card-title">Challenge Complexity</h3>
-            <p className="create-card-subtitle">
-                Choose the difficulty level of this competition.
-            </p>
+            <p className="create-card-subtitle">Choose the difficulty level of this competition.</p>
 
             <div className="create-section">
                 <label>Complexity Level</label>
@@ -1022,11 +1345,7 @@ function CreateCompetition({ editMode = false }) {
                         <button
                             key={level.title}
                             type="button"
-                            className={
-                                form.complexityLevel === index
-                                    ? "complexity-option active"
-                                    : "complexity-option"
-                            }
+                            className={form.complexityLevel === index ? "complexity-option active" : "complexity-option"}
                             onClick={() => updateField("complexityLevel", index)}
                         >
                             <strong>{level.title}</strong>
@@ -1038,7 +1357,6 @@ function CreateCompetition({ editMode = false }) {
         </div>
     );
 
-    // ✅ ADDED: replaces old inline case 4 — shows spinner/error while saving draft
     const renderDatasets = () => {
         if (savingDraft) {
             return (
@@ -1061,7 +1379,7 @@ function CreateCompetition({ editMode = false }) {
                         className="footer-primary-btn"
                         onClick={() => {
                             setDraftError(null);
-                            setSavedCompetitionId(null); // reset so useEffect re-fires
+                            setSavedCompetitionId(null);
                         }}
                     >
                         Retry
@@ -1087,11 +1405,8 @@ function CreateCompetition({ editMode = false }) {
             <div className="section-header-row">
                 <div>
                     <h3 className="create-card-title">Key Milestones</h3>
-                    <p className="create-card-subtitle">
-                        Optional. Add validation and leaderboard dates.
-                    </p>
+                    <p className="create-card-subtitle">Optional. Add validation and leaderboard dates.</p>
                 </div>
-
                 <button type="button" className="soft-action-btn" onClick={addMilestone}>
                     + Add Milestone
                 </button>
@@ -1139,22 +1454,14 @@ function CreateCompetition({ editMode = false }) {
                                 type="text"
                                 value={item.title}
                                 placeholder="Milestone title"
-                                onChange={(e) =>
-                                    updateMilestone(item.id, "title", e.target.value)
-                                }
+                                onChange={(e) => updateMilestone(item.id, "title", e.target.value)}
                             />
                             <input
                                 type="date"
                                 value={item.date}
-                                onChange={(e) =>
-                                    updateMilestone(item.id, "date", e.target.value)
-                                }
+                                onChange={(e) => updateMilestone(item.id, "date", e.target.value)}
                             />
-                            <button
-                                type="button"
-                                className="remove-btn"
-                                onClick={() => removeMilestone(item.id)}
-                            >
+                            <button type="button" className="remove-btn" onClick={() => removeMilestone(item.id)}>
                                 Remove
                             </button>
                         </div>
@@ -1166,20 +1473,14 @@ function CreateCompetition({ editMode = false }) {
 
     const renderCurrentStep = () => {
         switch (currentStep) {
-            case 0:
-                return renderBasicInfo();
-            case 1:
-                return renderEvaluation();
-            case 2:
-                return renderRules();
-            case 3:
-                return renderComplexity();
-            case 4:
-                return renderDatasets(); // ✅ now uses renderDatasets()
-            case 5:
-                return renderMilestones();
-            default:
-                return null;
+            case 0: return renderBasicInfo();
+            case 1: return renderTaskConfig();
+            case 2: return renderEvaluation();
+            case 3: return renderRules();
+            case 4: return renderComplexity();
+            case 5: return renderDatasets();
+            case 6: return renderMilestones();
+            default: return null;
         }
     };
 
@@ -1205,13 +1506,8 @@ function CreateCompetition({ editMode = false }) {
             <div className="create-main">
                 <div className="create-topbar">
                     <h1>{isEditMode ? "Edit Competition" : "Create New Competition"}</h1>
-
                     <div className="topbar-actions">
-                        <button
-                            type="button"
-                            className="topbar-text-btn"
-                            onClick={handleCancel}
-                        >
+                        <button type="button" className="topbar-text-btn" onClick={handleCancel}>
                             Cancel
                         </button>
                     </div>
@@ -1221,14 +1517,11 @@ function CreateCompetition({ editMode = false }) {
                     <div className="wizard-head">
                         <div className="wizard-title-row">
                             <h2>{isEditMode ? "Update Competition" : "Create Competition"}</h2>
-                            <span>Step {currentStep + 1} of 6</span>
+                            <span>Step {currentStep + 1} of {steps.length}</span>
                         </div>
 
                         <div className="wizard-progress">
-                            <div
-                                className="wizard-progress-fill"
-                                style={{ width: `${progressPercent}%` }}
-                            ></div>
+                            <div className="wizard-progress-fill" style={{ width: `${progressPercent}%` }} />
                         </div>
 
                         <div className="wizard-tabs">
@@ -1236,18 +1529,10 @@ function CreateCompetition({ editMode = false }) {
                                 <button
                                     key={step}
                                     type="button"
-                                    className={
-                                        currentStep === index ? "wizard-tab active" : "wizard-tab"
-                                    }
+                                    className={currentStep === index ? "wizard-tab active" : "wizard-tab"}
                                     onClick={() => {
-                                        if (index <= currentStep) {
-                                            setCurrentStep(index);
-                                            return;
-                                        }
-
-                                        if (validateStep(currentStep)) {
-                                            setCurrentStep(index);
-                                        }
+                                        if (index <= currentStep) { setCurrentStep(index); return; }
+                                        if (validateStep(currentStep)) setCurrentStep(index);
                                     }}
                                 >
                                     {step}
@@ -1285,12 +1570,8 @@ function CreateCompetition({ editMode = false }) {
                                 disabled={submitting}
                             >
                                 {submitting
-                                    ? isEditMode
-                                        ? "Updating..."
-                                        : "Creating..."
-                                    : isEditMode
-                                        ? "Update Competition"
-                                        : "Create Competition"}
+                                    ? isEditMode ? "Updating..." : "Creating..."
+                                    : isEditMode ? "Update Competition" : "Create Competition"}
                             </button>
                         )}
                     </div>
