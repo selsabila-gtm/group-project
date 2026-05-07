@@ -1,17 +1,19 @@
 /**
- * RawSamplesTable.jsx — complete rewrite
+ * RawSamplesTable.jsx — updated
  *
- * 1. Dynamic columns from backend (task-type aware)
- * 2. Score breakdown popover — explains exactly why a sample scored X%
- * 3. Approval flow — Approve / Reject / Flag buttons + progress bar
- * 4. Annotator audit trail — who approved/rejected, when, with notes
- * 5. Status: scored → can_be_validated → validated (needs 2 approvals)
+ * Changes:
+ *  1. isOrganizer gate REMOVED — all team members see all action buttons
+ *  2. Un-reject: rejected samples show a "↩ Restore" button to move back to pending
+ *  3. "validated" status shows an un-validate button (→ pending) so mistakes are fixable
+ *  4. Score breakdown popover, approval audit trail, dynamic task-type columns preserved
+ *  5. Status guide updated to reflect open permissions
+ *  6. 2-annotator error surfaced clearly when backend returns 422
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
 
-const API           = "http://127.0.0.1:8000";
-const REQUIRED      = 2;   // must match backend REQUIRED_APPROVALS
+const API      = "http://127.0.0.1:8000";
+const REQUIRED = 2;   // must match backend REQUIRED_APPROVALS
 
 function authHeader() {
     const token = localStorage.getItem("token");
@@ -19,7 +21,7 @@ function authHeader() {
 }
 
 // ── Score breakdown popover ──────────────────────────────────────────────────
-function ScoreBreakdownPopover({ score, breakdown, children }) {
+function ScoreBreakdownPopover({ score, breakdown }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
 
@@ -30,104 +32,77 @@ function ScoreBreakdownPopover({ score, breakdown, children }) {
         return () => document.removeEventListener("mousedown", h);
     }, [open]);
 
-    // Show score even if breakdown is missing (pre-migration rows or audio samples)
     if (!breakdown || breakdown.length === 0) {
-        if (score == null) {
-            return <span style={{ fontSize:12, color:"#9ca3af" }}>—</span>;
-        }
-        const pct = Math.round(score * 100);
+        if (score == null) return <span style={{ fontSize:12, color:"#9ca3af" }}>—</span>;
+        const pct   = Math.round(score * 100);
         const color = pct >= 70 ? "#16a34a" : pct >= 40 ? "#d97706" : "#dc2626";
-        return (
-            <span style={{ fontSize:12, fontWeight:800, color, fontVariantNumeric:"tabular-nums" }}>
-                {pct}%
-            </span>
-        );
+        return <span style={{ fontSize:12, fontWeight:800, color }}>{pct}%</span>;
     }
 
     const pct   = Math.round((score || 0) * 100);
     const color = pct >= 70 ? "#16a34a" : pct >= 40 ? "#d97706" : "#dc2626";
-
-    const severityColor = { ok:"#16a34a", warn:"#d97706", error:"#dc2626", info:"#6b7280" };
+    const sevColor = { ok:"#16a34a", warn:"#d97706", error:"#dc2626", info:"#6b7280" };
 
     return (
         <span ref={ref} style={{ position:"relative", display:"inline-flex", alignItems:"center", gap:4 }}>
-            <button
-                onClick={() => setOpen(o => !o)}
-                style={{
-                    background:"none", border:"none", cursor:"pointer", padding:0,
-                    display:"flex", alignItems:"center", gap:4,
-                }}
-            >
-                <span style={{ fontSize:12, fontWeight:800, color, fontVariantNumeric:"tabular-nums" }}>
-                    {pct}%
-                </span>
-                <span style={{
-                    fontSize:9, fontWeight:700, color:"#fff",
-                    background: color, borderRadius:99, padding:"1px 5px",
-                }}>WHY?</span>
+            <button onClick={() => setOpen(o => !o)} style={{
+                background:"none", border:"none", cursor:"pointer", padding:0,
+                display:"flex", alignItems:"center", gap:4,
+            }}>
+                <span style={{ fontSize:12, fontWeight:800, color }}>{pct}%</span>
+                <span style={{ fontSize:9, fontWeight:700, color:"#fff", background:color,
+                    borderRadius:99, padding:"1px 5px" }}>WHY?</span>
             </button>
-
             {open && (
                 <div style={{
                     position:"fixed",
                     top: ref.current ? (() => {
-                        const rect = ref.current.getBoundingClientRect();
-                        const spaceBelow = window.innerHeight - rect.bottom;
-                        return spaceBelow > 400 ? rect.bottom + 6 : Math.max(10, rect.top - 6 - 400);
+                        const r = ref.current.getBoundingClientRect();
+                        return window.innerHeight - r.bottom > 400 ? r.bottom + 6 : Math.max(10, r.top - 406);
                     })() : 200,
                     left: ref.current
                         ? Math.min(ref.current.getBoundingClientRect().left, window.innerWidth - 430)
                         : 100,
-                    minWidth:320, maxWidth:420,
-                    background:"#fff",
+                    minWidth:320, maxWidth:420, background:"#fff",
                     border:"1.5px solid #e8edf8", borderRadius:12,
                     boxShadow:"0 8px 32px rgba(0,0,0,.18)", zIndex:9999,
-                    padding:"14px 16px",
-                    maxHeight: "80vh", overflowY: "auto",
+                    padding:"14px 16px", maxHeight:"80vh", overflowY:"auto",
                 }}>
-                    {/* Header */}
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-                        <p style={{ margin:0, fontSize:11, fontWeight:800, letterSpacing:".08em",
-                            textTransform:"uppercase", color:"#4f586f" }}>Score Breakdown</p>
+                    <div style={{ display:"flex", alignItems:"center",
+                        justifyContent:"space-between", marginBottom:10 }}>
+                        <p style={{ margin:0, fontSize:11, fontWeight:800,
+                            letterSpacing:".08em", textTransform:"uppercase", color:"#4f586f" }}>
+                            Score Breakdown
+                        </p>
                         <span style={{ fontSize:18, fontWeight:900, color }}>{pct}%</span>
                     </div>
-
-                    {/* Overall progress bar */}
-                    <div style={{ height:5, background:"#eef3ff", borderRadius:99, overflow:"hidden", marginBottom:12 }}>
-                        <div style={{ width:`${pct}%`, height:"100%", background:color, borderRadius:99,
-                            transition:"width .3s" }} />
+                    <div style={{ height:5, background:"#eef3ff", borderRadius:99,
+                        overflow:"hidden", marginBottom:12 }}>
+                        <div style={{ width:`${pct}%`, height:"100%", background:color, borderRadius:99 }} />
                     </div>
-
-                    {/* Per-rule rows */}
                     <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                         {breakdown.map((rule, i) => (
                             <div key={i} style={{
                                 background: rule.passed ? "rgba(34,197,94,.04)" : "rgba(239,68,68,.04)",
-                                border: `1px solid ${rule.passed ? "rgba(34,197,94,.15)" : "rgba(239,68,68,.15)"}`,
+                                border:`1px solid ${rule.passed ? "rgba(34,197,94,.15)" : "rgba(239,68,68,.15)"}`,
                                 borderRadius:8, padding:"8px 10px",
                             }}>
-                                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:3 }}>
+                                <div style={{ display:"flex", alignItems:"center",
+                                    justifyContent:"space-between", marginBottom:3 }}>
                                     <span style={{ fontSize:11, fontWeight:700,
-                                        color: severityColor[rule.severity] || "#4f586f" }}>
+                                        color:sevColor[rule.severity]||"#4f586f" }}>
                                         {rule.passed ? "✓" : "✗"} {rule.label}
                                     </span>
                                     <span style={{ fontSize:11, fontWeight:800,
-                                        color: severityColor[rule.severity] || "#4f586f" }}>
-                                        {rule.score_pct}%
-                                    </span>
+                                        color:sevColor[rule.severity]||"#4f586f" }}>{rule.score_pct}%</span>
                                 </div>
-                                {/* Sub-bar */}
-                                <div style={{ height:3, background:"#eef3ff", borderRadius:99, overflow:"hidden", marginBottom:5 }}>
+                                <div style={{ height:3, background:"#eef3ff", borderRadius:99,
+                                    overflow:"hidden", marginBottom:5 }}>
                                     <div style={{ width:`${rule.score_pct}%`, height:"100%",
-                                        background: severityColor[rule.severity] || "#9ca3af",
-                                        borderRadius:99 }} />
+                                        background:sevColor[rule.severity]||"#9ca3af", borderRadius:99 }} />
                                 </div>
                                 <p style={{ margin:0, fontSize:10, color:"#6b7280", lineHeight:1.5 }}>
-                                    {/* Strip the [contributes X%] suffix for cleaner display */}
-                                    {(rule.explanation || "").replace(/\s*\[contributes.*?\]/g, "")}
-                                </p>
-                                <p style={{ margin:"3px 0 0", fontSize:9, color:"#b0b8cc", fontStyle:"italic" }}>
-                                    Weight: {Math.round(rule.weight * 100)}% of total score
+                                    {(rule.explanation||"").replace(/\s*\[contributes.*?\]/g,"")}
                                 </p>
                             </div>
                         ))}
@@ -138,7 +113,7 @@ function ScoreBreakdownPopover({ score, breakdown, children }) {
     );
 }
 
-// ── Approval progress ────────────────────────────────────────────────────────
+// ── Approval progress dots ───────────────────────────────────────────────────
 function ApprovalProgress({ approvalCount, needed, approvals }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
@@ -151,9 +126,7 @@ function ApprovalProgress({ approvalCount, needed, approvals }) {
     }, [open]);
 
     const done  = approvalCount || 0;
-    const total = REQUIRED;
-    const pct   = Math.min(100, Math.round(done / total * 100));
-    const color = done >= total ? "#16a34a" : "#d97706";
+    const color = done >= REQUIRED ? "#16a34a" : "#d97706";
 
     return (
         <span ref={ref} style={{ position:"relative", display:"inline-flex", alignItems:"center", gap:4 }}>
@@ -161,56 +134,49 @@ function ApprovalProgress({ approvalCount, needed, approvals }) {
                 background:"none", border:"none", cursor:"pointer", padding:0,
                 display:"flex", alignItems:"center", gap:4,
             }}>
-                {/* Mini dots */}
-                {Array.from({length:total}).map((_, i) => (
+                {Array.from({ length: REQUIRED }).map((_, i) => (
                     <span key={i} style={{
                         width:8, height:8, borderRadius:"50%",
                         background: i < done ? color : "#e5e7eb",
                         border:`1px solid ${i < done ? color : "#d1d5db"}`,
                     }} />
                 ))}
-                <span style={{ fontSize:10, fontWeight:700, color }}>
-                    {done}/{total}
-                </span>
+                <span style={{ fontSize:10, fontWeight:700, color }}>{done}/{REQUIRED}</span>
             </button>
 
             {open && approvals && approvals.length > 0 && (
                 <div style={{
                     position:"fixed",
                     top: ref.current ? (() => {
-                        const rect = ref.current.getBoundingClientRect();
-                        const spaceBelow = window.innerHeight - rect.bottom;
-                        return spaceBelow > 200 ? rect.bottom + 6 : Math.max(10, rect.top - 6 - 200);
+                        const r = ref.current.getBoundingClientRect();
+                        return window.innerHeight - r.bottom > 200 ? r.bottom + 6 : Math.max(10, r.top - 206);
                     })() : 200,
                     left: ref.current
                         ? Math.min(ref.current.getBoundingClientRect().left, window.innerWidth - 270)
                         : 100,
-                    minWidth:250,
-                    background:"#fff",
+                    minWidth:250, background:"#fff",
                     border:"1.5px solid #e8edf8", borderRadius:10,
                     boxShadow:"0 6px 24px rgba(0,0,0,.15)", zIndex:9999, padding:"12px 14px",
                 }}>
-                    <p style={{ margin:"0 0 8px", fontSize:10, fontWeight:800, letterSpacing:".08em",
-                        textTransform:"uppercase", color:"#4f586f" }}>Annotator Actions</p>
+                    <p style={{ margin:"0 0 8px", fontSize:10, fontWeight:800,
+                        letterSpacing:".08em", textTransform:"uppercase", color:"#4f586f" }}>
+                        Annotator Actions
+                    </p>
                     {approvals.map((a, i) => {
-                        const actionColor = a.action==="approve" ? "#16a34a"
-                            : a.action==="reject" ? "#dc2626" : "#d97706";
-                        const actionIcon = a.action==="approve" ? "✓"
-                            : a.action==="reject" ? "✗" : "△";
-                        const dt = a.timestamp ? new Date(a.timestamp).toLocaleString() : "";
+                        const ac = a.action==="approve" ? "#16a34a" : a.action==="reject" ? "#dc2626" : "#d97706";
+                        const ai = a.action==="approve" ? "✓" : a.action==="reject" ? "✗" : "△";
                         return (
                             <div key={i} style={{
                                 display:"flex", gap:8, alignItems:"flex-start",
-                                paddingBottom:6, marginBottom: i<approvals.length-1 ? 6 : 0,
-                                borderBottom: i<approvals.length-1 ? "1px solid #f0f3fb" : "none",
+                                paddingBottom:6, marginBottom: i < approvals.length-1 ? 6 : 0,
+                                borderBottom: i < approvals.length-1 ? "1px solid #f0f3fb" : "none",
                             }}>
-                                <span style={{ fontSize:12, color:actionColor, fontWeight:700,
-                                    width:16, flexShrink:0, paddingTop:1 }}>{actionIcon}</span>
+                                <span style={{ fontSize:12, color:ac, fontWeight:700,
+                                    width:16, flexShrink:0, paddingTop:1 }}>{ai}</span>
                                 <div>
-                                    <p style={{ margin:0, fontSize:12, fontWeight:700,
-                                        color:"var(--color-text-primary,#1d2333)" }}>{a.name}</p>
+                                    <p style={{ margin:0, fontSize:12, fontWeight:700 }}>{a.name}</p>
                                     <p style={{ margin:"1px 0 0", fontSize:10, color:"#6b7280" }}>
-                                        {dt}
+                                        {a.timestamp ? new Date(a.timestamp).toLocaleString() : ""}
                                     </p>
                                     {a.note && (
                                         <p style={{ margin:"2px 0 0", fontSize:11,
@@ -226,8 +192,8 @@ function ApprovalProgress({ approvalCount, needed, approvals }) {
     );
 }
 
-// ── Status pill with reason popover ─────────────────────────────────────────
-function StatusPill({ status, flags, score, approvalCount, isOrganizer }) {
+// ── Status pill ──────────────────────────────────────────────────────────────
+function StatusPill({ status, flags, score, approvalCount }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
 
@@ -239,69 +205,51 @@ function StatusPill({ status, flags, score, approvalCount, isOrganizer }) {
     }, [open]);
 
     const palette = {
-        validated:         { bg:"rgba(34,197,94,.13)",  color:"#16a34a", label:"Validated" },
-        can_be_validated:  { bg:"rgba(19,89,219,.13)",  color:"#1359db", label:"Ready" },
-        scored:            { bg:"rgba(139,92,246,.13)", color:"#7c3aed", label:"Scored" },
-        flagged:           { bg:"rgba(249,115,22,.13)", color:"#ea580c", label:"Flagged" },
-        rejected:          { bg:"rgba(239,68,68,.13)",  color:"#dc2626", label:"Rejected" },
-        pending:           { bg:"rgba(245,158,11,.13)", color:"#d97706", label:"Pending" },
+        validated:        { bg:"rgba(34,197,94,.13)",  color:"#16a34a", label:"Validated" },
+        can_be_validated: { bg:"rgba(19,89,219,.13)",  color:"#1359db", label:"Ready" },
+        scored:           { bg:"rgba(139,92,246,.13)", color:"#7c3aed", label:"Scored" },
+        flagged:          { bg:"rgba(249,115,22,.13)", color:"#ea580c", label:"Flagged" },
+        rejected:         { bg:"rgba(239,68,68,.13)",  color:"#dc2626", label:"Rejected" },
+        pending:          { bg:"rgba(245,158,11,.13)", color:"#d97706", label:"Pending" },
     };
     const p = palette[status] || palette.pending;
 
-    const getMessage = () => {
+    const getMsg = () => {
         if (status === "validated")
-            return { title:"Validated ✓", body:"This sample has been validated by an organiser and is in the dataset." };
+            return { title:"Validated ✓", body:"In the dataset. Use ↩ Restore to move back to pending if needed." };
         if (status === "can_be_validated")
-            return { title:"Ready for Final Validation", body:`Received ${REQUIRED}/${REQUIRED} annotator approvals. An organiser can now click ✓ Validate to add it to the dataset.` };
+            return { title:"Ready to Validate", body:`Got ${REQUIRED}/${REQUIRED} approvals. Click ✓ Validate to add to the dataset.` };
         if (status === "scored")
-            return { title:"Awaiting Annotator Approvals", body:`System scored this sample (${Math.round((score||0)*100)}%). Needs ${Math.max(0, REQUIRED - (approvalCount||0))} more annotator approval(s). Use the ✓ Approve button on the right.` };
-        if (status === "flagged") {
-            const reasons = flags && flags.length > 0
-                ? flags.join(" • ")
-                : "Flagged by automated checks or an annotator.";
-            return { title:"Flagged for Review", body: reasons };
-        }
-        if (status === "rejected") {
-            const reasons = flags && flags.length > 0
-                ? flags.join(" • ")
-                : "Failed automated validation — the text may be empty, too short (under 3 words), missing a label, or contain personal data (email/phone).";
-            return { title:"Rejected — Reason", body: reasons };
-        }
+            return { title:"Awaiting Approvals", body:`Scored (${Math.round((score||0)*100)}%). Needs ${Math.max(0, REQUIRED-(approvalCount||0))} more approval(s). Click ✓ Approve below.` };
+        if (status === "flagged")
+            return { title:"Flagged for Review", body: flags?.length ? flags.join(" • ") : "Flagged by automated checks or an annotator." };
+        if (status === "rejected")
+            return { title:"Rejected", body: (flags?.length ? flags.join(" • ") : "Failed validation.") + " — click ↩ Restore to un-reject." };
         return { title:"Pending", body:"Submitted, awaiting automated scoring." };
     };
 
-    const msg = getMessage();
+    const msg = getMsg();
 
     return (
         <span ref={ref} style={{ position:"relative", display:"inline-flex", alignItems:"center", gap:3 }}>
             <span style={{ ...p, fontSize:11, fontWeight:700, padding:"3px 10px",
-                borderRadius:99, whiteSpace:"nowrap", letterSpacing:".02em" }}>
-                {p.label}
-            </span>
-            {status !== "validated" && (
-                <button onClick={() => setOpen(o=>!o)} style={{
-                    fontSize:9, fontWeight:700, padding:"1px 5px", borderRadius:99,
-                    border:`1px solid ${p.color}`, background:"transparent",
-                    cursor:"pointer", color:p.color, lineHeight:1.4, flexShrink:0,
-                }}>?</button>
-            )}
+                borderRadius:99, whiteSpace:"nowrap", letterSpacing:".02em" }}>{p.label}</span>
+            <button onClick={() => setOpen(o => !o)} style={{
+                fontSize:9, fontWeight:700, padding:"1px 5px", borderRadius:99,
+                border:`1px solid ${p.color}`, background:"transparent",
+                cursor:"pointer", color:p.color, lineHeight:1.4, flexShrink:0,
+            }}>?</button>
             {open && (
                 <div style={{
                     position:"fixed",
-                    top: ref.current
-                        ? (() => {
-                            const rect = ref.current.getBoundingClientRect();
-                            const spaceBelow = window.innerHeight - rect.bottom;
-                            return spaceBelow > 160
-                                ? rect.bottom + 6
-                                : rect.top - 6 - 140;
-                          })()
-                        : 200,
+                    top: ref.current ? (() => {
+                        const r = ref.current.getBoundingClientRect();
+                        return window.innerHeight - r.bottom > 160 ? r.bottom + 6 : r.top - 146;
+                    })() : 200,
                     left: ref.current
                         ? Math.min(ref.current.getBoundingClientRect().left, window.innerWidth - 310)
                         : 200,
-                    minWidth:240, maxWidth:310,
-                    background:"#fff",
+                    minWidth:240, maxWidth:310, background:"#fff",
                     border:`1.5px solid ${p.color}`, borderRadius:10, padding:"12px 14px",
                     boxShadow:"0 8px 32px rgba(0,0,0,.18)", zIndex:9999,
                 }}>
@@ -309,21 +257,19 @@ function StatusPill({ status, flags, score, approvalCount, isOrganizer }) {
                         color:p.color, letterSpacing:".05em", textTransform:"uppercase" }}>
                         {msg.title}
                     </p>
-                    <p style={{ margin:0, fontSize:12, color:"#1d2333", lineHeight:1.6 }}>
-                        {msg.body}
-                    </p>
+                    <p style={{ margin:0, fontSize:12, color:"#1d2333", lineHeight:1.6 }}>{msg.body}</p>
                 </div>
             )}
         </span>
     );
 }
 
-// ── Approve/Reject/Flag action buttons ───────────────────────────────────────
+// ── Approve/Flag/Reject actions (for scored/flagged/can_be_validated samples) ─
 function ApproveActions({ sample, onAction, updating }) {
     const [showNoteFor, setShowNoteFor] = useState(null);
     const [note, setNote] = useState("");
 
-    const canApprove = ["scored","flagged","can_be_validated"].includes(sample.status);
+    const canApprove = ["scored", "flagged", "can_be_validated"].includes(sample.status);
     if (!canApprove) return null;
 
     const doAction = (action) => {
@@ -335,30 +281,23 @@ function ApproveActions({ sample, onAction, updating }) {
     return (
         <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
             <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                <button
-                    onClick={() => doAction("approve")}
-                    disabled={updating}
-                    style={{
-                        fontSize:10, padding:"3px 8px", borderRadius:5, fontWeight:700,
-                        border:"0.5px solid #16a34a", color:"#16a34a",
-                        background:"rgba(34,197,94,.08)", cursor:"pointer",
-                    }}>✓ Approve</button>
-                <button
-                    onClick={() => setShowNoteFor(showNoteFor==="flag" ? null : "flag")}
-                    disabled={updating}
-                    style={{
-                        fontSize:10, padding:"3px 8px", borderRadius:5, fontWeight:700,
-                        border:"0.5px solid #ea580c", color:"#ea580c",
-                        background:"rgba(249,115,22,.08)", cursor:"pointer",
-                    }}>△ Flag</button>
-                <button
-                    onClick={() => setShowNoteFor(showNoteFor==="reject" ? null : "reject")}
-                    disabled={updating}
-                    style={{
-                        fontSize:10, padding:"3px 8px", borderRadius:5, fontWeight:700,
-                        border:"0.5px solid #dc2626", color:"#dc2626",
-                        background:"rgba(239,68,68,.08)", cursor:"pointer",
-                    }}>✕ Reject</button>
+                <button onClick={() => doAction("approve")} disabled={updating} style={{
+                    fontSize:10, padding:"3px 8px", borderRadius:5, fontWeight:700,
+                    border:"0.5px solid #16a34a", color:"#16a34a",
+                    background:"rgba(34,197,94,.08)", cursor:"pointer",
+                }}>✓ Approve</button>
+                <button onClick={() => setShowNoteFor(showNoteFor==="flag" ? null : "flag")}
+                    disabled={updating} style={{
+                    fontSize:10, padding:"3px 8px", borderRadius:5, fontWeight:700,
+                    border:"0.5px solid #ea580c", color:"#ea580c",
+                    background:"rgba(249,115,22,.08)", cursor:"pointer",
+                }}>△ Flag</button>
+                <button onClick={() => setShowNoteFor(showNoteFor==="reject" ? null : "reject")}
+                    disabled={updating} style={{
+                    fontSize:10, padding:"3px 8px", borderRadius:5, fontWeight:700,
+                    border:"0.5px solid #dc2626", color:"#dc2626",
+                    background:"rgba(239,68,68,.08)", cursor:"pointer",
+                }}>✕ Reject</button>
             </div>
             {showNoteFor && (
                 <div style={{ display:"flex", gap:4 }}>
@@ -368,7 +307,7 @@ function ApproveActions({ sample, onAction, updating }) {
                         placeholder={`Reason for ${showNoteFor}…`}
                         value={note}
                         onChange={e => setNote(e.target.value)}
-                        onKeyDown={e => e.key==="Enter" && doAction(showNoteFor)}
+                        onKeyDown={e => e.key === "Enter" && doAction(showNoteFor)}
                         autoFocus
                     />
                     <button onClick={() => doAction(showNoteFor)} style={{
@@ -382,27 +321,71 @@ function ApproveActions({ sample, onAction, updating }) {
     );
 }
 
-// ── Organiser final validate button ──────────────────────────────────────────
-function OrgActions({ sample, onStatusChange, updating }) {
-    if (sample.status === "can_be_validated") {
+// ── Universal status action buttons (all members, all statuses) ───────────────
+// Replaces the old OrgActions (organizer-only validate button).
+// Everyone can: validate ready samples, restore rejected, un-validate, re-flag.
+function StatusActions({ sample, onStatusChange, updating }) {
+    const { status } = sample;
+
+    const btn = (label, newStatus, opts = {}) => (
+        <button
+            onClick={() => onStatusChange(sample.id, newStatus)}
+            disabled={updating}
+            style={{
+                fontSize:10, padding:"3px 9px", borderRadius:5, fontWeight:700,
+                border:`0.5px solid ${opts.border || "#6b7280"}`,
+                color: opts.color || "#6b7280",
+                background: opts.bg || "rgba(107,114,128,.07)",
+                cursor:"pointer", whiteSpace:"nowrap",
+                ...(opts.solid ? { background: opts.border, color:"#fff" } : {}),
+            }}
+        >{label}</button>
+    );
+
+    if (status === "can_be_validated") {
         return (
-            <button onClick={() => onStatusChange(sample.id, "validated")} disabled={updating}
-                style={{
-                    fontSize:10, padding:"4px 10px", borderRadius:5, fontWeight:800,
-                    border:"1.5px solid #16a34a", color:"#fff",
-                    background:"#16a34a", cursor:"pointer", whiteSpace:"nowrap",
-                }}>
-                ✓ Validate
-            </button>
+            <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                {btn("✓ Validate", "validated",
+                    { border:"#16a34a", color:"#fff", bg:"#16a34a", solid:true })}
+                {btn("△ Flag", "flagged",
+                    { border:"#ea580c", color:"#ea580c", bg:"rgba(249,115,22,.08)" })}
+            </div>
         );
     }
-    if (sample.status === "validated") return null;
+
+    if (status === "validated") {
+        return btn("↩ Restore", "pending",
+            { border:"#d97706", color:"#d97706", bg:"rgba(245,158,11,.08)" });
+    }
+
+    if (status === "rejected") {
+        return (
+            <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                {btn("↩ Restore", "pending",
+                    { border:"#1359db", color:"#1359db", bg:"rgba(19,89,219,.08)" })}
+                {btn("✓ Validate", "validated",
+                    { border:"#16a34a", color:"#16a34a", bg:"rgba(34,197,94,.08)" })}
+            </div>
+        );
+    }
+
+    if (status === "flagged") {
+        return (
+            <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                {btn("↩ Restore", "pending",
+                    { border:"#1359db", color:"#1359db", bg:"rgba(19,89,219,.08)" })}
+                {btn("⊘ Reject", "rejected",
+                    { border:"#dc2626", color:"#dc2626", bg:"rgba(239,68,68,.08)" })}
+            </div>
+        );
+    }
+
+    // pending / scored — no direct override needed here; ApproveActions handles scoring flow
     return null;
 }
 
 // ── Dynamic cell renderer ────────────────────────────────────────────────────
 function CellValue({ colKey, sample }) {
-    // Map column keys to their actual data field names
     const DATA_KEY_MAP = {
         "content":  "content_snippet",
         "document": "document",
@@ -411,14 +394,10 @@ function CellValue({ colKey, sample }) {
         "prompt":   "prompt",
     };
     const dataKey = DATA_KEY_MAP[colKey] || colKey;
-    const val = sample[dataKey] !== undefined ? sample[dataKey] : sample[colKey];
+    const val     = sample[dataKey] !== undefined ? sample[dataKey] : sample[colKey];
 
     if (colKey === "score") {
-        return (
-            <ScoreBreakdownPopover score={sample.agreement} breakdown={sample.score_breakdown}>
-                {null}
-            </ScoreBreakdownPopover>
-        );
+        return <ScoreBreakdownPopover score={sample.agreement} breakdown={sample.score_breakdown} />;
     }
     if (colKey === "approvals") {
         return (
@@ -448,22 +427,22 @@ function CellValue({ colKey, sample }) {
                     color:"var(--color-text-info,#185fa5)",
                     display:"flex", alignItems:"center", justifyContent:"center",
                     fontSize:10, fontWeight:700,
-                }}>
-                    {sample.annotator?.initials || "?"}
-                </div>
-                <span style={{ fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                }}>{sample.annotator?.initials || "?"}</div>
+                <span style={{ fontSize:12, overflow:"hidden",
+                    textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {sample.annotator?.name || "Unknown"}
                 </span>
             </div>
         );
     }
     if (colKey === "id") {
-        return <span style={{ fontFamily:"monospace", fontSize:11,
-            color:"var(--color-text-secondary)" }}>{sample.uid}</span>;
+        return (
+            <span style={{ fontFamily:"monospace", fontSize:11,
+                color:"var(--color-text-secondary)" }}>{sample.uid}</span>
+        );
     }
-    if (colKey === "actions") return null; // rendered separately
+    if (colKey === "actions") return null;
 
-    // Generic text cell
     const display = val != null && val !== "" && val !== "—" ? String(val) : null;
     return display
         ? <span style={{ fontSize:12 }} title={display}>{display.slice(0,60)}{display.length>60?"…":""}</span>
@@ -498,7 +477,7 @@ export default function RawSamplesTable({ competitionId, isOrganizer, version })
                 setSamples(d.items || []);
                 setTotal(d.total || 0);
                 setPageCount(d.pages || 1);
-                if (d.columns) setColumns(d.columns);
+                if (d.columns)   setColumns(d.columns);
                 if (d.task_type) setTaskType(d.task_type);
             })
             .catch(console.error)
@@ -507,7 +486,7 @@ export default function RawSamplesTable({ competitionId, isOrganizer, version })
 
     useEffect(() => { load(); }, [load]);
 
-    // Annotator approve/flag/reject
+    // Annotator vote: approve / flag / reject
     const handleApprove = async (sampleId, action, note) => {
         setUpdating(sampleId);
         try {
@@ -521,7 +500,7 @@ export default function RawSamplesTable({ competitionId, isOrganizer, version })
         finally { setUpdating(null); }
     };
 
-    // Organiser final status change
+    // Direct status override — any member, any transition
     const handleStatusChange = async (sampleId, newStatus) => {
         setUpdating(sampleId);
         try {
@@ -532,6 +511,7 @@ export default function RawSamplesTable({ competitionId, isOrganizer, version })
             });
             if (!res.ok) {
                 const d = await res.json().catch(() => ({}));
+                // Surface the 2-annotator error message clearly
                 alert(d.detail || "Could not update status.");
                 return;
             }
@@ -553,16 +533,14 @@ export default function RawSamplesTable({ competitionId, isOrganizer, version })
         } finally { setRevalidating(false); }
     };
 
-    // Visible columns minus "actions" (rendered inline)
     const visibleCols = columns.filter(c => c.key !== "actions");
-    const hasActions  = columns.some(c => c.key === "actions");
+    const hasActions  = true; // always show actions column — no organizer gate
 
     return (
         <div style={{
             background:"var(--color-background-primary,#fff)",
             border:"0.5px solid var(--color-border-tertiary)",
-            borderRadius:12,
-            display:"flex", flexDirection:"column",
+            borderRadius:12, display:"flex", flexDirection:"column",
         }}>
             {/* Toolbar */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
@@ -602,46 +580,48 @@ export default function RawSamplesTable({ competitionId, isOrganizer, version })
                         {["all","pending","scored","can_be_validated","validated","flagged","rejected"].map(s => (
                             <option key={s} value={s}>
                                 {s==="all" ? "All statuses"
-                                  : s==="can_be_validated" ? "Ready to validate"
-                                  : s==="scored" ? "Scored (needs approval)"
-                                  : s.charAt(0).toUpperCase()+s.slice(1)}
+                                    : s==="can_be_validated" ? "Ready to validate"
+                                    : s==="scored" ? "Scored (needs approval)"
+                                    : s.charAt(0).toUpperCase()+s.slice(1)}
                             </option>
                         ))}
                     </select>
 
-                    {isOrganizer && (
-                        <button onClick={triggerRevalidate} disabled={revalidating} style={{
-                            fontSize:12, padding:"5px 12px", borderRadius:7,
-                            border:"0.5px solid var(--color-border-tertiary)",
-                            background: revalidating ? "var(--color-background-secondary)"
-                                                     : "var(--color-background-info,#e6f1fb)",
-                            color: revalidating ? "var(--color-text-secondary)"
-                                                : "var(--color-text-info,#185fa5)",
-                            cursor: revalidating ? "not-allowed" : "pointer",
-                            fontWeight:700, whiteSpace:"nowrap",
-                        }}>
-                            {revalidating ? "Running…" : "⟳ Re-score All"}
-                        </button>
-                    )}
+                    <button onClick={triggerRevalidate} disabled={revalidating} style={{
+                        fontSize:12, padding:"5px 12px", borderRadius:7,
+                        border:"0.5px solid var(--color-border-tertiary)",
+                        background: revalidating
+                            ? "var(--color-background-secondary)"
+                            : "var(--color-background-info,#e6f1fb)",
+                        color: revalidating
+                            ? "var(--color-text-secondary)"
+                            : "var(--color-text-info,#185fa5)",
+                        cursor: revalidating ? "not-allowed" : "pointer",
+                        fontWeight:700, whiteSpace:"nowrap",
+                    }}>
+                        {revalidating ? "Running…" : "⟳ Re-score All"}
+                    </button>
                 </div>
             </div>
 
-            {/* Status guide */}
+            {/* Status legend */}
             <div style={{ display:"flex", gap:14, padding:"7px 18px",
                 borderBottom:"0.5px solid var(--color-border-tertiary)",
                 background:"var(--color-background-secondary)", flexWrap:"wrap" }}>
                 {[
-                    {s:"pending",         color:"#d97706", t:"Waiting to be scored"},
-                    {s:"scored",          color:"#7c3aed", t:"Score ready — click ? then Approve"},
-                    {s:"can_be_validated",color:"#1359db", t:`${REQUIRED} approvals done — organiser validates`},
-                    {s:"validated",       color:"#16a34a", t:"In the dataset"},
-                    {s:"flagged",         color:"#ea580c", t:"Needs review"},
-                    {s:"rejected",        color:"#dc2626", t:"Failed"},
+                    { s:"pending",          color:"#d97706", t:"Awaiting scoring" },
+                    { s:"scored",           color:"#7c3aed", t:"Ready for approval" },
+                    { s:"can_be_validated", color:"#1359db", t:"2 approvals — click Validate" },
+                    { s:"validated",        color:"#16a34a", t:"In dataset" },
+                    { s:"flagged",          color:"#ea580c", t:"Needs review" },
+                    { s:"rejected",         color:"#dc2626", t:"Failed — restorable" },
                 ].map(({ s, color, t }) => (
                     <span key={s} style={{ fontSize:10, display:"flex", alignItems:"center", gap:4 }}>
                         <span style={{ width:7, height:7, borderRadius:"50%",
                             background:color, flexShrink:0 }} />
-                        <b style={{ color }}>{s==="can_be_validated"?"Ready":s.charAt(0).toUpperCase()+s.slice(1)}</b>
+                        <b style={{ color }}>
+                            {s === "can_be_validated" ? "Ready" : s.charAt(0).toUpperCase()+s.slice(1)}
+                        </b>
                         {" — "}{t}
                     </span>
                 ))}
@@ -667,21 +647,19 @@ export default function RawSamplesTable({ competitionId, isOrganizer, version })
                                     color:"var(--color-text-secondary)", textTransform:"uppercase",
                                     whiteSpace:"nowrap" }}>{c.label}</th>
                             ))}
-                            {hasActions && (
-                                <th style={{ padding:"10px 14px", textAlign:"left",
-                                    fontSize:10, fontWeight:700, letterSpacing:".07em",
-                                    color:"var(--color-text-secondary)", textTransform:"uppercase",
-                                    whiteSpace:"nowrap", minWidth:180 }}>Actions</th>
-                            )}
+                            <th style={{ padding:"10px 14px", textAlign:"left",
+                                fontSize:10, fontWeight:700, letterSpacing:".07em",
+                                color:"var(--color-text-secondary)", textTransform:"uppercase",
+                                whiteSpace:"nowrap", minWidth:200 }}>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={visibleCols.length + (hasActions?1:0)}
+                            <tr><td colSpan={visibleCols.length + 1}
                                 style={{ padding:"32px 0", textAlign:"center",
                                     color:"var(--color-text-secondary)" }}>Loading…</td></tr>
                         ) : samples.length === 0 ? (
-                            <tr><td colSpan={visibleCols.length + (hasActions?1:0)}
+                            <tr><td colSpan={visibleCols.length + 1}
                                 style={{ padding:"40px 0", textAlign:"center",
                                     color:"var(--color-text-secondary)" }}>
                                 No samples found.
@@ -695,8 +673,7 @@ export default function RawSamplesTable({ competitionId, isOrganizer, version })
                         ) : samples.map((s, i) => (
                             <tr key={s.id} style={{
                                 borderBottom:"0.5px solid var(--color-border-tertiary)",
-                                background: i%2===0 ? "transparent"
-                                    : "var(--color-background-secondary)",
+                                background: i%2===0 ? "transparent" : "var(--color-background-secondary)",
                                 opacity: updating === s.id ? 0.6 : 1,
                             }}>
                                 {visibleCols.map(c => (
@@ -706,26 +683,27 @@ export default function RawSamplesTable({ competitionId, isOrganizer, version })
                                         <CellValue colKey={c.key} sample={s} />
                                     </td>
                                 ))}
-                                {hasActions && (
-                                    <td style={{ padding:"10px 14px" }}>
+                                <td style={{ padding:"10px 14px" }}>
+                                    {updating === s.id ? (
+                                        <span style={{ fontSize:12,
+                                            color:"var(--color-text-secondary)" }}>…</span>
+                                    ) : (
                                         <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                                            {/* Any annotator: approve/flag/reject scored samples */}
+                                            {/* Vote buttons for scored/flagged/ready samples */}
                                             <ApproveActions
                                                 sample={s}
                                                 onAction={handleApprove}
                                                 updating={updating === s.id}
                                             />
-                                            {/* Organiser only: final validate */}
-                                            {isOrganizer && (
-                                                <OrgActions
-                                                    sample={s}
-                                                    onStatusChange={handleStatusChange}
-                                                    updating={updating === s.id}
-                                                />
-                                            )}
+                                            {/* Universal status change buttons for all members */}
+                                            <StatusActions
+                                                sample={s}
+                                                onStatusChange={handleStatusChange}
+                                                updating={updating === s.id}
+                                            />
                                         </div>
-                                    </td>
-                                )}
+                                    )}
+                                </td>
                             </tr>
                         ))}
                     </tbody>
@@ -735,7 +713,7 @@ export default function RawSamplesTable({ competitionId, isOrganizer, version })
             {/* Pagination */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
                 padding:"12px 18px", borderTop:"0.5px solid var(--color-border-tertiary)" }}>
-                <button disabled={page<=1} onClick={() => setPage(p=>p-1)} style={{
+                <button disabled={page<=1} onClick={() => setPage(p => p-1)} style={{
                     fontSize:13, padding:"5px 14px", borderRadius:7,
                     border:"0.5px solid var(--color-border-tertiary)",
                     background:"var(--color-background-secondary)",
@@ -745,7 +723,7 @@ export default function RawSamplesTable({ competitionId, isOrganizer, version })
                 <span style={{ fontSize:12, color:"var(--color-text-secondary)" }}>
                     Page {page} / {pageCount}
                 </span>
-                <button disabled={page>=pageCount} onClick={() => setPage(p=>p+1)} style={{
+                <button disabled={page>=pageCount} onClick={() => setPage(p => p+1)} style={{
                     fontSize:13, padding:"5px 14px", borderRadius:7,
                     border:"0.5px solid var(--color-border-tertiary)",
                     background:"var(--color-background-secondary)",

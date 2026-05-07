@@ -159,6 +159,7 @@ def delete_competition_related_rows(db: Session, competition_id: str):
     db.execute(text("DELETE FROM competition_organizers WHERE competition_id = :cid"), {"cid": competition_id})
     db.execute(text("DELETE FROM recent_competitions WHERE competition_id = :cid"), {"cid": competition_id})
     db.execute(text("DELETE FROM competition_prompts WHERE competition_id = :cid"), {"cid": competition_id})
+    db.execute(text("DELETE FROM dataset_versions WHERE competition_id = :cid"), {"cid": competition_id})
 
 
 def validate_competition_payload(data: CompetitionCreateIn):

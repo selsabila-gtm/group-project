@@ -1,7 +1,15 @@
 /**
- * DatasetHub.jsx — clean rewrite, no patch artifacts
- * COG-22 + COG-23: versioning, pinning, team-accessible snapshots
+ * DatasetHub.jsx — updated
+ *
+ * Changes:
+ *  1. Versioning now reads from / writes to the `dataset_versions` SQL table
+ *     (via updated backend endpoints) — no more JSON blob in datasets_json.
+ *  2. "Snapshot Dataset" button visible to ALL team members (no organizer gate).
+ *  3. Delete button also open to all members (your dataset, your call).
+ *  4. All other version UI preserved: pinning, edit modal, changelog, diff badges,
+ *     label distribution mini-bars, active-version filter on the samples table.
  */
+
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import CompetitionSidebar from "../components/CompetitionSidebar";
@@ -24,7 +32,8 @@ function CompetitionTopbar({ competition }) {
                 <span className="dh-lab-badge">LAB ACTIVE</span>
                 <nav className="dh-topbar-tabs">
                     {["Overview","Rules","Resources"].map((t,i) => (
-                        <button key={t} type="button" className={`dh-topbar-tab${i===0?" active":""}`}>{t}</button>
+                        <button key={t} type="button"
+                            className={`dh-topbar-tab${i===0?" active":""}`}>{t}</button>
                     ))}
                 </nav>
             </div>
@@ -78,7 +87,8 @@ function VersionLabelBars({ distribution, total }) {
                     <span className="dh-ver-label-name" title={lbl}>{lbl}</span>
                     <div className="dh-ver-label-bar">
                         <div className="dh-ver-label-fill"
-                            style={{ width:`${Math.round(cnt/total*100)}%`, background:COLORS[i%COLORS.length] }} />
+                            style={{ width:`${Math.round(cnt/total*100)}%`,
+                                background: COLORS[i % COLORS.length] }} />
                     </div>
                     <span className="dh-ver-label-pct">{Math.round(cnt/total*100)}%</span>
                 </div>
@@ -88,7 +98,7 @@ function VersionLabelBars({ distribution, total }) {
 }
 
 // ─── Single version card ───────────────────────────────────────────────────────
-function VersionCard({ version, isActive, isLast, onSelect, onEdit, onDelete, onPin, pinning, isOrganizer }) {
+function VersionCard({ version, isActive, isLast, onSelect, onEdit, onDelete, onPin, pinning }) {
     const [expanded, setExpanded] = useState(false);
     const total = version.total_samples || 0;
 
@@ -124,18 +134,18 @@ function VersionCard({ version, isActive, isLast, onSelect, onEdit, onDelete, on
                             <p className="dh-ver-date">{version.date}</p>
                         </div>
 
-                        {/* Actions — stop propagation so click doesn't select the version */}
                         <div className="dh-ver-actions" onClick={e => e.stopPropagation()}>
                             <button
                                 className={`dh-ver-pin-btn${version.is_pinned ? " pinned" : ""}`}
-                                title={version.is_pinned ? "Unpin from experiments" : "Pin for experiments"}
+                                title={version.is_pinned ? "Unpin" : "Pin for experiments"}
                                 onClick={() => onPin(version.tag)}
                                 disabled={pinning}
                             >{version.is_pinned ? "📌" : "📍"}</button>
                             <button className="dh-ver-edit-btn" title="Edit label/notes"
                                 onClick={() => onEdit(version)}>✎</button>
-                            {isOrganizer && !version.is_current && (
-                                <button className="dh-ver-del-btn" title="Delete (organiser only)"
+                            {/* All members can delete (except the latest version) */}
+                            {!version.is_current && (
+                                <button className="dh-ver-del-btn" title="Delete version"
                                     onClick={() => onDelete(version.tag)}>✕</button>
                             )}
                         </div>
@@ -155,7 +165,7 @@ function VersionCard({ version, isActive, isLast, onSelect, onEdit, onDelete, on
                         ))}
                     </div>
 
-                    {/* Diffs vs previous version */}
+                    {/* Diffs */}
                     {version.diff && Object.values(version.diff).some(v => v !== 0) && (
                         <div className="dh-ver-diffs">
                             <DiffBadge value={version.diff.validated_samples} label="validated" />
@@ -170,7 +180,6 @@ function VersionCard({ version, isActive, isLast, onSelect, onEdit, onDelete, on
                         {expanded ? "▾ Hide" : "▸ Show"} changelog & labels
                     </button>
 
-                    {/* Expanded detail */}
                     {expanded && (
                         <div className="dh-ver-expanded" onClick={e => e.stopPropagation()}>
                             {version.changelog?.length > 0 && (
@@ -190,7 +199,10 @@ function VersionCard({ version, isActive, isLast, onSelect, onEdit, onDelete, on
                             {version.label_distribution && (
                                 <div>
                                     <p className="dh-ver-section-title">Label distribution</p>
-                                    <VersionLabelBars distribution={version.label_distribution} total={total} />
+                                    <VersionLabelBars
+                                        distribution={version.label_distribution}
+                                        total={total}
+                                    />
                                 </div>
                             )}
                         </div>
@@ -220,9 +232,12 @@ function EditVersionModal({ version, onSave, onClose }) {
                 <h3 className="dh-modal-title">Edit {version.tag}</h3>
                 <p className="dh-modal-sub">Update label or notes. Stats are immutable.</p>
                 <label className="dh-modal-label">LABEL</label>
-                <input className="dh-modal-input" value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Pre-launch freeze" />
+                <input className="dh-modal-input" value={label}
+                    onChange={e => setLabel(e.target.value)}
+                    placeholder="e.g. Pre-launch freeze" />
                 <label className="dh-modal-label" style={{ marginTop:10 }}>NOTES</label>
-                <textarea className="dh-modal-input" value={notes} rows={3} onChange={e => setNotes(e.target.value)}
+                <textarea className="dh-modal-input" value={notes} rows={3}
+                    onChange={e => setNotes(e.target.value)}
                     placeholder="What changed in this version?"
                     style={{ resize:"vertical", minHeight:64, fontFamily:"inherit" }} />
                 <div className="dh-modal-actions">
@@ -238,7 +253,7 @@ function EditVersionModal({ version, onSave, onClose }) {
 
 // ─── Version Control panel ─────────────────────────────────────────────────────
 function VersionControl({ versions, loading, onCreateVersion, onUpdateVersion, onDeleteVersion,
-    isOrganizer, onSelectVersion, activeVersion, onRefresh, pinnedTag, onPin, pinning }) {
+    onSelectVersion, activeVersion, onRefresh, pinnedTag, onPin, pinning }) {
 
     const [showModal,      setShowModal]      = useState(false);
     const [editingVersion, setEditingVersion] = useState(null);
@@ -258,7 +273,7 @@ function VersionControl({ versions, loading, onCreateVersion, onUpdateVersion, o
     };
 
     const handleDelete = async (vTag) => {
-        if (!window.confirm(`Delete version ${vTag}? Samples are not lost.`)) return;
+        if (!window.confirm(`Delete version ${vTag}? Samples are not lost — they just won't be tagged with this version.`)) return;
         await onDeleteVersion(vTag);
     };
 
@@ -277,14 +292,15 @@ function VersionControl({ versions, loading, onCreateVersion, onUpdateVersion, o
                     )}
                     <button className="dh-version-icon-btn" onClick={onRefresh} title="Refresh">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
+                            <polyline points="1 4 1 10 7 10"/>
+                            <polyline points="23 20 23 14 17 14"/>
                             <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
                         </svg>
                     </button>
                 </div>
             </div>
 
-            {/* Pinned version status bar */}
+            {/* Pinned banner */}
             {pinnedTag && (
                 <div className="dh-ver-pinned-bar">
                     <div className="dh-ver-pinned-info">
@@ -294,17 +310,20 @@ function VersionControl({ versions, loading, onCreateVersion, onUpdateVersion, o
                             <p className="dh-ver-pinned-tag">{pinnedTag}</p>
                         </div>
                     </div>
-                    <button className="dh-ver-unpin-btn" onClick={() => onPin(pinnedTag)} disabled={pinning}>
+                    <button className="dh-ver-unpin-btn"
+                        onClick={() => onPin(pinnedTag)} disabled={pinning}>
                         Unpin
                     </button>
                 </div>
             )}
 
-            {/* Active version filter banner */}
+            {/* Active filter banner */}
             {activeVersion && (
                 <div className="dh-ver-filter-banner">
-                    <span>📌 Viewing {activeVersion} — table is filtered</span>
-                    <button className="dh-ver-clear-btn" onClick={() => onSelectVersion(null)}>Show all</button>
+                    <span>🔍 Viewing {activeVersion} — table filtered</span>
+                    <button className="dh-ver-clear-btn" onClick={() => onSelectVersion(null)}>
+                        Show all
+                    </button>
                 </div>
             )}
 
@@ -315,8 +334,8 @@ function VersionControl({ versions, loading, onCreateVersion, onUpdateVersion, o
                 <div className="dh-ver-empty">
                     <p className="dh-ver-empty-title">No snapshots yet</p>
                     <p className="dh-ver-empty-sub">
-                        Click <strong>"+ Snapshot Dataset"</strong> below to freeze
-                        your validated samples into a versioned, reproducible dataset.
+                        Click <strong>"+ Snapshot Dataset"</strong> to freeze your validated
+                        samples into a versioned, reproducible snapshot stored in the database.
                     </p>
                 </div>
             ) : (
@@ -332,40 +351,51 @@ function VersionControl({ versions, loading, onCreateVersion, onUpdateVersion, o
                             onDelete={handleDelete}
                             onPin={onPin}
                             pinning={pinning}
-                            isOrganizer={isOrganizer}
                         />
                     ))}
                 </div>
             )}
 
-            {/* Snapshot button — always visible, any team member can create */}
+            {/* Snapshot button — ALL members can create snapshots */}
             <button className="dh-snapshot-btn" onClick={() => setShowModal(true)}>
                 + Snapshot Dataset
             </button>
 
             {/* Create modal */}
             {showModal && (
-                <div className="dh-modal-backdrop" onClick={() => { setShowModal(false); setError(null); }}>
+                <div className="dh-modal-backdrop"
+                    onClick={() => { setShowModal(false); setError(null); }}>
                     <div className="dh-modal" onClick={e => e.stopPropagation()}>
                         <h3 className="dh-modal-title">Create Dataset Snapshot</h3>
                         <p className="dh-modal-sub">
-                            Freezes all currently-validated samples into an immutable snapshot.
-                            Future submissions won't affect this version.
+                            Freezes all currently-validated samples into an immutable snapshot
+                            saved to the database. Future submissions won't affect this version.
                         </p>
                         {error && <div className="dh-modal-error">{error}</div>}
                         <label className="dh-modal-label">VERSION TAG</label>
-                        <input className="dh-modal-input" value={tag} onChange={e => setTag(e.target.value)}
+                        <input className="dh-modal-input" value={tag}
+                            onChange={e => setTag(e.target.value)}
                             placeholder="e.g. v1.3  (auto-generated if blank)" />
-                        <label className="dh-modal-label" style={{ marginTop:10 }}>LABEL (optional)</label>
-                        <input className="dh-modal-input" value={label} onChange={e => setLabel(e.target.value)}
+                        <label className="dh-modal-label" style={{ marginTop:10 }}>
+                            LABEL (optional)
+                        </label>
+                        <input className="dh-modal-input" value={label}
+                            onChange={e => setLabel(e.target.value)}
                             placeholder="e.g. Pre-launch validation freeze" />
-                        <label className="dh-modal-label" style={{ marginTop:10 }}>NOTES (optional)</label>
-                        <textarea className="dh-modal-input" value={notes} rows={3} onChange={e => setNotes(e.target.value)}
+                        <label className="dh-modal-label" style={{ marginTop:10 }}>
+                            NOTES (optional)
+                        </label>
+                        <textarea className="dh-modal-input" value={notes} rows={3}
+                            onChange={e => setNotes(e.target.value)}
                             placeholder="Describe what changed in this version…"
                             style={{ resize:"vertical", minHeight:60, fontFamily:"inherit" }} />
                         <div className="dh-modal-actions">
-                            <button className="dh-modal-cancel" onClick={() => { setShowModal(false); setError(null); }}>Cancel</button>
-                            <button className="dh-modal-confirm" onClick={handleCreate} disabled={creating}>
+                            <button className="dh-modal-cancel"
+                                onClick={() => { setShowModal(false); setError(null); }}>
+                                Cancel
+                            </button>
+                            <button className="dh-modal-confirm"
+                                onClick={handleCreate} disabled={creating}>
                                 {creating ? "Creating…" : "Create Snapshot"}
                             </button>
                         </div>
@@ -375,7 +405,11 @@ function VersionControl({ versions, loading, onCreateVersion, onUpdateVersion, o
 
             {/* Edit modal */}
             {editingVersion && (
-                <EditVersionModal version={editingVersion} onSave={onUpdateVersion} onClose={() => setEditingVersion(null)} />
+                <EditVersionModal
+                    version={editingVersion}
+                    onSave={onUpdateVersion}
+                    onClose={() => setEditingVersion(null)}
+                />
             )}
         </div>
     );
@@ -412,11 +446,13 @@ export default function DatasetHub() {
     const [downloadFormat,  setDownloadFormat]  = useState("csv");
     const [downloading,     setDownloading]     = useState(false);
 
+    // Competition detail
     useEffect(() => {
         fetch(`${API}/competitions/${competitionId}`, { headers: authHeader() })
             .then(r => r.json()).then(setCompetition).catch(console.error);
     }, [competitionId]);
 
+    // Role (for informational use only — does not gate any actions in this page)
     useEffect(() => {
         fetch(`${API}/competitions/${competitionId}/my-role`, { headers: authHeader() })
             .then(r => r.ok ? r.json() : { role:"guest", is_organizer:false })
@@ -424,6 +460,7 @@ export default function DatasetHub() {
             .catch(() => setIsOrganizer(false));
     }, [competitionId]);
 
+    // Health — poll every 30s
     useEffect(() => {
         const load = () => {
             setHealthLoading(true);
@@ -438,6 +475,7 @@ export default function DatasetHub() {
         return () => clearInterval(iv);
     }, [competitionId]);
 
+    // Versions from the dataset_versions table
     const loadVersions = useCallback(() => {
         setVersionsLoading(true);
         fetch(`${API}/competitions/${competitionId}/versions`, { headers: authHeader() })
@@ -454,6 +492,7 @@ export default function DatasetHub() {
 
     useEffect(() => { loadVersions(); }, [loadVersions]);
 
+    // Create snapshot — open to all members
     const handleCreateVersion = async (body) => {
         try {
             const res = await fetch(`${API}/competitions/${competitionId}/versions`, {
@@ -468,6 +507,7 @@ export default function DatasetHub() {
         } catch (err) { return err.message || "Failed to create version."; }
     };
 
+    // Edit label / notes
     const handleUpdateVersion = async (tag, body) => {
         try {
             await fetch(`${API}/competitions/${competitionId}/versions/${tag}`, {
@@ -479,6 +519,7 @@ export default function DatasetHub() {
         } catch (err) { console.error(err); }
     };
 
+    // Soft-delete — open to all members
     const handleDeleteVersion = async (tag) => {
         try {
             const res = await fetch(`${API}/competitions/${competitionId}/versions/${tag}`,
@@ -489,6 +530,7 @@ export default function DatasetHub() {
         } catch (err) { console.error(err); }
     };
 
+    // Pin / unpin — open to all members
     const handlePin = async (tag) => {
         setPinning(true);
         try {
@@ -506,18 +548,23 @@ export default function DatasetHub() {
         finally { setPinning(false); }
     };
 
+    // Download
     const handleDownload = async () => {
         setDownloading(true);
         try {
             const params = new URLSearchParams({ format: downloadFormat });
             if (activeVersion) params.set("version", activeVersion);
-            const res = await fetch(`${API}/competitions/${competitionId}/export?${params}`,
+            const res = await fetch(
+                `${API}/competitions/${competitionId}/export?${params}`,
                 { headers: authHeader() });
-            if (!res.ok) { alert((await res.json().catch(()=>({}))).detail || "Download failed."); return; }
+            if (!res.ok) {
+                alert((await res.json().catch(()=>({}))).detail || "Download failed.");
+                return;
+            }
             const blob = await res.blob();
             const url  = URL.createObjectURL(blob);
             const a    = document.createElement("a");
-            a.href = url;
+            a.href     = url;
             a.download = `dataset-${competitionId}${activeVersion ? `-${activeVersion}` : ""}.${downloadFormat}`;
             a.click();
             URL.revokeObjectURL(url);
@@ -531,8 +578,11 @@ export default function DatasetHub() {
 
     return (
         <div className="dh-shell">
-            <CompetitionSidebar competitionId={competitionId}
-                competitionTitle={competition?.title} taskType={competition?.task_type} />
+            <CompetitionSidebar
+                competitionId={competitionId}
+                competitionTitle={competition?.title}
+                taskType={competition?.task_type}
+            />
 
             <div className="dh-main">
                 <CompetitionTopbar competition={competition} />
@@ -541,7 +591,9 @@ export default function DatasetHub() {
                     {/* Page header */}
                     <div className="dh-page-header">
                         <div className="dh-page-header-left">
-                            <div className="dh-breadcrumb"><span className="dh-crumb-tag">RESEARCH CORE</span></div>
+                            <div className="dh-breadcrumb">
+                                <span className="dh-crumb-tag">RESEARCH CORE</span>
+                            </div>
                             <h1 className="dh-page-title">{competition?.title || "Dataset Hub"}</h1>
                             <p className="dh-page-desc">{competition?.description || ""}</p>
                         </div>
@@ -553,8 +605,10 @@ export default function DatasetHub() {
                                     <option value="json">JSON</option>
                                     <option value="conll">CoNLL</option>
                                 </select>
-                                <button className="dh-download-btn" onClick={handleDownload} disabled={downloading}>
-                                    {downloading ? "Downloading…" : activeVersion ? `Download ${activeVersion}` : "Download"}
+                                <button className="dh-download-btn" onClick={handleDownload}
+                                    disabled={downloading}>
+                                    {downloading ? "Downloading…"
+                                        : activeVersion ? `Download ${activeVersion}` : "Download"}
                                 </button>
                             </div>
                         </div>
@@ -564,9 +618,12 @@ export default function DatasetHub() {
                     <div className="dh-stats-health-row">
                         <div className="dh-stats-row">
                             <StatCard label="TOTAL SAMPLES"   value={total.toLocaleString()} accent="#1359db" />
-                            <StatCard label="AVG TEXT LENGTH" value={avgLen || "—"} sub={avgLen ? "tokens" : undefined} />
+                            <StatCard label="AVG TEXT LENGTH" value={avgLen || "—"}
+                                sub={avgLen ? "tokens" : undefined} />
                             <StatCard label="VOCAB SIZE"      value={total > 0 ? vocabSize : "—"} />
-                            <StatCard label="LABEL DIST."     value={Object.keys(health?.label_distribution||{}).length||"—"} sub="categories" />
+                            <StatCard label="LABEL DIST."
+                                value={Object.keys(health?.label_distribution || {}).length || "—"}
+                                sub="categories" />
                         </div>
                         <DataHealthPanel health={health} loading={healthLoading} />
                     </div>
@@ -580,7 +637,6 @@ export default function DatasetHub() {
                                 onCreateVersion={handleCreateVersion}
                                 onUpdateVersion={handleUpdateVersion}
                                 onDeleteVersion={handleDeleteVersion}
-                                isOrganizer={isOrganizer}
                                 onSelectVersion={setActiveVersion}
                                 activeVersion={activeVersion}
                                 onRefresh={loadVersions}
@@ -592,8 +648,13 @@ export default function DatasetHub() {
                         </div>
 
                         <div className="dh-right-col">
-                            <RawSamplesTable competitionId={competitionId}
-                                isOrganizer={isOrganizer} version={activeVersion} />
+                            {/* isOrganizer still passed for informational display in RawSamplesTable
+                                but no longer gates any action buttons */}
+                            <RawSamplesTable
+                                competitionId={competitionId}
+                                isOrganizer={isOrganizer}
+                                version={activeVersion}
+                            />
                         </div>
                     </div>
                 </div>
