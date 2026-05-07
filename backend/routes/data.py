@@ -78,11 +78,13 @@ async def create_text_sample(
         competition_id=body.competition_id,
         contributor_id=str(current_user.id),
         text_content=body.text_content,
-        annotation=json.dumps(body.annotation or {}),
+        annotation=body.annotation or {},        # jsonb — store as dict
         status=result.status,
         quality_score=float(result.quality_score) if result.quality_score is not None else None,
-        # ── FIX: save the actual validation reasons so the UI can show them ──
-        flags=json.dumps(result.reasons),
+        flags=result.reasons,                    # jsonb — store as list directly
+        # score_breakdown is text column — store as JSON string
+        score_breakdown=json.dumps(result.score_breakdown) if result.score_breakdown else "[]",
+        task_type=task_type,
         submitted_at=datetime.utcnow().isoformat(),
     )
     db.add(sample)
@@ -149,10 +151,12 @@ async def create_audio_sample(
         contributor_id=str(current_user.id),
         audio_url=storage_path,
         audio_duration=audio_duration,
-        annotation=annotation,
+        annotation=ann_dict,                     # jsonb — store as dict
         status=derived_status,
         quality_score=float(result.quality_score) if result.quality_score is not None else None,
-        flags=json.dumps(derived_reasons),
+        flags=derived_reasons,                   # jsonb — store as list
+        score_breakdown=json.dumps(result.score_breakdown) if result.score_breakdown else "[]",
+        task_type="AUDIO_SYNTHESIS",
         submitted_at=datetime.utcnow().isoformat(),
     )
     db.add(sample)
@@ -213,10 +217,12 @@ async def bulk_import(
                 competition_id=competition_id,
                 contributor_id=str(current_user.id),
                 text_content=row["text_content"],
-                annotation=json.dumps(row["annotation"]),
+                annotation=row["annotation"],            # jsonb — store as dict
                 status=result.status,
                 quality_score=float(result.quality_score) if result.quality_score is not None else None,
-                flags=json.dumps(result.reasons),
+                flags=result.reasons,                    # jsonb — store as list
+                score_breakdown=json.dumps(result.score_breakdown) if result.score_breakdown else "[]",
+                task_type=task_type if "task_type" in dir() else "TEXT_CLASSIFICATION",
                 submitted_at=datetime.utcnow().isoformat(),
             ))
 
