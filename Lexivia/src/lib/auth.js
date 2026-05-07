@@ -12,12 +12,11 @@ export async function signUp({ fullName, email, password }) {
     password,
     options: {
       data: { full_name: fullName },
+      emailRedirectTo: `${window.location.origin}/auth/callback`,
     },
   })
   if (error) throw error
-  // data = { user, session }
-  // session is null if email confirmation is required
-  return data
+  return data  // { user, session } — session is null if email confirmation required
 }
 
 export async function signIn({ email, password }) {
@@ -55,19 +54,27 @@ export function onAuthStateChange(callback) {
   return subscription  // call subscription.unsubscribe() on cleanup
 }
 
-export async function signInWithGoogle() {
+// ── OAuth ─────────────────────────────────────────────────────────────────────
+// Both functions redirect to /auth/callback (NOT /dashboard directly).
+// AuthCallback.jsx reads the session from the URL hash, syncs the profile
+// to your backend, then redirects to /dashboard.
+//
+// The old redirectTo: .../dashboard skipped profile sync entirely —
+// that's why Google/GitHub users had no profile row in your DB.
+
+export async function signInWithGoogle(redirectTo = `${window.location.origin}/auth/callback`) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${window.location.origin}/dashboard` },
+    options:  { redirectTo },
   })
   if (error) throw error
   return data
 }
 
-export async function signInWithGithub() {
+export async function signInWithGithub(redirectTo = `${window.location.origin}/auth/callback`) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'github',
-    options: { redirectTo: `${window.location.origin}/dashboard` },
+    options:  { redirectTo },
   })
   if (error) throw error
   return data

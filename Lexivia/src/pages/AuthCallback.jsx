@@ -1,76 +1,102 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "../config/supabase.js";
+/**
+ * AuthCallback.jsx
+ *
+ * Handles TWO cases after Supabase redirects back to /auth/callback:
+ *
+ *  1. Email confirmation  — user clicked the link in their inbox
+ *     Supabase puts the session in the URL hash: #access_token=...&type=signup
+ *
+ *  2. OAuth (Google / GitHub) — user completed the OAuth flow
+ *     Supabase puts the session in the URL hash: #access_token=...&type=recovery (or just sets it)
+ *
+ * In both cases we:
+ *   a) Call supabase.auth.getSession() — Supabase reads the hash automatically
+ *   b) Store the token in localStorage
+ *   c) Sync the user profile to your backend via /sync-user
+ *   d) Redirect to /dashboard
+ *
+ * ADD THIS ROUTE in your router:
+ *   <Route path="/auth/callback" element={<AuthCallback />} />
+ */
 
-function AuthCallback() {
-  const navigate = useNavigate();
+import { useEffect, useState } from "react"
+import { supabase } from "../config/supabase.js"
+import { syncProfile } from "./Signup"   // reuse the helper
+
+export default function AuthCallback() {
+  const [status, setStatus] = useState("Verifying your account…")
+  const [error,  setError]  = useState("")
 
   useEffect(() => {
-    const handle = async () => {
+    const handleCallback = async () => {
       try {
-        // Exchange the code in the URL for a real session.
-        // This handles BOTH signup confirmation and email-change confirmation.
-        const { data, error } = await supabase.auth.exchangeCodeForSession(
-          window.location.href
-        );
+        // getSession() automatically picks up the token from the URL hash
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
-        if (error) {
-          console.error("Auth callback error:", error.message);
-          navigate("/login?error=confirmation_failed");
-          return;
-        }
+        if (sessionError) throw sessionError
+        if (!session)     throw new Error("No session found. The link may have expired.")
 
-        const session = data?.session;
+        const { user, access_token } = session
 
-        if (session) {
-          // Persist the session so the rest of the app finds it in localStorage
-          localStorage.setItem("token", session.access_token);
-          localStorage.setItem("user", JSON.stringify(session.user));
+        // Store credentials
+        localStorage.setItem("token", access_token)
+        localStorage.setItem("user",  JSON.stringify(user))
 
-          // Sync the profile to the backend (non-blocking)
-          const user = session.user;
-          fetch("http://127.0.0.1:8000/sync-user", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              user_id:   user.id,
-              full_name: user.user_metadata?.full_name || "",
-              email:     user.email,
-            }),
-          }).catch(console.error);
+        // Derive full_name:
+        //  - For email signup: we stored it in sessionStorage before the redirect
+        //  - For OAuth: Supabase puts it in user_metadata
+        const fullName =
+          sessionStorage.getItem("pending_full_name") ||
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||        // GitHub uses "name"
+          ""
 
-          // Check whether this is an email-change confirmation or a fresh signup.
-          // Supabase sets the `type` param in the URL for email changes.
-          const params = new URLSearchParams(window.location.search);
-          const type   = params.get("type"); // "email_change" | "signup" | null
+        sessionStorage.removeItem("pending_full_name")
 
-          if (type === "email_change") {
-            // Redirect back to settings with a success flag
-            navigate("/settings?email_confirmed=1");
-          } else {
-            // Fresh signup confirmation → go to dashboard
-            navigate("/dashboard");
-          }
-        } else {
-          navigate("/login");
-        }
+        setStatus("Syncing your profile…")
+        await syncProfile(user.id, fullName, user.email, access_token)
+
+        setStatus("All done! Redirecting…")
+        setTimeout(() => { window.location.href = "/dashboard" }, 800)
+
       } catch (err) {
-        console.error("Unexpected auth callback error:", err);
-        navigate("/login");
+        console.error("AuthCallback error:", err)
+        setError(err.message || "Verification failed. Please try signing up again.")
       }
-    };
+    }
 
-    handle();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    handleCallback()
+  }, [])
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
-      <p style={{ color: "#8892a4", fontSize: "14px" }}>Confirming your email…</p>
+    <div style={{
+      minHeight: "100vh", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      background: "#f6f7fb", fontFamily: "Inter, Arial, sans-serif",
+    }}>
+      {error ? (
+        <div style={{ textAlign: "center", maxWidth: 400 }}>
+          <p style={{ fontSize: "32px", marginBottom: 16 }}>⚠</p>
+          <h2 style={{ fontSize: "20px", color: "#0d0e14", marginBottom: 8 }}>Verification failed</h2>
+          <p style={{ fontSize: "14px", color: "#8892a4", marginBottom: 24 }}>{error}</p>
+          <a href="/signup" style={{ color: "#1a2fff", fontSize: "14px", fontWeight: 600 }}>
+            Back to Sign Up
+          </a>
+        </div>
+      ) : (
+        <div style={{ textAlign: "center" }}>
+          {/* Simple spinner */}
+          <div style={{
+            width: 40, height: 40, border: "3px solid #e8eaf2",
+            borderTop: "3px solid #1a2fff", borderRadius: "50%",
+            animation: "spin 0.8s linear infinite", margin: "0 auto 20px",
+          }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <p style={{ fontSize: "14px", color: "#8892a4", letterSpacing: "0.3px" }}>{status}</p>
+        </div>
+      )}
     </div>
-  );
+  )
 }
 
-export default AuthCallback;
+
