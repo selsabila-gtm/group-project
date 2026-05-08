@@ -24,8 +24,10 @@ Key endpoints:
 """
 
 import csv
+from importlib.resources import path
 import io
 import json
+from random import random
 import subprocess
 import uuid
 import os
@@ -97,30 +99,11 @@ def get_workspace_path(competition_id: str, user_id: str) -> Path:
 
     defaults = {
     "main_modeling.py": (
-        "# ── Lexivia Workspace ─────────────────────────────\n"
-        "# Public dataset is available at:\n"
-        "#   /home/jovyan/work/data/dataset.csv\n"
-        "#\n"
-        "# Load it with:\n"
-        "#   import pandas as pd\n"
-        "#   df = pd.read_csv('/home/jovyan/work/data/dataset.csv')\n"
-        "#\n"
-        "# Your task:\n"
-        "#   Train a model and create predictions.csv\n"
-        "#\n"
-        "# predictions.csv MUST contain:\n"
-        "#   id,prediction\n"
-        "#\n"
-        "# Example:\n"
-        "#   output.to_csv('predictions.csv', index=False)\n"
-        "#\n"
-        "# Accuracy is computed automatically by the backend\n"
-        "# using hidden labels uploaded by the organizer.\n"
-        "# Hidden labels are NEVER visible inside Jupyter.\n"
-        "# ─────────────────────────────────────────────────\n\n"
         "import pandas as pd\n\n"
-        "df = pd.read_csv('/home/jovyan/work/data/dataset.csv')\n"
-        "print(df.head())\n"
+        "train_df = pd.read_csv('/home/jovyan/work/data/train.csv')\n"
+        "test_df = pd.read_csv('/home/jovyan/work/data/test.csv')\n\n"
+        "print(train_df.head())\n"
+        "print(test_df.head())\n"
     ),
 
     "utils.py": "# Helper functions\n",
@@ -376,7 +359,16 @@ def _build_dataset_rows(competition_id: str, db: Session, version_tag: str | Non
     rows = []
     for s in samples:
         ann   = _parse_annotation(s.annotation)
-        label = ann.get("label") or ann.get("labels") or ann.get("sentiment") or ""
+        label = (
+            ann.get("label")
+            or ann.get("labels")
+            or ann.get("sentiment")
+            or ann.get("summary")
+            or ann.get("target")
+            or ann.get("output")
+            or ann.get("answer")
+            or ""
+        )             
         if isinstance(label, list):
             label = "|".join(str(l) for l in label)
 
@@ -686,10 +678,7 @@ def run_workspace_file(
         )
 
     combined_output = result.stdout + "\n" + result.stderr
-    metric_name, metric_value = compute_accuracy_from_predictions(competition_id, base_path, db)
-
-    if metric_name is None:
-        metric_name, metric_value = extract_metric_from_output(combined_output)
+    metric_name, metric_value = None, None
 
     return {
         "stdout":       result.stdout,
@@ -711,78 +700,113 @@ def load_dataset_into_workspace(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Exports validated (or pinned-version) samples from the DB and writes them
-    directly into the workspace's data/ folder as dataset.csv and dataset.json.
-
-    The container mounts this folder at /home/jovyan/work/data/, so after calling
-    this endpoint the participant can immediately do:
-        df = pd.read_csv('/home/jovyan/work/data/dataset.csv')
-
-    Body (all optional):
-        {
-          "version_tag": "v1.2",   # pin a specific version; omit for latest validated
-          "format": "csv"          # "csv" | "json" | "both" (default: "both")
-        }
-    """
     require_competition_access(competition_id, current_user.id, db)
 
-    # Check the competition exists
-    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+    competition = db.query(Competition).filter(
+        Competition.id == competition_id
+    ).first()
+
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
 
     version_tag = body.get("version_tag")
-    fmt         = body.get("format", "both")
+    fmt = body.get("format", "both")
 
-    rows = _build_dataset_rows(competition_id, db, version_tag=version_tag)
+    rows = _build_dataset_rows(
+        competition_id,
+        db,
+        version_tag=version_tag,
+    )
 
     if not rows:
         label = f" in version {version_tag}" if version_tag else ""
+
         raise HTTPException(
             status_code=404,
             detail=(
                 f"No validated samples found{label}. "
-                "Go to Dataset Hub → validate some samples first, "
-                "then come back and click Load Dataset."
+                "Go to Dataset Hub → validate some samples first."
             ),
         )
 
-    base_path = get_workspace_path(competition_id, current_user.id)
-    data_dir  = base_path / "data"
+    import random
+
+    random.seed(42)
+    random.shuffle(rows)
+
+    split_idx = max(1, int(len(rows) * 0.8))
+
+    train_rows = rows[:split_idx]
+    test_rows = rows[split_idx:]
+
+    base_path = get_workspace_path(
+        competition_id,
+        current_user.id,
+    )
+
+    data_dir = base_path / "data"
     data_dir.mkdir(exist_ok=True)
 
     written = []
 
-    if fmt in ("csv", "both"):
-        csv_path = data_dir / "dataset.csv"
-        with csv_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+    def write_csv(path, data):
+        if not data:
+            return
+
+        with path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=data[0].keys(),
+            )
             writer.writeheader()
-            writer.writerows(rows)
-        written.append("data/dataset.csv")
+            writer.writerows(data)
+
+    if fmt in ("csv", "both"):
+        write_csv(data_dir / "train.csv", train_rows)
+        write_csv(data_dir / "test.csv", test_rows)
+
+        written.extend([
+            "data/train.csv",
+            "data/test.csv",
+        ])
 
     if fmt in ("json", "both"):
-        json_path = data_dir / "dataset.json"
-        json_path.write_text(
-            json.dumps(rows, ensure_ascii=False, indent=2),
+        (data_dir / "train.json").write_text(
+            json.dumps(train_rows, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        written.append("data/dataset.json")
+
+        (data_dir / "test.json").write_text(
+            json.dumps(test_rows, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        written.extend([
+            "data/train.json",
+            "data/test.json",
+        ])
 
     return {
-        "message":      f"Dataset loaded into workspace ({len(rows)} validated samples)",
+        "message": (
+            f"Dataset split into train/test "
+            f"({len(train_rows)} train, {len(test_rows)} test)"
+        ),
         "sample_count": len(rows),
-        "version_tag":  version_tag,
+        "train_count": len(train_rows),
+        "test_count": len(test_rows),
+        "version_tag": version_tag,
         "files_written": written,
-        "container_paths": [f"/home/jovyan/work/{f}" for f in written],
+        "container_paths": [
+            f"/home/jovyan/work/{f}" for f in written
+        ],
         "usage_hint": (
             "import pandas as pd\n"
-            "df = pd.read_csv('/home/jovyan/work/data/dataset.csv')\n"
-            "print(df.shape)"
+            "train_df = pd.read_csv('/home/jovyan/work/data/train.csv')\n"
+            "test_df = pd.read_csv('/home/jovyan/work/data/test.csv')\n"
+            "print(train_df.shape)\n"
+            "print(test_df.shape)"
         ),
     }
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Routes — git-style push history
@@ -873,6 +897,41 @@ def list_experiments(
 
     return runs
 
+def compute_model_accuracy_from_test_csv(base_path: Path, model_filename: str):
+    import pickle
+    import pandas as pd
+    from sklearn.metrics import accuracy_score
+
+    model_path = safe_file_path(base_path, model_filename)
+    test_path = base_path / "data" / "test.csv"
+
+    if not model_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model file not found: {model_filename}. Run your training code first.",
+        )
+
+    if not test_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="test.csv not found. Click Load Dataset before saving the model.",
+        )
+
+    test_df = pd.read_csv(test_path)
+
+    if "text_content" not in test_df.columns or "label" not in test_df.columns:
+        raise HTTPException(
+            status_code=400,
+            detail="test.csv must contain text_content and label columns.",
+        )
+
+    with model_path.open("rb") as f:
+        model = pickle.load(f)
+
+    preds = model.predict(test_df["text_content"])
+    accuracy = accuracy_score(test_df["label"].astype(str), [str(p) for p in preds])
+
+    return "accuracy", str(round(float(accuracy), 4))
 
 @router.post("/competitions/{competition_id}/experiments")
 def save_experiment(
@@ -889,27 +948,38 @@ def save_experiment(
     ).first()
 
     if not workspace:
-        raise HTTPException(
-            status_code=400,
-            detail="Launch a workspace before saving experiments",
-        )
+        raise HTTPException(status_code=400, detail="Launch a workspace before saving model")
+
+    base_path = get_workspace_path(competition_id, current_user.id)
+    model_filename = body.get("model_filename") or body.get("artifact_path") or "model.pkl"
+
+    metric_name, metric_value = compute_model_accuracy_from_test_csv(
+    base_path,
+    model_filename,
+)
 
     run = ExperimentRun(
-        workspace_id    = workspace.id,
-        competition_id  = competition_id,
-        user_id         = current_user.id,
-        name            = body.get("name") or "Untitled Experiment",
-        notes           = body.get("notes") or "",
-        metric_name     = body.get("metric_name") or "accuracy",
-        metric_value    = str(body.get("metric_value") if body.get("metric_value") is not None else "0.00"),
-        parameters_json = json.dumps(body.get("parameters") or {}),
-        artifact_path   = body.get("artifact_path"),
+        workspace_id=workspace.id,
+        competition_id=competition_id,
+        user_id=current_user.id,
+        name=body.get("name") or "Untitled Model",
+        notes=body.get("notes") or "",
+        metric_name=metric_name,
+        metric_value=metric_value,
+        parameters_json=json.dumps({
+            "dataset_version": body.get("dataset_version"),
+            "dataset_files": body.get("dataset_files") or [],
+            "hyperparameters": body.get("hyperparameters") or {},
+            "resource_tier": body.get("resource_tier"),
+            "active_file": body.get("active_file"),
+            "model_filename": body.get("model_filename"),
+        }),
+        artifact_path=body.get("artifact_path"),
     )
 
     db.add(run)
     db.commit()
     db.refresh(run)
-
     return run
 
 

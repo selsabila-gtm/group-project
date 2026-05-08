@@ -181,8 +181,8 @@ class ExperimentRun(Base):
 
     name = Column(String, nullable=False)
     notes = Column(Text, default="")
-    metric_name = Column(String, default="accuracy")
-    metric_value = Column(String, default="0.00")
+    metric_name = Column(String, nullable=True)
+    metric_value = Column(String, nullable=True)
     parameters_json = Column(Text, default="{}")
     artifact_path = Column(String, nullable=True)
 

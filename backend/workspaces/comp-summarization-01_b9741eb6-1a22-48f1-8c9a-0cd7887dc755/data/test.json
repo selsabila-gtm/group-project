@@ -1,0 +1,12 @@
+[
+  {
+    "id": "3cf6ef65-99f5-4bb8-b289-6b1c52f962ee",
+    "text_content": "hello hello my name is slaaaaa and uuu we know each other always , hello hello my name is slaaaaa and uuu we know each other always ",
+    "label": "hello name is ala we are family ,hello name is ala we are family , hello name is ala we are family ",
+    "audio_url": "",
+    "quality_score": 0.554,
+    "version_tag": "",
+    "submitted_at": "2026-05-06 18:37:27.658723+00:00",
+    "annotation_json": "{\"summary\": \"hello name is ala we are family ,hello name is ala we are family , hello name is ala we are family \", \"compression_ratio\": 0.8148148148148148, \"source_word_count\": 27, \"summary_word_count\": 22}"
+  }
+]

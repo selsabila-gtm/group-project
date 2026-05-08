@@ -25,93 +25,125 @@ function clearAuthAndGoLogin() {
     window.location.href = "/login";
 }
 
-// ─── Resource tier config ────────────────────────────────────────────────────
-
 const RESOURCE_TIERS = {
     "CPU Basic": {
-        cpuLabel: "2 cores", ramLabel: "4 GB", gpuLabel: "No GPU", diskLabel: "10 GB",
-        cpuPct: 40, ramPct: 45, gpuPct: 0,
+        cpuLabel: "2 cores",
+        ramLabel: "4 GB",
+        gpuLabel: "No GPU",
+        diskLabel: "10 GB",
+        cpuPct: 40,
+        ramPct: 45,
+        gpuPct: 0,
     },
     "GPU Basic": {
-        cpuLabel: "4 cores", ramLabel: "16 GB", gpuLabel: "1 shared GPU", diskLabel: "40 GB",
-        cpuPct: 55, ramPct: 65, gpuPct: 35,
+        cpuLabel: "4 cores",
+        ramLabel: "16 GB",
+        gpuLabel: "1 shared GPU",
+        diskLabel: "40 GB",
+        cpuPct: 55,
+        ramPct: 65,
+        gpuPct: 35,
     },
     "GPU Pro": {
-        cpuLabel: "8 cores", ramLabel: "32 GB", gpuLabel: "1 dedicated GPU", diskLabel: "80 GB",
-        cpuPct: 70, ramPct: 75, gpuPct: 80,
+        cpuLabel: "8 cores",
+        ramLabel: "32 GB",
+        gpuLabel: "1 dedicated GPU",
+        diskLabel: "80 GB",
+        cpuPct: 70,
+        ramPct: 75,
+        gpuPct: 80,
     },
 };
 
-// ─── Default starter code ────────────────────────────────────────────────────
-
-const DEFAULT_CODE = `# ── Lexivia Workspace ──────────────────────────────────────────────
-# Click "Load Dataset" in the toolbar to populate data/dataset.csv
-# with all validated samples from this competition's Dataset Hub.
+const DEFAULT_CODE = `# ── Lexivia Model Workspace ───────────────────────────────────────
+# Click "Load Dataset" to create:
+#   /home/jovyan/work/data/train.csv
+#   /home/jovyan/work/data/test.csv
 #
-# Then run this file to see your data:
+# Train your model here, then save it as model.pkl.
+# Evaluation/submission will happen later on another page.
+
 import pandas as pd
+import pickle
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
 
-df = pd.read_csv('/home/jovyan/work/data/dataset.csv')
-print('Dataset loaded:', df.shape)
-print(df.head())
+train_df = pd.read_csv('/home/jovyan/work/data/train.csv')
+test_df = pd.read_csv('/home/jovyan/work/data/test.csv')
 
-# When you train a model, print your metric like this for auto-detection:
-# print('accuracy: 0.94')
-# print('f1: 0.88')
+print('Train:', train_df.shape)
+print('Test:', test_df.shape)
+print(train_df.head())
+
+model = Pipeline([
+    ('tfidf', TfidfVectorizer()),
+    ('clf', LogisticRegression(max_iter=1000))
+])
+
+model.fit(train_df['text_content'], train_df['label'])
+
+with open('model.pkl', 'wb') as f:
+    pickle.dump(model, f)
+
+print('Model saved to model.pkl')
 `;
-
-// ─── Sub-components ──────────────────────────────────────────────────────────
 
 function ResBar({ label, value, pct }) {
     const color = pct > 75 ? "#f59e0b" : "#22c55e";
+
     return (
         <div className="ws-resbar">
             <span className="ws-resbar-label">{label}</span>
             <div className="ws-resbar-track">
-                <div className="ws-resbar-fill" style={{ width: `${pct}%`, background: color }} />
+                <div
+                    className="ws-resbar-fill"
+                    style={{ width: `${pct}%`, background: color }}
+                />
             </div>
             <span className="ws-resbar-val">{value}</span>
         </div>
     );
 }
 
-function SaveModal({ saving, onClose, onSave, lastMetric }) {
+function SaveModal({ saving, onClose, onSave }) {
     const [form, setForm] = useState({
         name: "",
         notes: "",
-        metric_name: lastMetric?.name || "accuracy",
-        metric_value: lastMetric?.value || "",
+        model_filename: "model.pkl",
         learning_rate: "0.0001",
         batch_size: "16",
         epochs: "5",
     });
-    useEffect(() => {
-        if (lastMetric?.name && lastMetric?.value !== undefined) {
-            setForm((prev) => ({
-                ...prev,
-                metric_name: lastMetric.name,
-                metric_value: String(lastMetric.value),
-            }));
-        }
-    }, [lastMetric]);
 
-    const update = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
+    const update = (key) => (e) =>
+        setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
     return (
         <div className="ws-modal-overlay" onClick={onClose}>
             <div className="ws-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="ws-modal-header">
-                    <span>Save Experiment Run</span>
-                    <button className="ws-modal-close" onClick={onClose}>×</button>
+                    <span>Save Model</span>
+                    <button className="ws-modal-close" onClick={onClose}>
+                        ×
+                    </button>
                 </div>
 
                 <div className="ws-modal-body">
-                    <label className="ws-modal-label">Experiment Name *</label>
+                    <label className="ws-modal-label">Model Name *</label>
                     <input
                         className="ws-modal-input"
                         value={form.name}
                         onChange={update("name")}
-                        placeholder="bert-baseline-v1"
+                        placeholder="bert-classifier-v1"
+                    />
+
+                    <label className="ws-modal-label">Model File</label>
+                    <input
+                        className="ws-modal-input"
+                        value={form.model_filename}
+                        onChange={update("model_filename")}
+                        placeholder="model.pkl"
                     />
 
                     <label className="ws-modal-label">Notes</label>
@@ -119,47 +151,44 @@ function SaveModal({ saving, onClose, onSave, lastMetric }) {
                         className="ws-modal-input ws-modal-textarea"
                         value={form.notes}
                         onChange={update("notes")}
-                        placeholder="What changed in this run?"
+                        placeholder="Training notes..."
                     />
-
-                    <div className="ws-modal-row2">
-                        <div>
-                            <label className="ws-modal-label">Metric Name</label>
-                            <input className="ws-modal-input" value={form.metric_name} onChange={update("metric_name")} />
-                        </div>
-                        <div>
-                            <label className="ws-modal-label">Metric Value</label>
-                            <input className="ws-modal-input" value={form.metric_value} onChange={update("metric_value")} placeholder="0.94" />
-                        </div>
-                    </div>
 
                     <div className="ws-modal-row3">
                         <div>
                             <label className="ws-modal-label">LR</label>
-                            <input className="ws-modal-input" value={form.learning_rate} onChange={update("learning_rate")} />
+                            <input
+                                className="ws-modal-input"
+                                value={form.learning_rate}
+                                onChange={update("learning_rate")}
+                            />
                         </div>
+
                         <div>
                             <label className="ws-modal-label">Batch</label>
-                            <input className="ws-modal-input" value={form.batch_size} onChange={update("batch_size")} />
+                            <input
+                                className="ws-modal-input"
+                                value={form.batch_size}
+                                onChange={update("batch_size")}
+                            />
                         </div>
+
                         <div>
                             <label className="ws-modal-label">Epochs</label>
-                            <input className="ws-modal-input" value={form.epochs} onChange={update("epochs")} />
+                            <input
+                                className="ws-modal-input"
+                                value={form.epochs}
+                                onChange={update("epochs")}
+                            />
                         </div>
                     </div>
-
-                    {lastMetric && (
-                        <p style={{ fontSize: 12, color: "#22c55e", marginBottom: 8 }}>
-                            ✓ Metric auto-detected from last run: {lastMetric.name} = {lastMetric.value}
-                        </p>
-                    )}
 
                     <button
                         className="ws-modal-save"
                         disabled={saving || !form.name.trim()}
                         onClick={() => onSave(form)}
                     >
-                        {saving ? "Saving..." : "Save Run"}
+                        {saving ? "Saving..." : "Save Model"}
                     </button>
                 </div>
             </div>
@@ -167,12 +196,9 @@ function SaveModal({ saving, onClose, onSave, lastMetric }) {
     );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
-
 export default function Experiments() {
     const { competitionId } = useParams();
 
-    // ── State ──────────────────────────────────────────────────────────────────
     const [competition, setCompetition] = useState(null);
     const [workspace, setWorkspace] = useState(null);
     const [experiments, setExperiments] = useState([]);
@@ -194,12 +220,10 @@ export default function Experiments() {
     const [toast, setToast] = useState("");
     const [pageError, setPageError] = useState("");
     const [stdinByFile, setStdinByFile] = useState({});
-    const [lastMetric, setLastMetric] = useState(null);
     const [uptime, setUptime] = useState(0);
 
-    // Dataset loading state
     const [loadingDataset, setLoadingDataset] = useState(false);
-    const [datasetInfo, setDatasetInfo] = useState(null); // { sample_count, files_written }
+    const [datasetInfo, setDatasetInfo] = useState(null);
 
     const activeStdin = stdinByFile[activeFile] || "";
     const fileInputRef = useRef(null);
@@ -209,10 +233,8 @@ export default function Experiments() {
 
     const tier = useMemo(
         () => RESOURCE_TIERS[resourceTier] || RESOURCE_TIERS["GPU Basic"],
-        [resourceTier],
+        [resourceTier]
     );
-
-    // ── Helpers ────────────────────────────────────────────────────────────────
 
     const showToast = (msg) => {
         setToast(msg);
@@ -221,8 +243,11 @@ export default function Experiments() {
 
     const safeJson = async (res) => {
         const text = await res.text();
-        try { return text ? JSON.parse(text) : {}; }
-        catch { return { detail: text }; }
+        try {
+            return text ? JSON.parse(text) : {};
+        } catch {
+            return { detail: text };
+        }
     };
 
     const request = async (url, options = {}) => {
@@ -239,13 +264,13 @@ export default function Experiments() {
         const data = await safeJson(res);
 
         if (!res.ok) {
-    console.error("API ERROR:", data);
-    throw new Error(
-        typeof data.detail === "string"
-            ? data.detail
-            : JSON.stringify(data.detail || data)
-    );
-}
+            console.error("API ERROR:", data);
+            throw new Error(
+                typeof data.detail === "string"
+                    ? data.detail
+                    : JSON.stringify(data.detail || data)
+            );
+        }
 
         return data;
     };
@@ -257,36 +282,37 @@ export default function Experiments() {
         return `${h}:${m}:${s}`;
     };
 
-    // Display values — use real workspace limits if available, else tier defaults
     const displayCpu = workspace?.cpu_limit || tier.cpuLabel;
     const displayRam = workspace?.ram_limit || tier.ramLabel;
     const displayGpu = workspace?.gpu_limit || tier.gpuLabel;
     const displayDisk = workspace?.storage_limit || tier.diskLabel;
 
-    // Git hash derived from container_id
     const gitHash = workspace?.container_id
         ? workspace.container_id.replace("ctr-", "").slice(0, 7)
         : "local";
 
-    // ── File loading ───────────────────────────────────────────────────────────
+    const loadFile = useCallback(
+        async (filename) => {
+            if (!filename) return;
 
-    const loadFile = useCallback(async (filename) => {
-        if (!filename) return;
-
-        setActiveFile(filename);
-        setOpenTabs((prev) => prev.includes(filename) ? prev : [...prev, filename]);
-
-        try {
-            const data = await request(
-                `${API}/competitions/${competitionId}/workspace/file?filename=${encodeURIComponent(filename)}`
+            setActiveFile(filename);
+            setOpenTabs((prev) =>
+                prev.includes(filename) ? prev : [...prev, filename]
             );
-            setFileContent(data.content ?? "");
-        } catch (err) {
-            setRunOutput(String(err.message || err));
-        }
-    }, [competitionId]);
 
-    // ── Page load ──────────────────────────────────────────────────────────────
+            try {
+                const data = await request(
+                    `${API}/competitions/${competitionId}/workspace/file?filename=${encodeURIComponent(
+                        filename
+                    )}`
+                );
+                setFileContent(data.content ?? "");
+            } catch (err) {
+                setRunOutput(String(err.message || err));
+            }
+        },
+        [competitionId]
+    );
 
     const loadPage = useCallback(async () => {
         setLoading(true);
@@ -328,9 +354,10 @@ export default function Experiments() {
         }
     }, [competitionId, loadFile]);
 
-    useEffect(() => { loadPage(); }, [loadPage]);
+    useEffect(() => {
+        loadPage();
+    }, [loadPage]);
 
-    // ── Uptime counter — resets only when workspace goes from stopped → running ─
     useEffect(() => {
         clearInterval(uptimeRef.current);
 
@@ -342,8 +369,6 @@ export default function Experiments() {
 
         return () => clearInterval(uptimeRef.current);
     }, [isRunning]);
-
-    // ── File operations ────────────────────────────────────────────────────────
 
     const saveCurrentFile = async () => {
         if (!activeFile) return;
@@ -370,7 +395,9 @@ export default function Experiments() {
             await saveCurrentFile();
 
             const res = await fetch(
-                `${API}/competitions/${competitionId}/workspace/download?filename=${encodeURIComponent(activeFile)}`,
+                `${API}/competitions/${competitionId}/workspace/download?filename=${encodeURIComponent(
+                    activeFile
+                )}`,
                 { headers: authHeader() }
             );
 
@@ -386,6 +413,7 @@ export default function Experiments() {
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
+
             showToast("File downloaded");
         } catch (err) {
             setRunOutput(String(err.message || err));
@@ -393,7 +421,7 @@ export default function Experiments() {
     };
 
     const createNewFile = async () => {
-        const filename = prompt("File name:", "experiment.py");
+        const filename = prompt("File name:", "train_model.py");
         if (!filename) return;
 
         try {
@@ -402,9 +430,10 @@ export default function Experiments() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     filename,
-                    content: filename.endsWith(".txt") ? "" : "# New file\n",
+                    content: filename.endsWith(".txt") ? "" : "# New model file\n",
                 }),
             });
+
             await loadPage();
             await loadFile(filename);
             showToast("File created");
@@ -427,11 +456,13 @@ export default function Experiments() {
             );
 
             const data = await safeJson(res);
+
             if (res.status === 401) return clearAuthAndGoLogin();
             if (!res.ok) throw new Error(data.detail || "Could not upload file");
 
             await loadPage();
             await loadFile(data.filename);
+
             showToast("File uploaded");
         } catch (err) {
             setRunOutput(String(err.message || err));
@@ -442,18 +473,18 @@ export default function Experiments() {
 
     const closeTab = (filename, e) => {
         e.stopPropagation();
+
         const nextTabs = openTabs.filter((tab) => tab !== filename);
         setOpenTabs(nextTabs);
 
         if (activeFile === filename) {
             const next = nextTabs[nextTabs.length - 1] || "";
             setActiveFile(next);
+
             if (next) loadFile(next);
             else setFileContent("");
         }
     };
-
-    // ── Workspace lifecycle ────────────────────────────────────────────────────
 
     const launchWorkspace = async () => {
         setLaunching(true);
@@ -473,6 +504,7 @@ export default function Experiments() {
             showToast("Workspace launched");
 
             const notebookUrl = data.notebook_url || data.workspace?.notebook_url;
+
             if (notebookUrl?.startsWith("http")) {
                 window.open(notebookUrl, "_blank", "noopener,noreferrer");
             }
@@ -489,6 +521,7 @@ export default function Experiments() {
                 `${API}/competitions/${competitionId}/workspace/stop`,
                 { method: "POST" }
             );
+
             setWorkspace(data.workspace);
             setKernelStatus("IDLE");
             showToast("Workspace stopped");
@@ -520,8 +553,6 @@ export default function Experiments() {
         }
     };
 
-    // ── Dataset bridge ─────────────────────────────────────────────────────────
-
     const loadDatasetIntoWorkspace = async () => {
         setLoadingDataset(true);
         setRunOutput("Loading dataset from Dataset Hub into workspace...");
@@ -538,20 +569,30 @@ export default function Experiments() {
 
             setDatasetInfo({
                 sample_count: data.sample_count,
-                files_written: data.files_written,
+                train_count: data.train_count,
+                test_count: data.test_count,
+                version_tag: data.version_tag || null,
+                files_written: data.files_written || [],
             });
 
             setRunOutput(
                 `✓ ${data.message}\n\n` +
-                `Files written:\n${(data.files_written || []).map(f => `  • ${f}`).join("\n")}\n\n` +
-                `Container paths:\n${(data.container_paths || []).map(f => `  ${f}`).join("\n")}\n\n` +
-                `Usage:\n${data.usage_hint}`
+                `Files written:\n${(data.files_written || [])
+                    .map((f) => `  • ${f}`)
+                    .join("\n")}\n\n` +
+                `Container paths:\n${(data.container_paths || [])
+                    .map((f) => `  ${f}`)
+                    .join("\n")}\n\n` +
+                `Usage:\n${data.usage_hint || ""}`
             );
 
-            // Refresh file list so data/dataset.csv appears
             await loadPage();
 
-            showToast(`✓ Dataset loaded: ${data.sample_count} validated samples`);
+            showToast(
+                `✓ Dataset loaded: ${data.sample_count ??
+                ((data.train_count || 0) + (data.test_count || 0))
+                } samples`
+            );
         } catch (err) {
             const msg = String(err.message || err);
             setRunOutput(`⚠ Dataset load failed:\n${msg}`);
@@ -561,20 +602,20 @@ export default function Experiments() {
         }
     };
 
-    // ── Code execution ─────────────────────────────────────────────────────────
-
     const runCurrentFile = async () => {
         if (!activeFile) return;
+
         await saveCurrentFile();
 
         setRunning(true);
         setKernelStatus("BUSY");
         setRunOutput("Running...");
-        setLastMetric(null);
 
         try {
             const stdin = activeStdin
-                ? activeStdin.endsWith("\n") ? activeStdin : `${activeStdin}\n`
+                ? activeStdin.endsWith("\n")
+                    ? activeStdin
+                    : `${activeStdin}\n`
                 : "";
 
             const data = await request(
@@ -590,26 +631,11 @@ export default function Experiments() {
                 }
             );
 
-            const metricText =
-                data.metric_name && data.metric_value !== undefined
-                    ? `\n\nDetected metric: ${data.metric_name} = ${data.metric_value}`
-                    : "";
-
             setRunOutput(
                 `${data.stdout || ""}` +
                 `${data.stderr ? `\nERROR:\n${data.stderr}` : ""}` +
-                metricText +
                 `${data.exit_code !== undefined ? `\n\nExit code: ${data.exit_code}` : ""}`
             );
-
-            if (
-                data.metric_name &&
-                data.metric_value !== undefined &&
-                data.metric_value !== null
-            ) {
-                setLastMetric({ name: data.metric_name, value: data.metric_value });
-                showToast(`Metric detected: ${data.metric_name} = ${data.metric_value}`);
-            }
         } catch (err) {
             console.error(err);
 
@@ -631,8 +657,6 @@ export default function Experiments() {
         }
     };
 
-    // ── Experiment saving ──────────────────────────────────────────────────────
-
     const saveExperiment = async (form) => {
         setSavingRun(true);
 
@@ -647,23 +671,28 @@ export default function Experiments() {
                     body: JSON.stringify({
                         name: form.name,
                         notes: form.notes,
-                        metric_name: lastMetric?.name || form.metric_name || "accuracy",
-                        metric_value: lastMetric?.value ?? form.metric_value ?? "",
-                        parameters: {
+
+                        dataset_version: datasetInfo?.version_tag || null,
+                        dataset_files: datasetInfo?.files_written || [],
+
+                        hyperparameters: {
                             learning_rate: form.learning_rate,
                             batch_size: form.batch_size,
                             epochs: form.epochs,
-                            resource_tier: resourceTier,
-                            active_file: activeFile,
                         },
-                        artifact_path: activeFile,
+
+                        resource_tier: resourceTier,
+                        active_file: activeFile,
+
+                        model_filename: form.model_filename,
+                        artifact_path: form.model_filename,
                     }),
                 }
             );
 
             setExperiments((prev) => [data, ...prev]);
             setShowSaveModal(false);
-            showToast("Experiment saved");
+            showToast("Model saved");
         } catch (err) {
             setPageError(String(err.message || err));
         } finally {
@@ -671,11 +700,10 @@ export default function Experiments() {
         }
     };
 
-    // ── Push changes ───────────────────────────────────────────────────────────
-
     const pushChanges = async () => {
         await saveCurrentFile();
-        const message = prompt("Commit message:", "Update workspace files");
+
+        const message = prompt("Commit message:", "Update model workspace files");
         if (!message) return;
 
         try {
@@ -684,13 +712,12 @@ export default function Experiments() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ message }),
             });
+
             showToast("Changes pushed");
         } catch (err) {
             setRunOutput(String(err.message || err));
         }
     };
-
-    // ── Loading / error states ─────────────────────────────────────────────────
 
     if (loading) {
         return (
@@ -705,12 +732,12 @@ export default function Experiments() {
         return (
             <div className="ws-boot">
                 <span style={{ color: "#f85149" }}>{pageError}</span>
-                <button className="ws-btn ws-btn--launch" onClick={loadPage}>Retry</button>
+                <button className="ws-btn ws-btn--launch" onClick={loadPage}>
+                    Retry
+                </button>
             </div>
         );
     }
-
-    // ── Render ─────────────────────────────────────────────────────────────────
 
     return (
         <div className="ws-shell">
@@ -721,14 +748,16 @@ export default function Experiments() {
             />
 
             <div className="ws-ide">
-                {/* Chrome bar: resource usage + tier selector + kernel controls */}
                 <div className="ws-chrome">
                     <div className="ws-chrome-logo">
                         <div className="ws-logo-icon">⬡</div>
                         <div>
-                            <div className="ws-logo-name">{competition?.title || "Workspace"}</div>
+                            <div className="ws-logo-name">
+                                {competition?.title || "Workspace"}
+                            </div>
                             <div className="ws-logo-sub">
-                                {resourceTier.toUpperCase()} · {workspace?.docker_image || "lexivia/notebook-gpu:latest"}
+                                {resourceTier.toUpperCase()} ·{" "}
+                                {workspace?.docker_image || "lexivia/notebook-gpu:latest"}
                             </div>
                         </div>
                     </div>
@@ -736,9 +765,11 @@ export default function Experiments() {
                     <div className="ws-chrome-res">
                         <ResBar label="CPU" value={displayCpu} pct={tier.cpuPct} />
                         <ResBar label="RAM" value={displayRam} pct={tier.ramPct} />
+
                         {resourceTier !== "CPU Basic" && (
                             <ResBar label="GPU" value={displayGpu} pct={tier.gpuPct} />
                         )}
+
                         <ResBar label="DISK" value={displayDisk} pct={35} />
                     </div>
 
@@ -777,31 +808,41 @@ export default function Experiments() {
                     </div>
                 </div>
 
-                {/* Tab bar */}
                 <div className="ws-tabbar">
                     {openTabs.map((tab) => (
                         <button
                             key={tab}
-                            className={`ws-tab ${activeFile === tab ? "ws-tab--active" : ""}`}
+                            className={`ws-tab ${activeFile === tab ? "ws-tab--active" : ""
+                                }`}
                             onClick={() => loadFile(tab)}
                         >
-                            <span className={`ws-tab-dot ${tab.endsWith(".py") ? "ws-tab-dot--py" :
-                                tab.endsWith(".txt") ? "ws-tab-dot--txt" : "ws-tab-dot--nb"
-                                }`} />
+                            <span
+                                className={`ws-tab-dot ${tab.endsWith(".py")
+                                        ? "ws-tab-dot--py"
+                                        : tab.endsWith(".txt")
+                                            ? "ws-tab-dot--txt"
+                                            : "ws-tab-dot--nb"
+                                    }`}
+                            />
                             {tab}
-                            <span className="ws-tab-x" onClick={(e) => closeTab(tab, e)}>×</span>
+                            <span className="ws-tab-x" onClick={(e) => closeTab(tab, e)}>
+                                ×
+                            </span>
                         </button>
                     ))}
                 </div>
 
                 <div className="ws-body">
-                    {/* Left sidebar: file explorer + saved runs */}
                     <aside className="ws-explorer">
                         <div className="ws-pane-title">
                             EXPLORER
                             <div className="ws-pane-actions">
-                                <button className="ws-icon-btn" onClick={createNewFile}>+</button>
-                                <button className="ws-icon-btn" onClick={loadPage}>↻</button>
+                                <button className="ws-icon-btn" onClick={createNewFile}>
+                                    +
+                                </button>
+                                <button className="ws-icon-btn" onClick={loadPage}>
+                                    ↻
+                                </button>
                             </div>
                         </div>
 
@@ -810,15 +851,18 @@ export default function Experiments() {
                                 <span className="ws-arrow">▸</span>
                                 <span>data</span>
                                 {datasetInfo && (
-                                    <span className="ws-ro-badge" title={`${datasetInfo.sample_count} samples`}>
-                                        {datasetInfo.sample_count}
+                                    <span
+                                        className="ws-ro-badge"
+                                        title={`${datasetInfo.sample_count || 0} samples`}
+                                    >
+                                        {datasetInfo.sample_count || 0}
                                     </span>
                                 )}
                             </div>
 
                             <div className="ws-tree-folder">
                                 <span className="ws-arrow">▸</span>
-                                <span>shared_models</span>
+                                <span>saved_models</span>
                             </div>
 
                             <div className="ws-tree-folder ws-tree-folder--open">
@@ -829,31 +873,37 @@ export default function Experiments() {
                             {files.map((file) => (
                                 <button
                                     key={file}
-                                    className={`ws-tree-file ${activeFile === file ? "ws-tree-file--active" : ""}`}
+                                    className={`ws-tree-file ${activeFile === file ? "ws-tree-file--active" : ""
+                                        }`}
                                     onClick={() => loadFile(file)}
                                 >
-                                    <span className={`ws-file-dot ${file.endsWith(".py") ? "ws-file-dot--py" :
-                                        file.endsWith(".txt") ? "ws-file-dot--txt" : "ws-file-dot--nb"
-                                        }`} />
+                                    <span
+                                        className={`ws-file-dot ${file.endsWith(".py")
+                                                ? "ws-file-dot--py"
+                                                : file.endsWith(".txt")
+                                                    ? "ws-file-dot--txt"
+                                                    : "ws-file-dot--nb"
+                                            }`}
+                                    />
                                     {file}
                                 </button>
                             ))}
                         </div>
 
                         <div className="ws-pane-title ws-pane-title--mt">
-                            SAVED RUNS
+                            SAVED MODELS
                             <span className="ws-run-count">{experiments.length}</span>
                         </div>
 
                         <div className="ws-runs-list">
                             {experiments.length === 0 ? (
-                                <p className="ws-runs-empty">No runs yet</p>
+                                <p className="ws-runs-empty">No models saved yet</p>
                             ) : (
                                 experiments.map((run) => (
                                     <div key={run.id} className="ws-run-item">
                                         <div className="ws-run-name">{run.name}</div>
                                         <div className="ws-run-score">
-                                            {run.metric_name}: <b>{run.metric_value}</b>
+                                            {run.artifact_path || "model.pkl"}
                                         </div>
                                     </div>
                                 ))
@@ -861,24 +911,38 @@ export default function Experiments() {
                         </div>
                     </aside>
 
-                    {/* Main editor area */}
                     <main className="ws-notebook">
                         <div className="ws-nb-toolbar">
-                            <button className="ws-nb-btn" disabled={!isRunning || running} onClick={runCurrentFile}>
+                            <button
+                                className="ws-nb-btn"
+                                disabled={!isRunning || running}
+                                onClick={runCurrentFile}
+                            >
                                 ▶ Run Active File
                             </button>
 
-                            <button className="ws-nb-btn" disabled={!isRunning || running} onClick={runCurrentFile}>
+                            <button
+                                className="ws-nb-btn"
+                                disabled={!isRunning || running}
+                                onClick={runCurrentFile}
+                            >
                                 ▶ Run
                             </button>
 
-                            <button className="ws-nb-btn" onClick={createNewFile}>+ File</button>
+                            <button className="ws-nb-btn" onClick={createNewFile}>
+                                + File
+                            </button>
 
-                            <button className="ws-nb-btn" onClick={() => fileInputRef.current?.click()}>
+                            <button
+                                className="ws-nb-btn"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
                                 ↑ Upload
                             </button>
 
-                            <button className="ws-nb-btn" onClick={downloadCurrentFile}>↓ Download</button>
+                            <button className="ws-nb-btn" onClick={downloadCurrentFile}>
+                                ↓ Download
+                            </button>
 
                             <input
                                 ref={fileInputRef}
@@ -892,47 +956,56 @@ export default function Experiments() {
                                 className="ws-nb-btn"
                                 onClick={() => {
                                     setRunOutput("");
-                                    setStdinByFile((prev) => ({ ...prev, [activeFile]: "" }));
+                                    setStdinByFile((prev) => ({
+                                        ...prev,
+                                        [activeFile]: "",
+                                    }));
                                 }}
                             >
                                 ⊘ Clear
                             </button>
 
-                            <button className="ws-nb-btn" disabled={savingFile} onClick={saveCurrentFile}>
+                            <button
+                                className="ws-nb-btn"
+                                disabled={savingFile}
+                                onClick={saveCurrentFile}
+                            >
                                 {savingFile ? "Saving..." : "Save File"}
                             </button>
 
-                            {/* ── Dataset bridge button ── */}
                             <button
                                 className="ws-nb-btn ws-nb-btn--dataset"
                                 disabled={loadingDataset}
                                 onClick={loadDatasetIntoWorkspace}
-                                title="Export validated samples from Dataset Hub into data/dataset.csv inside the container"
+                                title="Export validated samples from Dataset Hub into train/test files"
                             >
                                 {loadingDataset
                                     ? "Loading..."
                                     : datasetInfo
-                                        ? `⟳ Reload Dataset (${datasetInfo.sample_count})`
+                                        ? `⟳ Reload Dataset (${datasetInfo.sample_count || 0})`
                                         : "⬇ Load Dataset"}
                             </button>
 
                             <button
                                 className="ws-nb-btn ws-nb-btn--save"
-                                disabled={!lastMetric && !runOutput}
+                                disabled={!runOutput}
                                 onClick={() => setShowSaveModal(true)}
                             >
-                                ↑ Save Experiment
+                                ↑ Save Model
                             </button>
                         </div>
 
                         <div className="ws-nb-scroll">
-                            {/* Code editor */}
                             <div className="ws-code-editor">
                                 <div className="ws-code-editor-head">
                                     <span>{activeFile || "No file selected"}</span>
+
                                     <div style={{ display: "flex", gap: 8 }}>
                                         <button onClick={saveCurrentFile}>Save</button>
-                                        <button onClick={runCurrentFile} disabled={!isRunning || running}>
+                                        <button
+                                            onClick={runCurrentFile}
+                                            disabled={!isRunning || running}
+                                        >
                                             {running ? "Running..." : "Run"}
                                         </button>
                                     </div>
@@ -946,31 +1019,41 @@ export default function Experiments() {
                                 />
                             </div>
 
-                            {/* stdin */}
                             <div className="ws-code-editor ws-small-block">
                                 <div className="ws-code-editor-head">
                                     <span>Input for input()</span>
                                 </div>
+
                                 <textarea
                                     className="ws-code-textarea ws-code-textarea--stdin"
                                     value={activeStdin}
                                     onChange={(e) =>
-                                        setStdinByFile((prev) => ({ ...prev, [activeFile]: e.target.value }))
+                                        setStdinByFile((prev) => ({
+                                            ...prev,
+                                            [activeFile]: e.target.value,
+                                        }))
                                     }
                                     placeholder={"Example:\nAla"}
                                     spellCheck="false"
                                 />
                             </div>
 
-                            {/* output */}
                             <div className="ws-code-editor ws-small-block">
                                 <div className="ws-code-editor-head">
                                     <span>Output</span>
-                                    <button onClick={() => {
-                                        setRunOutput("");
-                                        setStdinByFile((prev) => ({ ...prev, [activeFile]: "" }));
-                                    }}>Clear</button>
+                                    <button
+                                        onClick={() => {
+                                            setRunOutput("");
+                                            setStdinByFile((prev) => ({
+                                                ...prev,
+                                                [activeFile]: "",
+                                            }));
+                                        }}
+                                    >
+                                        Clear
+                                    </button>
                                 </div>
+
                                 <pre className="ws-code-output">
                                     {runOutput || "Run output will appear here."}
                                 </pre>
@@ -978,30 +1061,42 @@ export default function Experiments() {
                         </div>
 
                         <div className="ws-statusbar">
-                            <span className={`ws-status-led ${isRunning ? "ws-status-led--on" : "ws-status-led--off"}`} />
+                            <span
+                                className={`ws-status-led ${isRunning
+                                        ? "ws-status-led--on"
+                                        : "ws-status-led--off"
+                                    }`}
+                            />
+
                             <span>STATUS: {kernelStatus}</span>
                             <div className="ws-statusbar-sep" />
                             <span>KERNEL: Python 3.10</span>
                             <div className="ws-statusbar-sep" />
                             <span>UPTIME: {fmtUptime(uptime)}</span>
                             <div className="ws-statusbar-sep" />
+
                             {datasetInfo && (
                                 <>
                                     <span style={{ color: "#22c55e" }}>
-                                        DATASET: {datasetInfo.sample_count} samples loaded
+                                        DATASET:{" "}
+                                        {datasetInfo.train_count !== undefined
+                                            ? `${datasetInfo.train_count} train / ${datasetInfo.test_count} test`
+                                            : `${datasetInfo.sample_count || 0} samples loaded`}
                                     </span>
                                     <div className="ws-statusbar-sep" />
                                 </>
                             )}
+
                             <span>SAVE: Manual</span>
                         </div>
                     </main>
 
-                    {/* Right panel: env info + git history */}
                     <aside className="ws-envpanel">
                         <div className="ws-pane-title">
                             ENVIRONMENT INFO
-                            <button className="ws-icon-btn" onClick={loadPage}>↻</button>
+                            <button className="ws-icon-btn" onClick={loadPage}>
+                                ↻
+                            </button>
                         </div>
 
                         <div className="ws-env-list">
@@ -1016,14 +1111,19 @@ export default function Experiments() {
                                 <div key={pkg} className="ws-env-row">
                                     <code className="ws-env-pkg">{pkg}</code>
                                     <span className="ws-env-ver">{ver}</span>
-                                    <button className="ws-env-edit" onClick={() => loadFile("requirements.txt")}>
+                                    <button
+                                        className="ws-env-edit"
+                                        onClick={() => loadFile("requirements.txt")}
+                                    >
                                         Edit
                                     </button>
                                 </div>
                             ))}
                         </div>
 
-                        <div className="ws-pane-title ws-pane-title--mt">CONTAINER</div>
+                        <div className="ws-pane-title ws-pane-title--mt">
+                            CONTAINER
+                        </div>
 
                         <div className="ws-container-info">
                             {[
@@ -1042,28 +1142,39 @@ export default function Experiments() {
                             ))}
                         </div>
 
-                        <div className="ws-pane-title ws-pane-title--mt">GIT COMMIT HISTORY</div>
+                        <div className="ws-pane-title ws-pane-title--mt">
+                            GIT COMMIT HISTORY
+                        </div>
 
                         <div className="ws-git-list">
                             <div className="ws-git-row">
                                 <span className="ws-git-dot ws-git-dot--active" />
+
                                 <div className="ws-git-info">
                                     <p className="ws-git-msg">Workspace updated</p>
                                     <p className="ws-git-sub">hash: {gitHash}</p>
                                 </div>
+
                                 <span className="ws-git-time">now</span>
                             </div>
+
                             <div className="ws-git-row">
                                 <span className="ws-git-dot" />
+
                                 <div className="ws-git-info">
                                     <p className="ws-git-msg">Initial setup</p>
                                     <p className="ws-git-sub">Project initialized</p>
                                 </div>
+
                                 <span className="ws-git-time">1h</span>
                             </div>
                         </div>
 
-                        <button className="ws-push-btn" disabled={savingFile} onClick={pushChanges}>
+                        <button
+                            className="ws-push-btn"
+                            disabled={savingFile}
+                            onClick={pushChanges}
+                        >
                             {savingFile ? "Pushing..." : "↑ Push Changes"}
                         </button>
                     </aside>
@@ -1075,7 +1186,6 @@ export default function Experiments() {
                     saving={savingRun}
                     onClose={() => setShowSaveModal(false)}
                     onSave={saveExperiment}
-                    lastMetric={lastMetric}
                 />
             )}
 
