@@ -3,15 +3,16 @@
  *
  * task_type: QUESTION_ANSWERING
  *
- * Contributor provides a context passage, writes a question,
- * and provides the answer — either as an extracted span (extractive)
- * or free text (generative). Config can specify qa_type default.
+ * QA type comes from config.qa_type (organizer-configured).
+ * PromptCard pre-fills the context passage with the organizer's text so
+ * contributors write questions about real corpus documents.
  */
 import { useState } from "react";
-import { WidgetHeader, CommitRow } from "./shared";
+import { WidgetHeader, CommitRow, PromptCard } from "./shared";
 
-export default function QuestionAnsweringWidget({ competition, config, onSubmit, submitting }) {
+export default function QuestionAnsweringWidget({ competition, config, prompt, promptLoading, onSubmit, submitting }) {
   const defaultQaType = config?.qa_type || "extractive";
+
   const [context,  setContext]  = useState("");
   const [question, setQuestion] = useState("");
   const [answer,   setAnswer]   = useState("");
@@ -52,6 +53,7 @@ export default function QuestionAnsweringWidget({ competition, config, onSubmit,
         answer,
         qa_type: qaType,
         start_index: qaType === "extractive" && startIdx !== "" ? Number(startIdx) : null,
+        prompt_id: prompt?.id ?? null,
       },
     });
     setContext(""); setQuestion(""); setAnswer(""); setStartIdx("");
@@ -60,6 +62,15 @@ export default function QuestionAnsweringWidget({ competition, config, onSubmit,
   return (
     <div className="dc-widget">
       <WidgetHeader icon="◈" label="QUESTION ANSWERING" meta={qaType === "extractive" ? "Extractive" : "Generative"} />
+
+      {/* Organizer-supplied context passage */}
+      <PromptCard
+        prompt={prompt}
+        loading={promptLoading}
+        label="CONTEXT PASSAGE"
+        hint="Write a question and answer for this passage, or use your own context."
+        onUse={(content) => { setContext(content); setQuestion(""); setAnswer(""); setStartIdx(""); }}
+      />
 
       {/* QA type toggle */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -75,7 +86,7 @@ export default function QuestionAnsweringWidget({ competition, config, onSubmit,
         ))}
       </div>
 
-      {/* Context */}
+      {/* Context textarea / highlighted preview */}
       <label className="dc-field-label">CONTEXT PASSAGE</label>
       {qaType === "extractive" && answer.trim() ? (
         <div
@@ -126,7 +137,6 @@ export default function QuestionAnsweringWidget({ competition, config, onSubmit,
         </div>
       </div>
 
-      {/* Extractive span warning */}
       {qaType === "extractive" && answer.trim() && startIdx === "" && (
         <p style={{ color: "#ef4444", fontSize: 11, marginTop: 6 }}>
           ⚠ Answer span not found in context — verify the exact wording.

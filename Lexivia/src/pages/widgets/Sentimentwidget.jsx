@@ -3,12 +3,12 @@
  *
  * task_type: SENTIMENT_ANALYSIS
  *
- * Contributor enters text, selects overall sentiment (positive/negative/
- * neutral/mixed), optionally rates aspect-level sentiments.
- * Labels and aspects fetched from config.sentiment_labels / config.aspect_categories.
+ * Sentiment labels and aspect categories come from config (organizer-configured).
+ * PromptCard surfaces organizer-supplied review/sentence examples so contributors
+ * can annotate real data instead of typing their own.
  */
 import { useState } from "react";
-import { WidgetHeader, CommitRow } from "./shared";
+import { WidgetHeader, CommitRow, PromptCard } from "./shared";
 
 const SENTIMENT_STYLES = {
   positive: { icon: "◑", color: "#16a34a", bg: "#dcfce7", border: "#86efac" },
@@ -68,7 +68,7 @@ function AspectRow({ aspect, value, onChange }) {
   );
 }
 
-export default function SentimentWidget({ competition, config, onSubmit, submitting }) {
+export default function SentimentWidget({ competition, config, prompt, promptLoading, onSubmit, submitting }) {
   const sentimentLabels  = config?.sentiment_labels  || ["positive", "negative", "neutral", "mixed"];
   const aspectCategories = config?.aspect_categories || ["product", "service", "price", "delivery", "support"];
 
@@ -105,6 +105,15 @@ export default function SentimentWidget({ competition, config, onSubmit, submitt
     <div className="dc-widget">
       <WidgetHeader icon="◕" label="SENTIMENT ANALYSIS" meta={`Tokens: ${tokenCount}`} />
 
+      {/* Organizer-supplied text example */}
+      <PromptCard
+        prompt={prompt}
+        loading={promptLoading}
+        label="TEXT SAMPLE"
+        hint="Annotate the text below, or write your own."
+        onUse={(content) => { setText(content); setSentiment(""); setAspects({}); }}
+      />
+
       <textarea
         className="dc-textarea"
         placeholder="Enter or paste text to analyse sentiment…"
@@ -121,12 +130,7 @@ export default function SentimentWidget({ competition, config, onSubmit, submitt
       <p className="dc-field-label" style={{ marginTop: 14 }}>OVERALL SENTIMENT</p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {sentimentLabels.map((l) => (
-          <SentimentButton
-            key={l}
-            label={l}
-            selected={sentiment === l}
-            onClick={setSentiment}
-          />
+          <SentimentButton key={l} label={l} selected={sentiment === l} onClick={setSentiment} />
         ))}
       </div>
 

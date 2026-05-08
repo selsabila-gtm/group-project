@@ -221,10 +221,25 @@ def validate_competition_payload(data: CompetitionCreateIn):
         raise HTTPException(status_code=400, detail="Freeze date cannot be before validation date")
 
 
+def _clean_list_values(cfg: dict) -> dict:
+    """
+    Strip empty/whitespace-only strings from any list values in a task config
+    dict. This prevents blank label buttons when the organizer leaves trailing
+    newlines in the textarea form fields.
+    """
+    cleaned = {}
+    for k, v in cfg.items():
+        if isinstance(v, list):
+            cleaned[k] = [item for item in v if isinstance(item, str) and item.strip()]
+        else:
+            cleaned[k] = v
+    return cleaned
+
+
 def _merge_task_config(task_type: str, organizer_config: dict) -> dict:
     """Merge organizer overrides on top of per-task defaults."""
     defaults = dict(TASK_CONFIG_DEFAULTS.get(task_type or "", {}))
-    defaults.update(organizer_config or {})
+    defaults.update(_clean_list_values(organizer_config or {}))
     return defaults
 
 
@@ -232,7 +247,7 @@ def build_competition_record(data: CompetitionCreateIn, is_draft: bool) -> Compe
     task_config = getattr(data, "task_config", None) or {}
     merged = _merge_task_config(data.task_type, task_config)
     # Strip the "prompts" key from dataset_config — prompts live in competition_prompts table
-    config_to_store = {k: v for k, v in merged.items() if k != "prompts"}
+    config_to_store = _clean_list_values({k: v for k, v in merged.items() if k != "prompts"})
 
     return Competition(
         title=data.competition_name,
@@ -788,7 +803,7 @@ def update_competition(
     # Save updated task config
     task_config = getattr(data, "task_config", None) or {}
     merged = _merge_task_config(data.task_type, task_config)
-    config_to_store = {k: v for k, v in merged.items() if k != "prompts"}
+    config_to_store = _clean_list_values({k: v for k, v in merged.items() if k != "prompts"})
     competition.dataset_config = json.dumps(config_to_store)
 
     # Re-seed prompts if applicable

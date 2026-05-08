@@ -49,6 +49,77 @@ export function CommitRow({ disabled, submitting, label = "Commit Entry ▶", on
   );
 }
 
+// ── PromptCard ────────────────────────────────────────────────
+/**
+ * Shown at the top of every widget when the organizer has supplied source
+ * texts / utterance prompts via the competition_prompts table.
+ *
+ * Props
+ *   prompt        — { id, content, difficulty?, domain?, target_emotion? }
+ *   loading       — true while DataCollection is fetching the next prompt
+ *   onUse         — called with the prompt content when the contributor
+ *                   clicks "Use this text" (text widgets pre-fill their textarea)
+ *                   Pass null for audio widgets (they don't need pre-fill).
+ *   label         — overrides the default "SOURCE TEXT" header badge text
+ *   hint          — short instruction shown below the prompt content
+ */
+export function PromptCard({ prompt, loading, onUse = null, label = "SOURCE TEXT", hint }) {
+  if (loading) {
+    return (
+      <div className="audio-prompt-card" style={{ opacity: 0.6 }}>
+        <span className="audio-prompt-label">Loading prompt…</span>
+        <p className="audio-prompt-text" style={{ color: "#9ca3af" }}>⟳ Fetching next item from the organizer's dataset…</p>
+      </div>
+    );
+  }
+
+  if (!prompt) return null;
+
+  const meta = [
+    prompt.difficulty && `Difficulty: ${prompt.difficulty}`,
+    prompt.domain     && `Domain: ${prompt.domain}`,
+    prompt.target_emotion && `Target emotion: ${prompt.target_emotion.toUpperCase()}`,
+  ].filter(Boolean);
+
+  return (
+    <div className="audio-prompt-card" style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <span className="audio-prompt-label">{label}</span>
+        <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: "monospace" }}>
+          ID {String(prompt.id).slice(0, 8).toUpperCase()}
+        </span>
+      </div>
+
+      <p className="audio-prompt-text">"{prompt.content}"</p>
+
+      <div className="audio-prompt-meta" style={{ marginTop: 8, alignItems: "center" }}>
+        {meta.length > 0 && (
+          <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {meta.map((m, i) => (
+              <span key={i} style={{
+                fontSize: 10, background: "#eff6ff", color: "#1d4ed8",
+                border: "1px solid #bfdbfe", borderRadius: 4, padding: "1px 6px",
+                fontWeight: 600,
+              }}>{m}</span>
+            ))}
+          </span>
+        )}
+        {hint && <span style={{ fontSize: 11, color: "#9ca3af" }}>{hint}</span>}
+        {onUse && (
+          <button
+            type="button"
+            className="dc-label-tag active"
+            style={{ marginLeft: "auto", fontSize: 11, padding: "4px 12px" }}
+            onClick={() => onUse(prompt.content)}
+          >
+            ↓ Use this text
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── useAudioRecorder hook (shared by audio widgets) ───────────
 export function useAudioRecorder() {
   const [recording, setRecording] = useState(false);

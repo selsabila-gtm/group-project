@@ -3,15 +3,16 @@
  *
  * task_type: TEXT_CLASSIFICATION
  *
- * Contributor writes (or pastes) text and assigns one or more labels
- * from the competition's configured label set.
- * Labels are fetched dynamically via the `config` prop
- * (config.labels — string array from dataset-config endpoint).
+ * Labels come from config.labels (organizer-configured via /dataset-config).
+ * If the organizer has seeded source texts via /prompts/batch, a PromptCard
+ * appears at the top and the contributor can pre-fill the textarea with one click.
  */
 import { useEffect, useState } from "react";
-import { QualityFlag, WidgetHeader, CommitRow } from "./shared";
+import { QualityFlag, WidgetHeader, CommitRow, PromptCard } from "./shared";
 
-export default function TextClassificationWidget({ competition, config, onSubmit, submitting }) {
+export default function TextClassificationWidget({ competition, config, prompt, promptLoading, onSubmit, submitting }) {
+  // Labels are always from the organizer's config; fall back to defaults only
+  // when the competition hasn't loaded yet.
   const labels = config?.labels || [
     "Finance", "Technology", "Healthcare", "Politics",
     "Sports", "Entertainment", "Science", "Other",
@@ -29,7 +30,7 @@ export default function TextClassificationWidget({ competition, config, onSubmit
     if (text.length > 20 && tokenCount < 5)
       f.push({
         type: "low_domain_relevance",
-        detail: 'Text appears too short — minimum 5 tokens required for reliable classification.',
+        detail: "Text appears too short — minimum 5 tokens required for reliable classification.",
       });
     if (text.length > 40 && tokenCount > 4)
       f.push({
@@ -51,6 +52,15 @@ export default function TextClassificationWidget({ competition, config, onSubmit
   return (
     <div className="dc-widget">
       <WidgetHeader icon="▤" label="TEXT CLASSIFICATION" meta="Multi-label" />
+
+      {/* Organizer-supplied source text (if any) */}
+      <PromptCard
+        prompt={prompt}
+        loading={promptLoading}
+        label="SOURCE TEXT"
+        hint="Classify the text below, or write your own."
+        onUse={(content) => { setText(content); setSelected([]); setFlags([]); }}
+      />
 
       <textarea
         className="dc-textarea"

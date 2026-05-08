@@ -3,34 +3,35 @@
  *
  * task_type: SUMMARIZATION
  *
- * Contributor reads a source document (or pastes one) and writes a
- * concise summary. Word-count guidance derived from config.target_ratio.
+ * Ratios and word limits come from config (organizer-configured).
+ * PromptCard pre-fills the source document field with an organizer-supplied
+ * article/passage so contributors summarise real corpus documents.
  */
 import { useState } from "react";
-import { WidgetHeader, CommitRow, QualityFlag } from "./shared";
+import { WidgetHeader, CommitRow, QualityFlag, PromptCard } from "./shared";
 
 function countWords(t) {
   return t.trim() ? t.trim().split(/\s+/).length : 0;
 }
 
-export default function SummarizationWidget({ competition, config, onSubmit, submitting }) {
-  const targetRatio = config?.target_ratio || 0.1; // 10% of source by default
-  const maxRatio    = config?.max_ratio    || 0.15;
+export default function SummarizationWidget({ competition, config, prompt, promptLoading, onSubmit, submitting }) {
+  const targetRatio = config?.target_ratio      || 0.1;
+  const maxRatio    = config?.max_ratio         || 0.15;
   const minWords    = config?.min_summary_words || 20;
 
   const [source,  setSource]  = useState("");
   const [summary, setSummary] = useState("");
 
-  const srcWords = countWords(source);
-  const sumWords = countWords(summary);
-  const targetWords   = Math.max(minWords, Math.round(srcWords * targetRatio));
-  const maxWords      = Math.round(srcWords * maxRatio);
-  const ratioActual   = srcWords > 0 ? Math.round((sumWords / srcWords) * 100) : 0;
+  const srcWords    = countWords(source);
+  const sumWords    = countWords(summary);
+  const targetWords = Math.max(minWords, Math.round(srcWords * targetRatio));
+  const maxWords    = Math.round(srcWords * maxRatio);
+  const ratioActual = srcWords > 0 ? Math.round((sumWords / srcWords) * 100) : 0;
 
   const flags = [];
   if (sumWords > 0 && srcWords > 0) {
     if (sumWords > maxWords && maxWords > minWords)
-      flags.push({ type: "warn", detail: `Summary is ${sumWords} words — exceeds the ${maxRatio*100}% target ratio.` });
+      flags.push({ type: "warn", detail: `Summary is ${sumWords} words — exceeds the ${maxRatio * 100}% target ratio.` });
     if (sumWords < minWords)
       flags.push({ type: "error", detail: `Summary is too short (${sumWords} words). Minimum: ${minWords} words.` });
   }
@@ -44,6 +45,7 @@ export default function SummarizationWidget({ competition, config, onSubmit, sub
         source_word_count: srcWords,
         summary_word_count: sumWords,
         compression_ratio: srcWords > 0 ? sumWords / srcWords : null,
+        prompt_id: prompt?.id ?? null,
       },
     });
     setSource(""); setSummary("");
@@ -51,7 +53,20 @@ export default function SummarizationWidget({ competition, config, onSubmit, sub
 
   return (
     <div className="dc-widget">
-      <WidgetHeader icon="▤" label="SUMMARIZATION" meta={srcWords > 0 ? `${ratioActual}% of source` : "Enter document"} />
+      <WidgetHeader
+        icon="▤"
+        label="SUMMARIZATION"
+        meta={srcWords > 0 ? `${ratioActual}% of source` : "Enter document"}
+      />
+
+      {/* Organizer-supplied document */}
+      <PromptCard
+        prompt={prompt}
+        loading={promptLoading}
+        label="DOCUMENT TO SUMMARISE"
+        hint="Write a summary for this document, or paste your own source text."
+        onUse={(content) => { setSource(content); setSummary(""); }}
+      />
 
       <label className="dc-field-label">SOURCE DOCUMENT</label>
       <textarea

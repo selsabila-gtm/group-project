@@ -1,17 +1,15 @@
 """
 routes/datasets.py
 
-Changes vs previous version:
-  - Removed legacy aliases (TEXT_PROCESSING, COGNITIVE_LOGIC) from DATASET_CONFIGS.
-  - Removed _ALIASES dict and _normalise() function — task_type is now stored
-    canonically in the DB, no runtime translation needed.
-  - get_dataset_config merges the static base config with the organizer's
-    custom config stored in competition.task_config_json, so widget labels
-    always reflect what the organizer set up.
-  - Added POST /competitions/{id}/prompts/batch — lets organizers seed prompts
-    for AUDIO_SYNTHESIS and SPEECH_EMOTION competitions.
-  - Added PATCH /competitions/{id}/task-config — lets organizers update the
-    task-specific config (labels, entity types, etc.) after creation.
+Changes in this version:
+  - Added GET /competitions/{id}/prompts/next  — returns the least-used prompt
+    for *any* task type, used by DataCollection to rotate organizer-supplied
+    source texts / utterance prompts across all widgets.
+  - Removed the AUDIO_SYNTHESIS / SPEECH_EMOTION restriction from
+    POST /competitions/{id}/prompts/batch so organizers can seed source texts
+    for NER, Translation, Summarization, QA, Sentiment, and Text Classification
+    competitions as well.
+  - All other behaviour is unchanged.
 """
 import json
 import uuid
@@ -265,6 +263,14 @@ def get_dataset_config(competition_id: str, db: Session = Depends(get_db)):
         except (json.JSONDecodeError, TypeError):
             pass  # fall back to base config
 
+    # Expose how many prompts are available (useful for all task types)
+    prompt_count = (
+        db.query(CompetitionPrompt)
+        .filter(CompetitionPrompt.competition_id == competition_id)
+        .count()
+    )
+    merged["prompt_count"] = prompt_count
+
     return merged
 
 
@@ -322,6 +328,58 @@ def update_task_config(
     return {"message": "Task config updated", "task_config": current}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Prompts  (all task types — audio AND text)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/competitions/{competition_id}/prompts/next")
+def get_next_prompt(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Returns the least-used prompt for a competition, regardless of task type.
+
+    Audio tasks  → utterance / TTS prompt the contributor reads aloud.
+    Text tasks   → organizer-supplied source text the contributor annotates
+                   (classification sentence, NER passage, translation source,
+                    QA context, document to summarise, etc.)
+
+    Returns null (HTTP 200 with body `null`) when the competition has no
+    prompts configured — widgets handle this gracefully by falling back to
+    free-form entry.
+    """
+    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    prompt = (
+        db.query(CompetitionPrompt)
+        .filter(CompetitionPrompt.competition_id == competition_id)
+        .order_by(
+            CompetitionPrompt.used_count.asc(),
+            CompetitionPrompt.created_at.asc(),
+        )
+        .first()
+    )
+
+    if not prompt:
+        return None  # No prompts configured — widget falls back to free entry
+
+    # Increment usage counter so prompts rotate fairly
+    prompt.used_count = (prompt.used_count or 0) + 1
+    db.commit()
+
+    return {
+        "id": str(prompt.id),
+        "content": prompt.content,
+        "difficulty": getattr(prompt, "difficulty", None),
+        "domain": getattr(prompt, "domain", None),
+        "target_emotion": getattr(prompt, "target_emotion", None),
+    }
+
+
 @router.post("/competitions/{competition_id}/prompts/batch")
 def create_prompts_batch(
     competition_id: str,
@@ -330,17 +388,25 @@ def create_prompts_batch(
     current_user=Depends(get_current_user),
 ):
     """
-    Bulk-creates prompts for AUDIO_SYNTHESIS and SPEECH_EMOTION competitions.
+    Bulk-creates prompts / source texts for any competition task type.
+
+    Audio tasks  (AUDIO_SYNTHESIS, SPEECH_EMOTION):
+        prompts are utterances the contributor reads aloud.
+
+    Text tasks   (TEXT_CLASSIFICATION, NER, SENTIMENT_ANALYSIS, TRANSLATION,
+                  QUESTION_ANSWERING, SUMMARIZATION):
+        prompts are organizer-supplied source texts shown to contributors
+        as a suggested/required starting point for annotation.
 
     Body:
         {
-          "prompts": ["Read this sentence aloud.", "Speak with a happy tone: ..."],
-          "difficulty": "medium",     # optional, applied to all
-          "domain": "general"         # optional, applied to all
+          "prompts":    ["Sentence one.", "Sentence two."],  // required
+          "difficulty": "medium",   // optional, applied to all
+          "domain":     "general",  // optional, applied to all
+          "replace":    false       // true = wipe existing prompts first
         }
 
-    Only the organizer may call this. Replaces all existing prompts for the
-    competition when replace=true (default false = append).
+    Only the organizer may call this.
     """
     competition = db.query(Competition).filter(Competition.id == competition_id).first()
     if not competition:
@@ -358,11 +424,8 @@ def create_prompts_batch(
         raise HTTPException(status_code=403, detail="Only the organizer can add prompts")
 
     task_type = (competition.task_type or "").upper().strip()
-    if task_type not in ("AUDIO_SYNTHESIS", "SPEECH_EMOTION"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Prompts only apply to AUDIO_SYNTHESIS and SPEECH_EMOTION, not {task_type}",
-        )
+    if task_type not in DATASET_CONFIGS:
+        raise HTTPException(status_code=400, detail=f"Unsupported task_type: {task_type}")
 
     prompts_text: list[str] = body.get("prompts", [])
     difficulty: str | None = body.get("difficulty")
@@ -462,7 +525,7 @@ def delete_prompt(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Hidden dataset upload / list / delete (unchanged logic)
+# Hidden dataset upload / list / delete (unchanged)
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/competitions/{competition_id}/datasets")

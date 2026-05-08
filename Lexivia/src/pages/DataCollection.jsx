@@ -3,25 +3,23 @@
  *
  * Responsibilities:
  *   1. Fetch competition metadata + dataset config (dynamic labels from organizer)
- *   2. Poll stats (my-stats, team-stats, sample count)
- *   3. Route to the correct annotation widget based on task_type
- *   4. Handle the universal submit (text vs audio)
- *   5. Render the shared layout (sidebar, topbar, stats panel, tabs)
+ *   2. Fetch the current organizer prompt via /prompts/next and rotate after
+ *      each successful submission — works for ALL task types.
+ *   3. Poll stats (my-stats, team-stats, sample count)
+ *   4. Route to the correct annotation widget based on task_type
+ *   5. Handle the universal submit (text vs audio)
+ *   6. Render the shared layout (sidebar, topbar, stats panel, tabs)
  *
- * Widget mapping (task_type → widget):
- *   TEXT_CLASSIFICATION   → TextClassificationWidget
- *   NER                   → NERWidget
- *   SENTIMENT_ANALYSIS    → SentimentWidget
- *   TRANSLATION           → TranslationWidget
- *   QUESTION_ANSWERING    → QuestionAnsweringWidget
- *   SUMMARIZATION         → SummarizationWidget
- *   AUDIO_SYNTHESIS       → AudioSynthesisWidget
- *   AUDIO_TRANSCRIPTION   → AudioTranscriptionWidget
- *   SPEECH_EMOTION        → SpeechEmotionWidget
- *   AUDIO_EVENT_DETECTION → AudioEventDetectionWidget
+ * Every widget receives:
+ *   competition  — full competition record
+ *   config       — merged organizer config (labels, entity types, lang pair…)
+ *   prompt       — current organizer prompt / source text, or null if none configured
+ *   promptLoading— true while the next prompt is being fetched
+ *   onSubmit     — universal submit handler (text or audio)
+ *   submitting   — submit in-flight flag
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CompetitionSidebar from "../components/CompetitionSidebar";
 import "./DataCollection.css";
@@ -189,28 +187,75 @@ function DataCollection() {
   const competitionId = params.id ?? params.competitionId;
   const navigate = useNavigate();
 
-  const [competition,   setCompetition]   = useState(null);
-  const [datasetConfig, setDatasetConfig] = useState(null);
-  const [myStats,       setMyStats]       = useState({ validated: 0, flagged: 0 });
-  const [teamStats,     setTeamStats]     = useState({ total: 0, members: [] });
-  const [totalSamples,  setTotalSamples]  = useState(0);
-  const [activeTab,     setActiveTab]     = useState("Manual Entry");
-  const [submitting,    setSubmitting]    = useState(false);
-  const [toast,         setToast]         = useState(null);
+  const [competition,    setCompetition]    = useState(null);
+  const [datasetConfig,  setDatasetConfig]  = useState(null);
+  const [prompt,         setPrompt]         = useState(null);   // current organizer prompt
+  const [promptLoading,  setPromptLoading]  = useState(false);
+  const [myStats,        setMyStats]        = useState({ validated: 0, flagged: 0 });
+  const [teamStats,      setTeamStats]      = useState({ total: 0, members: [] });
+  const [totalSamples,   setTotalSamples]   = useState(0);
+  const [activeTab,      setActiveTab]      = useState("Manual Entry");
+  const [submitting,     setSubmitting]     = useState(false);
+  const [toast,          setToast]          = useState(null);
 
-  // Load competition + dataset config (which merges organizer overrides)
+  // ── Prompt fetcher (works for all task types) ─────────────────────────────
+  // Returns null silently when the competition has no prompts configured —
+  // widgets fall back to free-form entry in that case.
+  const loadNextPrompt = useCallback(() => {
+    if (!competitionId) return;
+    setPromptLoading(true);
+    fetch(`${API}/competitions/${competitionId}/prompts/next`, { headers: authHeader() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p) => setPrompt(p ?? null))
+      .catch(() => setPrompt(null))
+      .finally(() => setPromptLoading(false));
+  }, [competitionId]);
+
+  // Load competition + dataset config.
+  // The /competitions/{id} response already contains dataset_config as a JSON
+  // string, so we parse it immediately — no second request needed for the labels
+  // to appear.  We also fire the dedicated /dataset-config endpoint in the
+  // background; if it responds it will overwrite with the server-merged version
+  // (defaults filled in for any missing keys).
   useEffect(() => {
+    if (!competitionId) return;
     const h = authHeader();
+
     fetch(`${API}/competitions/${competitionId}`, { headers: h })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Competition fetch failed: ${r.status}`);
+        return r.json();
+      })
       .then((comp) => {
         setCompetition(comp);
-        return fetch(`${API}/competitions/${competitionId}/dataset-config`, { headers: h });
+
+        // ── Step 1: parse dataset_config from the competition record ──────────
+        // competition_display_dict() serialises every DB column, so
+        // dataset_config is always present as a JSON string or object.
+        try {
+          const raw = comp.dataset_config;
+          const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+          if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+            setDatasetConfig(parsed);
+          }
+        } catch { /* ignore malformed JSON — widget defaults will show */ }
+
+        // ── Step 2: upgrade with server-merged config (fire-and-forget) ──────
+        // /dataset-config merges stored config with per-task defaults so any
+        // missing keys are filled in.  Non-fatal if it fails.
+        fetch(`${API}/competitions/${competitionId}/dataset-config`, { headers: h })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((cfg) => {
+            if (cfg && typeof cfg === "object" && Object.keys(cfg).length > 0) {
+              setDatasetConfig(cfg);
+            }
+          })
+          .catch(() => {});
+
+        loadNextPrompt();
       })
-      .then((r) => r.ok ? r.json() : null)
-      .then((cfg) => { if (cfg) setDatasetConfig(cfg); })
       .catch(console.error);
-  }, [competitionId]);
+  }, [competitionId, loadNextPrompt]);
 
   // Poll stats every 15 s
   useEffect(() => {
@@ -261,6 +306,8 @@ function DataCollection() {
       setTotalSamples((n) => n + 1);
       setTeamStats((s) => ({ ...s, total: (s.total || 0) + 1 }));
       setToast("✓ Sample committed successfully");
+      // Rotate to the next prompt after every successful submission
+      loadNextPrompt();
     } catch (err) {
       setToast(`⚠ ${err.message || "Submission failed — please retry"}`);
     } finally {
@@ -268,7 +315,7 @@ function DataCollection() {
     }
   };
 
-  // Widget router — task_type is used directly, no aliases needed
+  // Widget router
   const renderWidget = () => {
     if (!competition) return <div className="dc-widget dc-placeholder">Loading…</div>;
 
@@ -283,7 +330,9 @@ function DataCollection() {
     return (
       <Widget
         competition={competition}
-        config={datasetConfig}   // ← merged config: base defaults + organizer overrides
+        config={datasetConfig}       // merged organizer config: labels, lang pair, etc.
+        prompt={prompt}              // current organizer prompt/source text (null = free entry)
+        promptLoading={promptLoading}
         onSubmit={handleSubmit}
         submitting={submitting}
       />

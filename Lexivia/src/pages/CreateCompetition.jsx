@@ -224,6 +224,13 @@ function serializeTaskConfig(taskType, taskConfig) {
     if (!taskConfig) return {};
     const cfg = { ...taskConfig };
 
+    // Strip empty strings from every array field so blank textarea lines are never persisted
+    Object.keys(cfg).forEach((k) => {
+        if (Array.isArray(cfg[k])) {
+            cfg[k] = cfg[k].filter((v) => typeof v === "string" ? v.trim() : v != null);
+        }
+    });
+
     // Convert glossary_raw ("EN term → AR term" lines) to [{src, tgt}] array
     if (taskType === "TRANSLATION" && typeof cfg.glossary_raw === "string") {
         cfg.glossary = cfg.glossary_raw
@@ -736,9 +743,9 @@ function CreateCompetition({ editMode = false }) {
             return defaultLines.join("\n");
         };
 
-        // Saves newline-separated textarea back as array
+        // Saves newline-separated textarea back as array, dropping blank lines
         const onTextareaLines = (key) => (e) =>
-            updateTaskConfig(key, e.target.value.split("\n").map((s) => s.trimEnd()));
+            updateTaskConfig(key, e.target.value.split("\n").map((s) => s.trimEnd()).filter(Boolean));
 
         if (!taskType) {
             return (

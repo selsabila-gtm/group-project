@@ -3,18 +3,19 @@
  *
  * task_type: TRANSLATION
  *
- * Side-by-side source / target text areas.
- * Language pair and optional glossary terms from config.
+ * Language pair, glossary come from config (organizer-configured).
+ * PromptCard pre-fills the source textarea with the organizer's sentence,
+ * so contributors translate real dataset sentences, not self-authored ones.
  */
 import { useState } from "react";
-import { WidgetHeader, CommitRow } from "./shared";
+import { WidgetHeader, CommitRow, PromptCard } from "./shared";
 
 const RTL_LANGS = new Set(["AR", "HE", "FA", "UR", "DZA", "PS"]);
 
-export default function TranslationWidget({ competition, config, onSubmit, submitting }) {
+export default function TranslationWidget({ competition, config, prompt, promptLoading, onSubmit, submitting }) {
   const srcLang  = config?.source_lang || competition?.config?.source_lang || "EN";
   const tgtLang  = config?.target_lang || competition?.config?.target_lang || "AR";
-  const glossary = config?.glossary     || [];
+  const glossary = config?.glossary    || [];
 
   const [source, setSource] = useState("");
   const [target, setTarget] = useState("");
@@ -32,6 +33,7 @@ export default function TranslationWidget({ competition, config, onSubmit, submi
         target_lang: tgtLang,
         translation: target,
         mode,
+        prompt_id: prompt?.id ?? null,
       },
     });
     setSource(""); setTarget("");
@@ -39,10 +41,15 @@ export default function TranslationWidget({ competition, config, onSubmit, submi
 
   return (
     <div className="dc-widget">
-      <WidgetHeader
-        icon="⇄"
-        label="TRANSLATION PAIR"
-        meta={`${srcLang} → ${tgtLang}`}
+      <WidgetHeader icon="⇄" label="TRANSLATION PAIR" meta={`${srcLang} → ${tgtLang}`} />
+
+      {/* Organizer-supplied source sentence */}
+      <PromptCard
+        prompt={prompt}
+        loading={promptLoading}
+        label={`SOURCE SENTENCE (${srcLang})`}
+        hint="Translate the sentence below, or write your own source text."
+        onUse={(content) => { setSource(content); setTarget(""); }}
       />
 
       {/* Mode toggle */}
@@ -70,7 +77,9 @@ export default function TranslationWidget({ competition, config, onSubmit, submi
             rows={8}
             dir={srcRtl ? "rtl" : "ltr"}
           />
-          <span className="pane-count">{source.length} chars · {source.trim() ? source.trim().split(/\s+/).length : 0} tokens</span>
+          <span className="pane-count">
+            {source.length} chars · {source.trim() ? source.trim().split(/\s+/).length : 0} tokens
+          </span>
         </div>
 
         <div className="translation-divider">⇄</div>
@@ -85,7 +94,9 @@ export default function TranslationWidget({ competition, config, onSubmit, submi
             rows={8}
             dir={rtl ? "rtl" : "ltr"}
           />
-          <span className="pane-count">{target.length} chars · {target.trim() ? target.trim().split(/\s+/).length : 0} tokens</span>
+          <span className="pane-count">
+            {target.length} chars · {target.trim() ? target.trim().split(/\s+/).length : 0} tokens
+          </span>
         </div>
       </div>
 

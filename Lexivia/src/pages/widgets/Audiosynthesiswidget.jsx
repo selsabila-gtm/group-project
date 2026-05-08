@@ -4,79 +4,72 @@
  * task_type: AUDIO_SYNTHESIS
  *
  * Contributor reads a prompt aloud and submits a WAV recording.
- * Prompts are rotated via /competitions/:id/prompts/next.
+ * Prompts are now managed by DataCollection and rotated after each submit
+ * via the shared /prompts/next endpoint. This widget is purely presentational:
+ * it receives `prompt` as a prop and never fetches from the API itself.
  */
-import { useCallback, useEffect } from "react";
 import { useAudioRecorder, Waveform, CommitRow } from "./shared";
 
-const API = "http://127.0.0.1:8000";
-function authHeader() {
-  const t = localStorage.getItem("token");
-  return t ? { Authorization: `Bearer ${t}` } : {};
-}
-
-export default function AudioSynthesisWidget({ competition, config, onSubmit, submitting }) {
+export default function AudioSynthesisWidget({ competition, config, prompt, promptLoading, onSubmit, submitting }) {
   const { recording, audioBlob, audioUrl, duration, amplitude, start, stop, reset, fmt } =
     useAudioRecorder();
 
-  // Prompt state lifted locally so reset works cleanly
-  const [prompt, setPrompt] = [
-    competition._prompt || null,
-    (p) => { competition._prompt = p; },
-  ];
-
-  const loadPrompt = useCallback((compId) => {
-    fetch(`${API}/competitions/${compId}/prompts/next`, { headers: authHeader() })
-      .then((r) => r.json())
-      .then((p) => {
-        // Hacky way to share prompt — in real app use prop/state at parent
-        competition._prompt = p;
-        // Force re-render via a dummy state trigger not available here —
-        // parent DataCollection passes competition as mutable; widget re-mounts on next submit.
-      })
-      .catch(() => {
-        competition._prompt = {
-          id: "FALLBACK",
-          content:
-            "The geometric precision of the algorithm allows for instantaneous detection of phonetic anomalies in complex synthetic environments.",
-        };
-      });
-  }, []);
-
-  useEffect(() => {
-    if (!competition._prompt) loadPrompt(competition.id);
-  }, [competition.id, loadPrompt]);
-
-  const currentPrompt = competition._prompt;
-
   const handleSubmit = () => {
-    if (!audioBlob || !currentPrompt) return;
+    if (!audioBlob || !prompt) return;
     onSubmit({
       audio_blob: audioBlob,
       audio_duration: duration,
       annotation: {
-        transcript: currentPrompt.content,
-        prompt_id: currentPrompt.id,
+        transcript: prompt.content,
+        prompt_id: prompt.id,
         duration,
         sample_rate: 48000,
       },
     });
     reset();
-    competition._prompt = null;
-    loadPrompt(competition.id);
   };
 
   return (
     <div className="dc-widget">
       {/* Prompt card */}
-      {currentPrompt && (
+      {promptLoading ? (
+        <div className="audio-prompt-card" style={{ opacity: 0.6 }}>
+          <span className="audio-prompt-label">Loading prompt…</span>
+          <p className="audio-prompt-text" style={{ color: "#9ca3af" }}>
+            ⟳ Fetching next utterance from the organizer's dataset…
+          </p>
+        </div>
+      ) : prompt ? (
         <div className="audio-prompt-card">
-          <span className="audio-prompt-label">TARGET STIMULUS</span>
-          <p className="audio-prompt-text">"{currentPrompt.content}"</p>
-          <div className="audio-prompt-meta">
-            <span>⏱ Read at natural pace</span>
-            <span>Prompt ID: {String(currentPrompt.id).slice(0, 8).toUpperCase()}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+            <span className="audio-prompt-label">TARGET STIMULUS</span>
+            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: "monospace" }}>
+              ID {String(prompt.id).slice(0, 8).toUpperCase()}
+            </span>
           </div>
+          <p className="audio-prompt-text">"{prompt.content}"</p>
+          <div className="audio-prompt-meta">
+            {prompt.difficulty && (
+              <span style={{ fontSize: 10, background: "#eff6ff", color: "#1d4ed8",
+                border: "1px solid #bfdbfe", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>
+                {prompt.difficulty}
+              </span>
+            )}
+            {prompt.domain && (
+              <span style={{ fontSize: 10, background: "#f0fdf4", color: "#166534",
+                border: "1px solid #bbf7d0", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>
+                {prompt.domain}
+              </span>
+            )}
+            <span>⏱ Read at natural pace</span>
+          </div>
+        </div>
+      ) : (
+        <div className="audio-prompt-card" style={{ borderStyle: "dashed" }}>
+          <span className="audio-prompt-label">NO PROMPTS CONFIGURED</span>
+          <p className="audio-prompt-text" style={{ color: "#9ca3af" }}>
+            The organizer has not added any prompts yet. Contact the competition organizer.
+          </p>
         </div>
       )}
 
@@ -105,7 +98,7 @@ export default function AudioSynthesisWidget({ competition, config, onSubmit, su
             type="button"
             className={`audio-record-btn ${recording ? "stop" : ""}`}
             onClick={recording ? stop : start}
-            disabled={submitting}
+            disabled={submitting || !prompt}
           >
             {recording ? "■" : "●"}
           </button>
@@ -116,7 +109,7 @@ export default function AudioSynthesisWidget({ competition, config, onSubmit, su
       </div>
 
       <CommitRow
-        disabled={!audioBlob}
+        disabled={!audioBlob || !prompt}
         submitting={submitting}
         label="▶ Commit Recording"
         onClick={handleSubmit}

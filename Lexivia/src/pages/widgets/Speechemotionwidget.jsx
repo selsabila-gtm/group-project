@@ -3,55 +3,39 @@
  *
  * task_type: SPEECH_EMOTION
  *
- * Contributor reads a scripted utterance with a target emotion or
- * records a spontaneous sample, then annotates the emotion, intensity,
- * arousal, and valence dimensions.
- * Emotion labels from config.emotion_labels.
+ * Contributor reads a scripted utterance with a target emotion or records a
+ * spontaneous sample, then annotates the emotion, intensity, arousal, and
+ * valence dimensions.
+ *
+ * Prompt lifecycle is now managed by DataCollection: the current prompt is
+ * passed as a prop and rotated automatically after each successful submit.
+ * Emotion labels come from config.emotion_labels (organizer-configured).
  */
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useAudioRecorder, Waveform, CommitRow } from "./shared";
 
-const API = "http://127.0.0.1:8000";
-function authHeader() {
-  const t = localStorage.getItem("token");
-  return t ? { Authorization: `Bearer ${t}` } : {};
-}
-
 const EMOTION_META = {
-  neutral:    { icon: "😐", color: "#6b7280", bg: "#f3f4f6" },
-  happy:      { icon: "😊", color: "#15803d", bg: "#dcfce7" },
-  sad:        { icon: "😢", color: "#1d4ed8", bg: "#dbeafe" },
-  angry:      { icon: "😠", color: "#b91c1c", bg: "#fee2e2" },
-  surprised:  { icon: "😲", color: "#9333ea", bg: "#f3e8ff" },
-  fearful:    { icon: "😨", color: "#0369a1", bg: "#e0f2fe" },
-  disgusted:  { icon: "🤢", color: "#65a30d", bg: "#ecfccb" },
-  contempt:   { icon: "😒", color: "#92400e", bg: "#fef3c7" },
+  neutral:   { icon: "😐", color: "#6b7280", bg: "#f3f4f6" },
+  happy:     { icon: "😊", color: "#15803d", bg: "#dcfce7" },
+  sad:       { icon: "😢", color: "#1d4ed8", bg: "#dbeafe" },
+  angry:     { icon: "😠", color: "#b91c1c", bg: "#fee2e2" },
+  surprised: { icon: "😲", color: "#9333ea", bg: "#f3e8ff" },
+  fearful:   { icon: "😨", color: "#0369a1", bg: "#e0f2fe" },
+  disgusted: { icon: "🤢", color: "#65a30d", bg: "#ecfccb" },
+  contempt:  { icon: "😒", color: "#92400e", bg: "#fef3c7" },
 };
 
-export default function SpeechEmotionWidget({ competition, config, onSubmit, submitting }) {
+export default function SpeechEmotionWidget({ competition, config, prompt, promptLoading, onSubmit, submitting }) {
+  // Labels come from the organizer's config; fall back to defaults if not set
   const emotionLabels = config?.emotion_labels || Object.keys(EMOTION_META);
 
   const { recording, audioBlob, audioUrl, duration, amplitude, start, stop, reset, fmt } =
     useAudioRecorder();
 
-  const [prompt,    setPrompt]    = useState(null);
   const [emotion,   setEmotion]   = useState("");
-  const [intensity, setIntensity] = useState(60);   // 0–100
-  const [arousal,   setArousal]   = useState(50);   // low–high
-  const [valence,   setValence]   = useState(50);   // negative–positive
-
-  const loadPrompt = useCallback(() => {
-    fetch(`${API}/competitions/${competition.id}/prompts/next`, { headers: authHeader() })
-      .then((r) => r.json())
-      .then(setPrompt)
-      .catch(() => setPrompt({
-        id: "FALLBACK",
-        content: "I can't believe this actually worked out the way I hoped.",
-        target_emotion: emotionLabels[0],
-      }));
-  }, [competition.id]);
-
-  useEffect(() => { loadPrompt(); }, [loadPrompt]);
+  const [intensity, setIntensity] = useState(60);
+  const [arousal,   setArousal]   = useState(50);
+  const [valence,   setValence]   = useState(50);
 
   const handleSubmit = () => {
     if (!audioBlob || !emotion) return;
@@ -63,13 +47,12 @@ export default function SpeechEmotionWidget({ competition, config, onSubmit, sub
         intensity: intensity / 100,
         arousal: arousal / 100,
         valence: valence / 100,
-        prompt_id: prompt?.id,
-        transcript: prompt?.content,
+        prompt_id: prompt?.id ?? null,
+        transcript: prompt?.content ?? null,
       },
     });
     reset();
     setEmotion(""); setIntensity(60); setArousal(50); setValence(50);
-    loadPrompt();
   };
 
   const targetEmotion = prompt?.target_emotion;
@@ -84,20 +67,48 @@ export default function SpeechEmotionWidget({ competition, config, onSubmit, sub
         <span className="dc-lang-tag">{fmt(duration)}</span>
       </div>
 
-      {/* Utterance prompt */}
-      {prompt && (
+      {/* Utterance prompt from organizer */}
+      {promptLoading ? (
+        <div className="audio-prompt-card" style={{ marginBottom: 16, opacity: 0.6 }}>
+          <span className="audio-prompt-label">Loading prompt…</span>
+          <p className="audio-prompt-text" style={{ color: "#9ca3af" }}>
+            ⟳ Fetching next utterance…
+          </p>
+        </div>
+      ) : prompt ? (
         <div className="audio-prompt-card" style={{ marginBottom: 16 }}>
-          <span className="audio-prompt-label">
-            UTTERANCE PROMPT
-            {targetEmotion && (
-              <span style={{ marginLeft: 10, color: EMOTION_META[targetEmotion]?.color || "#555" }}>
-                Target: {targetEmotion.toUpperCase()}
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+            <span className="audio-prompt-label">
+              UTTERANCE PROMPT
+              {targetEmotion && (
+                <span style={{ marginLeft: 10, color: EMOTION_META[targetEmotion]?.color || "#555", fontWeight: 700 }}>
+                  · Target: {targetEmotion.toUpperCase()}
+                </span>
+              )}
+            </span>
+            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: "monospace" }}>
+              ID {String(prompt.id).slice(0, 8).toUpperCase()}
+            </span>
+          </div>
+          <p className="audio-prompt-text">"{prompt.content}"</p>
+          <div className="audio-prompt-meta">
+            {prompt.difficulty && (
+              <span style={{ fontSize: 10, background: "#eff6ff", color: "#1d4ed8",
+                border: "1px solid #bfdbfe", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>
+                {prompt.difficulty}
               </span>
             )}
-          </span>
-          <p className="audio-prompt-text">"{prompt.content}"</p>
-          <p style={{ margin: 0, fontSize: 11, color: "#9ca3af" }}>
-            Read with the target emotion expressed naturally, at a conversational pace.
+            <span style={{ fontSize: 11, color: "#9ca3af" }}>
+              Read with the target emotion expressed naturally, at a conversational pace.
+            </span>
+          </div>
+        </div>
+      ) : (
+        /* No prompts — contributor records spontaneous speech */
+        <div className="audio-prompt-card" style={{ marginBottom: 16, borderStyle: "dashed" }}>
+          <span className="audio-prompt-label">SPONTANEOUS RECORDING</span>
+          <p className="audio-prompt-text" style={{ color: "#9ca3af" }}>
+            No scripted prompts configured. Record a spontaneous utterance expressing any emotion.
           </p>
         </div>
       )}
@@ -128,7 +139,7 @@ export default function SpeechEmotionWidget({ competition, config, onSubmit, sub
         <div className="audio-timer">{fmt(duration)}</div>
       </div>
 
-      {/* Emotion selector */}
+      {/* Emotion selector — labels from organizer config */}
       <p className="dc-field-label" style={{ marginTop: 16 }}>EXPRESSED EMOTION</p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {emotionLabels.map((e) => {
@@ -159,8 +170,8 @@ export default function SpeechEmotionWidget({ competition, config, onSubmit, sub
       {emotion && (
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
           {[
-            { label: "INTENSITY", value: intensity, set: setIntensity, lo: "Mild", hi: "Intense" },
-            { label: "AROUSAL",   value: arousal,   set: setArousal,   lo: "Calm", hi: "Excited" },
+            { label: "INTENSITY", value: intensity, set: setIntensity, lo: "Mild",     hi: "Intense"  },
+            { label: "AROUSAL",   value: arousal,   set: setArousal,   lo: "Calm",     hi: "Excited"  },
             { label: "VALENCE",   value: valence,   set: setValence,   lo: "Negative", hi: "Positive" },
           ].map(({ label, value, set, lo, hi }) => (
             <div key={label}>

@@ -110,22 +110,36 @@ class CompetitionPrompt(Base):
     created_at = Column(String, nullable=True)
 
 
+
+
 class DataSample(Base):
     __tablename__ = "data_samples"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     competition_id = Column(String, nullable=False, index=True)
     contributor_id = Column(String, nullable=False, index=True)
+
     status = Column(String, default="pending")
+
     text_content = Column(Text, nullable=True)
     annotation = Column(Text, nullable=True)
+
     audio_url = Column(String, nullable=True)
     audio_duration = Column(String, nullable=True)
+
     quality_score = Column(String, nullable=True)
+
     flags = Column(Text, default="[]")
     meta_data = Column(Text, default="{}")
+
     submitted_at = Column(String, nullable=True)
     version_tag = Column(String, nullable=True, index=True)
+
+    # 🔥 MISSING FIELDS (add these)
+    score_breakdown = Column(Text, default="[]")
+    approval_count = Column(Integer, default=0)
+    approvals_json = Column(Text, default="[]")
+    task_type = Column(String, nullable=True)
 
 
 class CompetitionDataset(Base):

@@ -98,6 +98,7 @@ class CompetitionCreateIn(BaseModel):
     milestones: List[Dict[str, Any]] = []
     validation_date: Optional[str] = None
     freeze_date: Optional[str] = None
+    task_config: Optional[dict] = None
 
 
 class CompetitionActionOut(BaseModel):
