@@ -75,7 +75,12 @@ from sqlalchemy.orm import Session
 
 from database import Base
 from models import UserProfile
-from models_teams import Team, TeamMember, TeamInvitation
+from models_teams import (
+    Team,
+    TeamMember,
+    TeamInvitation,
+    TeamJoinRequest,
+)
 from .utils import get_db, get_current_user
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -497,7 +502,6 @@ def accept_join_request(
     db: Session  = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
-    from teams import TeamJoinRequest  # avoid circular import at module level
 
     n = _get_own_notification(db, notification_id, str(current_user.id))
 
@@ -506,6 +510,9 @@ def accept_join_request(
 
     if n.action_taken:
         raise HTTPException(status_code=400, detail=f"Already {n.action_taken} this request")
+
+    if not n.join_request_id:
+        raise HTTPException(status_code=400, detail="No join request linked")
 
     req = db.query(TeamJoinRequest).filter(
         TeamJoinRequest.id      == n.join_request_id,
@@ -561,7 +568,6 @@ def decline_join_request(
     db: Session  = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
-    from teams import TeamJoinRequest
 
     n = _get_own_notification(db, notification_id, str(current_user.id))
 
@@ -570,6 +576,9 @@ def decline_join_request(
 
     if n.action_taken:
         raise HTTPException(status_code=400, detail=f"Already {n.action_taken} this request")
+    
+    if not n.join_request_id:
+        raise HTTPException(status_code=400, detail="No join request linked")
 
     req = db.query(TeamJoinRequest).filter(
         TeamJoinRequest.id      == n.join_request_id,

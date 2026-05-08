@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from database import Base
 from models import UserProfile
-from models_teams import Team, TeamMember, TeamInvitation
+from models_teams import Team, TeamMember, TeamInvitation,TeamJoinRequest
 from .utils import get_db, get_current_user
 
 # Import notification helper (lazy to avoid circular imports at module load time)
@@ -29,18 +29,6 @@ from .utils import get_db, get_current_user
 router = APIRouter(tags=["teams"])
 
 
-# ── Inline model for join requests ────────────────────────────────────────────
-
-class TeamJoinRequest(Base):
-    __tablename__ = "team_join_requests"
-
-    id         = Column(Integer, primary_key=True, autoincrement=True)
-    team_id    = Column(Integer, nullable=False)
-    user_id    = Column(String, nullable=False)
-    message    = Column(Text, nullable=True)
-    status     = Column(String, default="pending")   # pending | accepted | declined
-    created_at = Column(String, nullable=True)
-    updated_at = Column(String, nullable=True)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
