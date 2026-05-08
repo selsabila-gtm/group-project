@@ -718,6 +718,35 @@ export default function Experiments() {
             setRunOutput(String(err.message || err));
         }
     };
+    
+    // ── Submit model ───────────────────────────────────────────────────────────
+
+    const submitModel = async () => {
+        const filename = prompt("Enter the model filename to submit (e.g. model.pkl):", "model.pkl");
+        if (!filename) return;
+
+        showToast("Submitting model...");
+
+        try {
+            const data = await request(
+                `${API}/competitions/${competitionId}/submit`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ model_filename: filename }),
+                }
+            );
+
+            if (data.status === "done") {
+                showToast(`✅ Score: ${data.score} (${data.metric_name})`);
+            } else {
+                showToast(`❌ Submission failed: ${data.error}`);
+            }
+        } catch (err) {
+            showToast(`Error: ${err.message}`);
+        }
+    };
+    // ── Loading / error states ─────────────────────────────────────────────────
 
     if (loading) {
         return (
@@ -992,6 +1021,13 @@ export default function Experiments() {
                                 onClick={() => setShowSaveModal(true)}
                             >
                                 ↑ Save Model
+                            </button>
+                            <button
+                                className="ws-nb-btn ws-nb-btn--save"
+                                disabled={!isRunning}
+                                onClick={submitModel}
+                            >
+                                🚀 Submit Model
                             </button>
                         </div>
 

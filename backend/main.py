@@ -5,7 +5,7 @@ import models
 import models_teams          # registers Team / TeamMember / TeamInvitation tables
 from routes import router    # single aggregated router from routes/
 from user_profile import router as profile_router, competitions_router
-
+import models_versioning
 app = FastAPI(title="Precision Architect API")
 
 # CORS for React frontend (registered ONCE)
