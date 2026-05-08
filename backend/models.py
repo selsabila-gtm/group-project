@@ -192,3 +192,22 @@ class ExperimentRun(Base):
     artifact_path = Column(String, nullable=True)
 
     created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
+
+class Submission(Base):
+    __tablename__ = "submissions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    competition_id = Column(String, ForeignKey("competitions.id"), nullable=False, index=True)
+    user_id = Column(String, ForeignKey("user_profiles.user_id"), nullable=False, index=True)
+
+    file_name = Column(String, nullable=True)
+    file_path = Column(String, nullable=True)
+    storage_path = Column(String, nullable=True)
+
+    score = Column(String, nullable=True)
+    metric_name = Column(String, nullable=True)
+    metric_value = Column(String, nullable=True)
+
+    status = Column(String, default="pending")
+    submitted_at = Column(String, default=lambda: datetime.utcnow().isoformat())
+    created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
