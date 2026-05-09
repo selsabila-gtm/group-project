@@ -38,6 +38,8 @@ export default function NERWidget({ competition, config, prompt, promptLoading, 
   const [entities,   setEntities]   = useState([]);
   const [activeType, setActiveType] = useState(entityTypes[0]);
   const [selError,   setSelError]   = useState("");
+  // Explicit flag — avoids the broken .slice(0,0) trick that kept entities.length === 0
+  const [annotating, setAnnotating] = useState(false);
   const textRef = useRef(null);
 
   const tokenize = (t) => {
@@ -86,6 +88,13 @@ export default function NERWidget({ competition, config, prompt, promptLoading, 
 
   const removeEntity = (idx) => setEntities((e) => e.filter((_, i) => i !== idx));
 
+  const resetToEdit = () => {
+    setText("");
+    setEntities([]);
+    setSelError("");
+    setAnnotating(false);
+  };
+
   const renderAnnotated = () => {
     if (!text) return null;
     const sorted = [...entities].sort((a, b) => a.start - b.start);
@@ -118,20 +127,20 @@ export default function NERWidget({ competition, config, prompt, promptLoading, 
       text_content: text,
       annotation: { entities, token_count: tokens.length },
     });
-    setText(""); setEntities([]);
+    resetToEdit();
   };
 
   const loadPromptText = (content) => {
     setText(content);
     setEntities([]);
     setSelError("");
+    setAnnotating(false);
   };
 
   return (
     <div className="dc-widget">
       <WidgetHeader icon="▦" label="NAMED ENTITY RECOGNITION" meta={`${entities.length} spans tagged`} />
 
-      {/* Organizer-supplied passage */}
       <PromptCard
         prompt={prompt}
         loading={promptLoading}
@@ -140,7 +149,6 @@ export default function NERWidget({ competition, config, prompt, promptLoading, 
         onUse={loadPromptText}
       />
 
-      {/* Entity type selector */}
       <p className="dc-field-label">ENTITY TYPE</p>
       <div className="dc-label-row" style={{ marginBottom: 14 }}>
         {entityTypes.map((t) => {
@@ -161,22 +169,32 @@ export default function NERWidget({ competition, config, prompt, promptLoading, 
         })}
       </div>
 
-      {/* Text input / annotation area */}
-      {!entities.length ? (
+      {!annotating ? (
         <>
           <p className="dc-field-label">PASTE / WRITE TEXT</p>
           <textarea
             className="dc-textarea"
-            placeholder="Paste your text here, then switch to Annotate mode…"
+            placeholder="Paste your text here, then click Start Annotating…"
             value={text}
             onChange={(e) => { setText(e.target.value); setEntities([]); }}
             rows={7}
           />
+          {text.trim() && (
+            <button
+              type="button"
+              className="dc-label-tag active"
+              style={{ marginTop: 8, fontSize: 12, padding: "6px 14px" }}
+              onClick={() => setAnnotating(true)}
+            >
+              Start Annotating →
+            </button>
+          )}
         </>
       ) : (
         <>
           <p className="dc-field-label">
-            SELECT SPANS <span style={{ fontWeight: 400, color: "#6f778c" }}>— highlight words with your mouse</span>
+            SELECT SPANS{" "}
+            <span style={{ fontWeight: 400, color: "#6f778c" }}>— highlight words with your mouse</span>
           </p>
           <div
             ref={textRef}
@@ -189,22 +207,11 @@ export default function NERWidget({ competition, config, prompt, promptLoading, 
           <button
             type="button"
             style={{ fontSize: 11, color: "#6f778c", border: "none", background: "transparent", cursor: "pointer", marginTop: 4 }}
-            onClick={() => { setText(""); setEntities([]); }}
+            onClick={resetToEdit}
           >
             ← Edit text
           </button>
         </>
-      )}
-
-      {text.trim() && !entities.length && (
-        <button
-          type="button"
-          className="dc-label-tag active"
-          style={{ marginTop: 8, fontSize: 12, padding: "6px 14px" }}
-          onClick={() => setEntities([{ start: 0, end: 0, text: "", label: activeType }].slice(0, 0))}
-        >
-          Start Annotating →
-        </button>
       )}
 
       {selError && (

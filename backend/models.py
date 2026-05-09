@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, Text, ForeignKey
+from sqlalchemy import JSON, Column, String, Integer, Boolean, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime
@@ -122,24 +122,32 @@ class DataSample(Base):
     status = Column(String, default="pending")
 
     text_content = Column(Text, nullable=True)
-    annotation = Column(Text, nullable=True)
 
     audio_url = Column(String, nullable=True)
     audio_duration = Column(String, nullable=True)
 
-    quality_score = Column(String, nullable=True)
-
-    flags = Column(Text, default="[]")
-    meta_data = Column(Text, default="{}")
+    flags = Column(JSON, default=list)
+    meta_data = Column(JSON, default=dict)
 
     submitted_at = Column(String, nullable=True)
     version_tag = Column(String, nullable=True, index=True)
 
-    # 🔥 MISSING FIELDS (add these)
-    score_breakdown = Column(Text, default="[]")
+    score_breakdown = Column(JSON, default=list)
     approval_count = Column(Integer, default=0)
-    approvals_json = Column(Text, default="[]")
+    approvals_json = Column(JSON, default=list)
     task_type = Column(String, nullable=True)
+
+    annotation = Column(JSON, nullable=True)
+
+    quality_score = Column(String, nullable=True)
+
+
+
+
+
+
+
+
 
 
 class CompetitionDataset(Base):
