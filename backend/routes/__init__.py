@@ -11,6 +11,7 @@ from .datasets import router as datasets_router
 from .experiments import router as experiments_router
 from .notifications import router as notifications_router
 from .submissions import router as submissions_router
+from .scraping import router as scraping_router
 
 router = APIRouter()
 
@@ -25,3 +26,4 @@ router.include_router(datasets_router)
 router.include_router(experiments_router)
 router.include_router(notifications_router)
 router.include_router(submissions_router)
+router.include_router(scraping_router)

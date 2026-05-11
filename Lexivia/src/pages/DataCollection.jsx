@@ -35,6 +35,7 @@ import AudioTranscriptionWidget   from "./widgets/AudioTranscriptionWidget";
 import SpeechEmotionWidget        from "./widgets/SpeechEmotionWidget";
 import AudioEventDetectionWidget  from "./widgets/AudioEventDetectionWidget";
 import BulkImportPanel            from "./widgets/BulkImportPanel";
+import ScrapingAssistantPanel from "./widgets/ScrapingAssistantPanel";
 
 const API = "http://127.0.0.1:8000";
 function authHeader() {
@@ -323,7 +324,15 @@ function DataCollection() {
       return <BulkImportPanel competitionId={competitionId} taskType={competition.task_type} />;
 
     if (activeTab === "Scraping Assistant")
-      return <div className="dc-widget dc-placeholder">🔧 Scraping Assistant coming soon</div>;
+      return (
+       <ScrapingAssistantPanel
+         competition={competition}
+          config={datasetConfig}
+          onSubmit={handleSubmit}
+          submitting={submitting}
+          competitionId={competitionId}
+        />
+      );
 
     const Widget = WIDGET_MAP[competition.task_type] || TextClassificationWidget;
 
