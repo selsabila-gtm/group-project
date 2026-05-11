@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./OrganizerDashboard.css";
@@ -25,8 +25,40 @@ function OrganizerDashboard() {
     const [competition, setCompetition] = useState(null);
     const [monitoring, setMonitoring] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [joinRequests, setJoinRequests] = useState([]);
+    const [requestsLoading, setRequestsLoading] = useState(false);
+    ;
 
     const token = localStorage.getItem("token");
+
+    const fetchJoinRequests = async () => {
+        if (!token) return;
+        setRequestsLoading(true);
+        try {
+            const res = await fetch(
+                `http://127.0.0.1:8000/competitions/${competitionId}/join-requests`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (res.ok) setJoinRequests(await res.json());
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setRequestsLoading(false);
+        }
+    };
+
+    const handleJoinRequestAction = async (requestId, action) => {
+        try {
+            const res = await fetch(
+                `http://127.0.0.1:8000/competitions/${competitionId}/join-requests/${requestId}/${action}`,
+                { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Action failed"); }
+            setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
+        } catch (error) {
+            alert(error.message);
+        }
+    };
 
     async function handleDeleteCompetition() {
         const confirmDelete = window.confirm(
@@ -89,6 +121,7 @@ function OrganizerDashboard() {
 
                 setCompetition(competitionData);
                 setMonitoring(monitoringData);
+                fetchJoinRequests();
             } catch (error) {
                 console.error(error);
                 alert("Could not load organizer dashboard.");
@@ -322,6 +355,155 @@ function OrganizerDashboard() {
                         </tbody>
                     </table>
                 </section>
+
+                {/* ── Join Requests (manual-approval competitions only) ── */}
+                {competition.join_method === "manual" && (
+                    <section id="join-requests" className="panel">
+                        <div className="section-row">
+                            <h2>Join Requests</h2>
+                            <span>{joinRequests.length} pending</span>
+                        </div>
+
+                        {requestsLoading ? (
+                            <p style={{ color: "#aaa", fontSize: 13 }}>Loading requests…</p>
+                        ) : joinRequests.length === 0 ? (
+                            <div className="empty-state">
+                                <strong>No pending requests</strong>
+                                <p>All join requests have been reviewed, or none have been submitted yet.</p>
+                            </div>
+                        ) : (
+                            <table className="submission-table">
+                                <thead>
+                                    <tr>
+                                        <th>Applicant / Team</th>
+                                        <th>Members</th>
+                                        <th>Message</th>
+                                        <th>Submitted</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+                                    {joinRequests.map((req) => {
+                                        const members = req.team?.members?.length
+                                            ? req.team.members
+                                            : [{
+                                                user_id: req.user_id,
+                                                username: req.username,
+                                                email: req.email,
+                                                role: "solo",
+                                                skills: req.skills || [],
+                                            }];
+
+                                        return (
+                                            <tr key={req.id}>
+                                                <td style={{ fontWeight: 600 }}>
+                                                    <div>{req.team?.name || req.username || req.user_id}</div>
+                                                    <span
+                                                        style={{
+                                                            fontSize: 10,
+                                                            fontWeight: 700,
+                                                            padding: "2px 8px",
+                                                            borderRadius: 20,
+                                                            letterSpacing: "0.04em",
+                                                            background: req.team_id ? "#e8f5e9" : "#e8edfb",
+                                                            color: req.team_id ? "#2e7d32" : "#2547c0",
+                                                        }}
+                                                    >
+                                                        {req.team_id ? "TEAM" : "SOLO"}
+                                                    </span>
+                                                </td>
+
+                                                <td>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                        {members.map((m) => {
+                                                            const initials = (m.username || "?")
+                                                                .split(" ")
+                                                                .map((part) => part[0])
+                                                                .join("")
+                                                                .slice(0, 2)
+                                                                .toUpperCase();
+
+                                                            return (
+                                                                <button
+                                                                    key={m.user_id}
+                                                                    type="button"
+                                                                    title={`${m.username || "User"} • ${m.role || "member"} • ${m.skills?.length ? m.skills.join(", ") : "No skills listed"
+                                                                        }`}
+                                                                    onClick={() => navigate(`/profile/${m.user_id}`)}
+                                                                    style={{
+                                                                        width: 34,
+                                                                        height: 34,
+                                                                        borderRadius: "50%",
+                                                                        border: "2px solid #e5e7eb",
+                                                                        background: m.role === "leader" ? "#2d5cf6" : "#eef2ff",
+                                                                        color: m.role === "leader" ? "#fff" : "#2547c0",
+                                                                        fontSize: 12,
+                                                                        fontWeight: 800,
+                                                                        cursor: "pointer",
+                                                                        display: "inline-flex",
+                                                                        alignItems: "center",
+                                                                        justifyContent: "center",
+                                                                    }}
+                                                                >
+                                                                    {initials}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </td>
+
+                                                <td style={{ color: "#6b7280", fontSize: 12, maxWidth: 220 }}>
+                                                    {req.message || <em style={{ color: "#ccc" }}>No message</em>}
+                                                </td>
+
+                                                <td style={{ color: "#9ca3af", fontSize: 12 }}>
+                                                    {req.created_at ? new Date(req.created_at).toLocaleDateString() : "—"}
+                                                </td>
+
+                                                <td>
+                                                    <div style={{ display: "flex", gap: 8 }}>
+                                                        <button
+                                                            onClick={() => handleJoinRequestAction(req.id, "approve")}
+                                                            style={{
+                                                                padding: "5px 14px",
+                                                                borderRadius: 7,
+                                                                border: "none",
+                                                                background: "#d1fae5",
+                                                                color: "#065f46",
+                                                                fontWeight: 700,
+                                                                fontSize: 12,
+                                                                cursor: "pointer",
+                                                            }}
+                                                        >
+                                                            ✓ Approve
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => handleJoinRequestAction(req.id, "reject")}
+                                                            style={{
+                                                                padding: "5px 14px",
+                                                                borderRadius: 7,
+                                                                border: "none",
+                                                                background: "#fee2e2",
+                                                                color: "#991b1b",
+                                                                fontWeight: 700,
+                                                                fontSize: 12,
+                                                                cursor: "pointer",
+                                                            }}
+                                                        >
+                                                            ✕ Reject
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        )}
+                    </section>
+                )}
             </main>
         </div>
     );

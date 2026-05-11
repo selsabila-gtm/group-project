@@ -109,21 +109,28 @@ def list_teams(
 
     count_map: dict[int, int] = {}
     my_teams: set[int] = set()
+    my_roles: dict[int, str] = {}
+
     for m in member_rows:
         count_map[m.team_id] = count_map.get(m.team_id, 0) + 1
+
         if str(m.user_id) == str(current_user.id):
             my_teams.add(m.team_id)
+            my_roles[m.team_id] = m.role
 
     return {
         "teams": [
             {
-                "id":           t.id,
-                "name":         t.name,
-                "description":  t.description,
-                "created_at":   t.created_at,
-                "member_count": count_map.get(t.id, 0),
-                "is_my_team":   t.id in my_teams,
-            }
+            "id":                t.id,
+            "name":              t.name,
+            "description":       t.description,
+            "created_at":        t.created_at,
+            "member_count":      count_map.get(t.id, 0),
+            "is_my_team":        t.id in my_teams,
+            "current_user_role": my_roles.get(t.id),
+            "role":              my_roles.get(t.id),
+            "is_leader":         my_roles.get(t.id) == "leader",
+        }
             for t in teams
         ],
         "total": total,

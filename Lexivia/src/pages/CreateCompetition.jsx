@@ -24,15 +24,15 @@ const steps = [
 
 // Task types now use exact DB values so they round-trip through the API correctly.
 const taskTypes = [
-    { value: "TEXT_CLASSIFICATION",   label: "Text Classification" },
-    { value: "NER",                   label: "Named Entity Recognition" },
-    { value: "SENTIMENT_ANALYSIS",    label: "Sentiment Analysis" },
-    { value: "TRANSLATION",           label: "Translation" },
-    { value: "QUESTION_ANSWERING",    label: "Question Answering" },
-    { value: "SUMMARIZATION",         label: "Summarization" },
-    { value: "AUDIO_SYNTHESIS",       label: "Audio Synthesis" },
-    { value: "AUDIO_TRANSCRIPTION",   label: "Audio Transcription" },
-    { value: "SPEECH_EMOTION",        label: "Speech Emotion" },
+    { value: "TEXT_CLASSIFICATION", label: "Text Classification" },
+    { value: "NER", label: "Named Entity Recognition" },
+    { value: "SENTIMENT_ANALYSIS", label: "Sentiment Analysis" },
+    { value: "TRANSLATION", label: "Translation" },
+    { value: "QUESTION_ANSWERING", label: "Question Answering" },
+    { value: "SUMMARIZATION", label: "Summarization" },
+    { value: "AUDIO_SYNTHESIS", label: "Audio Synthesis" },
+    { value: "AUDIO_TRANSCRIPTION", label: "Audio Transcription" },
+    { value: "SPEECH_EMOTION", label: "Speech Emotion" },
     { value: "AUDIO_EVENT_DETECTION", label: "Audio Event Detection" },
 ];
 
@@ -146,6 +146,9 @@ const initialForm = {
 
     complexityLevel: 0,
 
+    // Join method: "auto" = automatic acceptance; "manual" = organizer approval required
+    joinMethod: "auto",
+
     // Task-specific annotation config set by organizer
     taskConfig: {},
 
@@ -207,6 +210,8 @@ function mapCompetitionToForm(c) {
         additionalRules: c.additional_rules || "",
 
         complexityLevel: c.complexity_level ?? 0,
+
+        joinMethod: c.join_method || "auto",
 
         taskConfig: Object.keys(taskConfig).length
             ? taskConfig
@@ -553,6 +558,7 @@ function CreateCompetition({ editMode = false }) {
 
         // Task-specific annotation config for this competition's widgets
         task_config: serializeTaskConfig(form.taskType, form.taskConfig),
+        join_method: form.joinMethod || "auto",
     });
 
     const saveDraft = async () => {
@@ -1326,6 +1332,50 @@ function CreateCompetition({ editMode = false }) {
                         <span className="slider"></span>
                     </label>
                 </div>
+            </div>
+
+            <div className="inner-panel">
+                <h4>Join Method</h4>
+                <p style={{ margin: "0 0 14px", color: "#6b7280", fontSize: 13 }}>
+                    How will participants or teams be accepted into this competition?
+                </p>
+
+                <div className="complexity-list">
+                    <button
+                        type="button"
+                        className={form.joinMethod === "auto" ? "complexity-option active" : "complexity-option"}
+                        onClick={() => updateField("joinMethod", "auto")}
+                    >
+                        <strong>Automatic Acceptance</strong>
+                        <span>
+                            Participants or teams that satisfy all requirements (team size, skills) are
+                            accepted instantly — no organizer action needed.
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        className={form.joinMethod === "manual" ? "complexity-option active" : "complexity-option"}
+                        onClick={() => updateField("joinMethod", "manual")}
+                    >
+                        <strong>Manual Approval</strong>
+                        <span>
+                            Every join request is held in a queue. You review and approve or reject
+                            each participant / team from the Organizer Dashboard.
+                        </span>
+                    </button>
+                </div>
+
+                {form.joinMethod === "manual" && (
+                    <div style={{
+                        marginTop: 12, padding: "10px 14px", borderRadius: 8,
+                        background: "#fffbeb", border: "1px solid #fcd34d",
+                        fontSize: 12, color: "#92400e",
+                    }}>
+                        ⚠️ With manual approval you must actively review join requests from the
+                        Organizer Dashboard → Join Requests tab.
+                    </div>
+                )}
             </div>
 
             <div className="create-section">

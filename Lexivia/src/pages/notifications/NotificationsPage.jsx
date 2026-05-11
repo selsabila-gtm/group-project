@@ -5,7 +5,6 @@ import Topbar from "../../components/Topbar";
 import "./NotificationsPage.css";
 
 const API = "http://127.0.0.1:8000";
-
 function authHeaders() {
   const token = localStorage.getItem("token");
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
@@ -14,19 +13,20 @@ function authHeaders() {
 // ── Shared type config (mirrors popup) ────────────────────────────────────────
 
 const TYPE_CONFIG = {
-  team_invitation:          { icon: "👥", color: "#2d5cf6", bg: "#eef2ff", label: "Team Invite"       },
-  team_join_request:        { icon: "🙋", color: "#0c8599", bg: "#e3fafc", label: "Join Request"      },
-  team_invitation_accepted: { icon: "✅", color: "#1a7a44", bg: "#e6f9ef", label: "Invite Accepted"   },
-  team_invitation_declined: { icon: "❌", color: "#c33",    bg: "#fff0f0", label: "Invite Declined"   },
-  team_join_accepted:       { icon: "🎉", color: "#1a7a44", bg: "#e6f9ef", label: "Request Accepted"  },
-  team_join_declined:       { icon: "😔", color: "#c33",    bg: "#fff0f0", label: "Request Declined"  },
-  team_member_removed:      { icon: "🚪", color: "#b85200", bg: "#fff4e6", label: "Removed from Team" },
-  competition_invitation:   { icon: "🏆", color: "#6324c4", bg: "#f3edff", label: "Competition Invite"},
-  competition_joined:       { icon: "📥", color: "#2d5cf6", bg: "#eef2ff", label: "New Participant"   },
-  competition_submission:   { icon: "📤", color: "#0c8599", bg: "#e3fafc", label: "Submission"        },
-  data_sample_flagged:      { icon: "🚩", color: "#b85200", bg: "#fff4e6", label: "Sample Flagged"    },
-  data_sample_validated:    { icon: "✔️", color: "#1a7a44", bg: "#e6f9ef", label: "Sample Validated"  },
-  general:                  { icon: "📣", color: "#555",    bg: "#f7f8fb", label: "Info"              },
+  team_invitation: { icon: "👥", color: "#2d5cf6", bg: "#eef2ff", label: "Team Invite" },
+  team_join_request: { icon: "🙋", color: "#0c8599", bg: "#e3fafc", label: "Join Request" },
+  team_invitation_accepted: { icon: "✅", color: "#1a7a44", bg: "#e6f9ef", label: "Invite Accepted" },
+  team_invitation_declined: { icon: "❌", color: "#c33", bg: "#fff0f0", label: "Invite Declined" },
+  team_join_accepted: { icon: "🎉", color: "#1a7a44", bg: "#e6f9ef", label: "Request Accepted" },
+  team_join_declined: { icon: "😔", color: "#c33", bg: "#fff0f0", label: "Request Declined" },
+  team_member_removed: { icon: "🚪", color: "#b85200", bg: "#fff4e6", label: "Removed from Team" },
+  competition_invitation: { icon: "🏆", color: "#6324c4", bg: "#f3edff", label: "Competition Invite" },
+  competition_joined: { icon: "📥", color: "#2d5cf6", bg: "#eef2ff", label: "New Participant" },
+  competition_submission: { icon: "📤", color: "#0c8599", bg: "#e3fafc", label: "Submission" },
+  data_sample_flagged: { icon: "🚩", color: "#b85200", bg: "#fff4e6", label: "Sample Flagged" },
+  data_sample_validated: { icon: "✔️", color: "#1a7a44", bg: "#e6f9ef", label: "Sample Validated" },
+  general: { icon: "📣", color: "#555", bg: "#f7f8fb", label: "Info" },
+  competition_join_request: { icon: "📥", color: "#2d5cf6", bg: "#eef2ff", label: "Competition Join Request" },
 };
 
 const ALL_TYPES = [
@@ -44,6 +44,7 @@ const ALL_TYPES = [
   "data_sample_flagged",
   "data_sample_validated",
   "general",
+  "competition_join_request",
 ];
 
 function typeConfig(type) {
@@ -56,11 +57,11 @@ function timeAgo(dateStr) {
   const m = Math.floor(diff / 60000);
   const h = Math.floor(m / 60);
   const d = Math.floor(h / 24);
-  if (m < 1)  return "just now";
+  if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
   if (h < 24) return `${h}h ago`;
   if (d === 1) return "yesterday";
-  if (d < 7)  return `${d}d ago`;
+  if (d < 7) return `${d}d ago`;
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
@@ -72,7 +73,7 @@ function NotifCard({ notif, onRead, onDelete, onAction, selected, onSelect }) {
   const navigate = useNavigate();
 
   const hasInviteAction = notif.type === "team_invitation" && !notif.action_taken;
-  const hasJoinAction   = notif.type === "team_join_request" && !notif.action_taken;
+  const hasJoinAction = notif.type === "team_join_request" && !notif.action_taken;
 
   async function doAction(endpoint, label) {
     setActioning(label);
@@ -92,8 +93,20 @@ function NotifCard({ notif, onRead, onDelete, onAction, selected, onSelect }) {
 
   function handleNavigate() {
     if (!notif.is_read) onRead(notif.id, true);
-    if (notif.team_id)        navigate(`/teams/${notif.team_id}`);
-    else if (notif.competition_id) navigate(`/competitions/${notif.competition_id}`);
+
+    if (notif.type === "competition_join_request" && notif.competition_id) {
+      navigate(`/competitions/${notif.competition_id}/organizer#join-requests`);
+      return;
+    }
+
+    if (notif.team_id) {
+      navigate(`/teams/${notif.team_id}`);
+      return;
+    }
+
+    if (notif.competition_id) {
+      navigate(`/competitions/${notif.competition_id}`);
+    }
   }
 
   return (
@@ -244,15 +257,15 @@ const PAGE_SIZE = 15;
 export default function NotificationsPage() {
   const navigate = useNavigate();
 
-  const [notifs, setNotifs]           = useState([]);
-  const [total, setTotal]             = useState(0);
+  const [notifs, setNotifs] = useState([]);
+  const [total, setTotal] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading]         = useState(true);
-  const [page, setPage]               = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
 
-  const [filter, setFilter]           = useState("all");       // type filter
-  const [unreadOnly, setUnreadOnly]   = useState(false);
-  const [selected, setSelected]       = useState(new Set());   // selected IDs
+  const [filter, setFilter] = useState("all");       // type filter
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [selected, setSelected] = useState(new Set());   // selected IDs
 
   // ── Fetch ────────────────────────────────────────────────────────────────
 
