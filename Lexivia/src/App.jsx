@@ -23,6 +23,8 @@ import OrganizerDashboard from "./pages/OrganizerDashboard";
 import AuthCallback from "./pages/AuthCallback";
 import Experiments from "./pages/Experiments";
 
+import ExperimentRegistry from "./pages/ExperimentRegistry";
+
 import "./index.css";
 
 function SimplePage({ title, subtitle }) {
@@ -84,6 +86,7 @@ function App() {
           <Route path="/competitions/:competitionId/data-collection" element={<DataCollection />} />
           <Route path="/competitions/:competitionId/experiments" element={<Experiments />} />
           <Route path="/competitions/:id/dataset-hub" element={<DatasetHub />} />
+          <Route path="/competitions/:competitionId/experiment-registry" element={<ExperimentRegistry />} />
 
           <Route
             path="/competitions/:competitionId/organizer"
