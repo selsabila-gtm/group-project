@@ -38,6 +38,14 @@ function CompetitionDetails() {
     const [activeTab, setActiveTab] = useState("overview");
     const [monitoring, setMonitoring] = useState(null);
     const [isJoined, setIsJoined] = useState(false);
+    const [hasPendingRequest, setHasPendingRequest] = useState(false);
+
+    // Team-join modal state
+    const [showTeamModal, setShowTeamModal] = useState(false);
+    const [myTeams, setMyTeams] = useState([]);
+    const [selectedTeamId, setSelectedTeamId] = useState("");
+    const [joinMessage, setJoinMessage] = useState("");
+    const [teamsLoading, setTeamsLoading] = useState(false);
 
     useEffect(() => {
         window.scrollTo(0, 0);
@@ -53,7 +61,10 @@ function CompetitionDetails() {
                 if (!res.ok) throw new Error("Competition not found");
                 return res.json();
             })
-            .then((data) => setCompetition(data))
+            .then((data) => {
+                setCompetition(data);
+                if (data.has_pending_request) setHasPendingRequest(true);
+            })
             .catch((err) => {
                 console.error(err);
                 alert("Competition not found");
@@ -104,34 +115,48 @@ function CompetitionDetails() {
         return safeJson(competition?.required_skills, []);
     }, [competition]);
 
-    const joinCompetition = async () => {
+    // ── Load user's teams for team-join modal ─────────────────────────────────
+    const loadMyTeams = async () => {
+        setTeamsLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+            const res = await fetch(`http://127.0.0.1:8000/teams?tab=mine&limit=50`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await res.json();
+            setMyTeams(data.teams ?? []);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setTeamsLoading(false);
+        }
+    };
+
+    const openJoinModal = () => {
+        setShowTeamModal(true);
+        loadMyTeams();
+    };
+
+    // Solo join (individual, no team)
+    const joinSolo = async () => {
         try {
             setJoining(true);
-
             const token = localStorage.getItem("token");
-
-            const res = await fetch(
-                `http://127.0.0.1:8000/competitions/${competitionId}/join`,
-                {
-                    method: "POST",
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                }
-            );
-
+            const res = await fetch(`http://127.0.0.1:8000/competitions/${competitionId}/join`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ message: joinMessage }),
+            });
             const data = await res.json();
+            if (!res.ok) { alert(data.detail || "Could not join competition"); return; }
 
-            if (!res.ok) {
-                alert(data.detail || "Could not join competition");
-                return;
+            if (data.status === "pending") {
+                setHasPendingRequest(true);
+                alert("Your request has been submitted and is awaiting organizer approval.");
+            } else {
+                setIsJoined(true);
+                navigate(`/competitions/${competitionId}/data-collection`);
             }
-
-            setIsJoined(true);
-            alert("Joined competition successfully");
-
-            // go directly to data collection
-            navigate(`/competitions/${competitionId}/data-collection`);
         } catch (error) {
             console.error(error);
             alert("Backend error while joining competition");
@@ -139,6 +164,39 @@ function CompetitionDetails() {
             setJoining(false);
         }
     };
+
+    // Team join (leader submits on behalf of team)
+    const joinAsTeam = async () => {
+        if (!selectedTeamId) { alert("Please select a team."); return; }
+        try {
+            setJoining(true);
+            const token = localStorage.getItem("token");
+            const res = await fetch(`http://127.0.0.1:8000/competitions/${competitionId}/join-team`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ team_id: selectedTeamId, message: joinMessage }),
+            });
+            const data = await res.json();
+            if (!res.ok) { alert(data.detail || "Could not submit team join request"); return; }
+
+            setShowTeamModal(false);
+            if (data.status === "pending") {
+                setHasPendingRequest(true);
+                alert("Team join request submitted and is awaiting organizer approval.");
+            } else {
+                setIsJoined(true);
+                navigate(`/competitions/${competitionId}/data-collection`);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Backend error while joining competition");
+        } finally {
+            setJoining(false);
+        }
+    };
+
+    // Legacy shim — called by the plain "Join Competition" button when no team size is required
+    const joinCompetition = joinSolo;
 
     if (loading) return <div className="details-loading">Loading competition...</div>;
     if (!competition) return null;
@@ -211,15 +269,49 @@ function CompetitionDetails() {
                                 >
                                     Check Competition →
                                 </button>
-                            ) : (
+                            ) : hasPendingRequest ? (
                                 <button
                                     type="button"
                                     className="join-btn"
-                                    onClick={joinCompetition}
-                                    disabled={joining || competition.status !== "OPEN"}
+                                    disabled
+                                    style={{ opacity: 0.7, cursor: "not-allowed", background: "#f59e0b" }}
                                 >
-                                    {joining ? "Joining..." : "Join Competition →"}
+                                    ⏳ Request Pending…
                                 </button>
+                            ) : (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                    {/* If team size required → show team-join button; always also offer solo join */}
+                                    {(competition.min_members > 1 || competition.max_members > 1) ? (
+                                        <>
+                                            <button
+                                                type="button"
+                                                className="join-btn"
+                                                onClick={openJoinModal}
+                                                disabled={joining || competition.status !== "OPEN"}
+                                            >
+                                                {joining ? "Submitting…" : "Join with Team →"}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="join-btn"
+                                                style={{ background: "#6b7280", fontSize: 13, padding: "10px 18px" }}
+                                                onClick={joinSolo}
+                                                disabled={joining || competition.status !== "OPEN"}
+                                            >
+                                                Join Solo
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            className="join-btn"
+                                            onClick={joinCompetition}
+                                            disabled={joining || competition.status !== "OPEN"}
+                                        >
+                                            {joining ? "Joining…" : competition.join_method === "manual" ? "Request to Join →" : "Join Competition →"}
+                                        </button>
+                                    )}
+                                </div>
                             )}
                         </div>
                     </section>
@@ -452,6 +544,119 @@ function CompetitionDetails() {
                     )}
                 </main>
             </div>
+
+            {/* ── Team Join Modal ─────────────────────────────────────────── */}
+            {showTeamModal && (
+                <div style={{
+                    position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+                    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+                }}>
+                    <div style={{
+                        background: "#fff", borderRadius: 16, padding: "32px 28px",
+                        width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+                    }}>
+                        <h2 style={{ margin: "0 0 6px", fontSize: 20, fontWeight: 700, color: "#1a1c20" }}>
+                            Join as a Team
+                        </h2>
+                        <p style={{ margin: "0 0 20px", color: "#6b7280", fontSize: 13 }}>
+                            Only team leaders can submit on behalf of their team.
+                            {competition.min_members && ` Required team size: ${competition.min_members}${competition.max_members && competition.max_members !== competition.min_members ? `–${competition.max_members}` : ""} members.`}
+                        </p>
+
+                        {teamsLoading ? (
+                            <p style={{ color: "#aaa", fontSize: 13 }}>Loading your teams…</p>
+                        ) : myTeams.length === 0 ? (
+                            <div style={{ padding: "16px", background: "#f9fafb", borderRadius: 8, color: "#6b7280", fontSize: 13 }}>
+                                You are not a member of any team yet.{" "}
+                                <button
+                                    type="button"
+                                    onClick={() => navigate("/teams")}
+                                    style={{ color: "#2d5cf6", background: "none", border: "none", cursor: "pointer", fontWeight: 600, padding: 0 }}
+                                >
+                                    Create or join a team →
+                                </button>
+                            </div>
+                        ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 220, overflowY: "auto", marginBottom: 16 }}>
+                                {myTeams.map((team) => (
+                                    <label
+                                        key={team.id}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: 12,
+                                            padding: "12px 14px", borderRadius: 10, cursor: "pointer",
+                                            border: `2px solid ${selectedTeamId === String(team.id) ? "#2d5cf6" : "#e5e7eb"}`,
+                                            background: selectedTeamId === String(team.id) ? "#f0f4ff" : "#fafafa",
+                                            transition: "all 0.15s",
+                                        }}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="team"
+                                            value={String(team.id)}
+                                            checked={selectedTeamId === String(team.id)}
+                                            disabled={team.current_user_role !== "leader"}
+                                            onChange={() => setSelectedTeamId(String(team.id))}
+                                            style={{ accentColor: "#2d5cf6" }}
+                                        />
+                                        <div>
+                                            <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1c20" }}>{team.name}</div>
+                                            <div style={{ fontSize: 12, color: "#9ca3af" }}>{team.member_count} member{team.member_count !== 1 ? "s" : ""}</div>
+                                        </div>
+                                        {team.current_user_role !== "leader" && (
+                                            <span style={{ marginLeft: "auto", fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>NOT LEADER</span>
+                                        )}
+                                    </label>
+                                ))}
+                            </div>
+                        )}
+
+                        {competition.join_method === "manual" && (
+                            <div style={{ marginBottom: 16 }}>
+                                <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6, color: "#374151" }}>
+                                    Message to organizer (optional)
+                                </label>
+                                <textarea
+                                    rows={3}
+                                    placeholder="Tell the organizer why your team should be accepted…"
+                                    value={joinMessage}
+                                    onChange={(e) => setJoinMessage(e.target.value)}
+                                    style={{
+                                        width: "100%", boxSizing: "border-box", padding: "10px 12px",
+                                        border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13,
+                                        fontFamily: "inherit", resize: "vertical",
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+                            <button
+                                type="button"
+                                onClick={() => { setShowTeamModal(false); setSelectedTeamId(""); setJoinMessage(""); }}
+                                style={{
+                                    padding: "10px 20px", borderRadius: 9, border: "1.5px solid #d1d5db",
+                                    background: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer",
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={joinAsTeam}
+                                disabled={joining || !selectedTeamId}
+                                style={{
+                                    padding: "10px 24px", borderRadius: 9, border: "none",
+                                    background: joining || !selectedTeamId ? "#93c5fd" : "#2d5cf6",
+                                    color: "#fff", fontWeight: 700, fontSize: 13,
+                                    cursor: joining || !selectedTeamId ? "not-allowed" : "pointer",
+                                }}
+                            >
+                                {joining ? "Submitting…" : competition.join_method === "manual" ? "Request to Join" : "Join Competition"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
