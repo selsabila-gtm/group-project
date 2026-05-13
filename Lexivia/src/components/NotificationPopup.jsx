@@ -11,19 +11,25 @@ function authHeaders() {
 // ── Notification type config ──────────────────────────────────────────────────
 
 const TYPE_CONFIG = {
-  team_invitation:          { icon: "👥", color: "#2d5cf6", bg: "#eef2ff", label: "Team Invite"      },
-  team_join_request:        { icon: "🙋", color: "#0c8599", bg: "#e3fafc", label: "Join Request"     },
-  team_invitation_accepted: { icon: "✅", color: "#1a7a44", bg: "#e6f9ef", label: "Invite Accepted"  },
-  team_invitation_declined: { icon: "❌", color: "#c33",    bg: "#fff0f0", label: "Invite Declined"  },
-  team_join_accepted:       { icon: "🎉", color: "#1a7a44", bg: "#e6f9ef", label: "Request Accepted" },
-  team_join_declined:       { icon: "😔", color: "#c33",    bg: "#fff0f0", label: "Request Declined" },
-  team_member_removed:      { icon: "🚪", color: "#b85200", bg: "#fff4e6", label: "Removed"          },
-  competition_invitation:   { icon: "🏆", color: "#6324c4", bg: "#f3edff", label: "Competition"      },
-  competition_joined:       { icon: "📥", color: "#2d5cf6", bg: "#eef2ff", label: "New Participant"  },
-  competition_submission:   { icon: "📤", color: "#0c8599", bg: "#e3fafc", label: "Submission"       },
-  data_sample_flagged:      { icon: "🚩", color: "#b85200", bg: "#fff4e6", label: "Flagged"          },
-  data_sample_validated:    { icon: "✔️", color: "#1a7a44", bg: "#e6f9ef", label: "Validated"        },
-  general:                  { icon: "📣", color: "#555",    bg: "#f7f8fb", label: "Info"             },
+  team_invitation: { icon: "👥", color: "#2d5cf6", bg: "#eef2ff", label: "Team Invite" },
+  team_join_request: { icon: "🙋", color: "#0c8599", bg: "#e3fafc", label: "Join Request" },
+  team_invitation_accepted: { icon: "✅", color: "#1a7a44", bg: "#e6f9ef", label: "Invite Accepted" },
+  team_invitation_declined: { icon: "❌", color: "#c33", bg: "#fff0f0", label: "Invite Declined" },
+  team_join_accepted: { icon: "🎉", color: "#1a7a44", bg: "#e6f9ef", label: "Request Accepted" },
+  team_join_declined: { icon: "😔", color: "#c33", bg: "#fff0f0", label: "Request Declined" },
+  team_member_removed: { icon: "🚪", color: "#b85200", bg: "#fff4e6", label: "Removed" },
+  competition_invitation: { icon: "🏆", color: "#6324c4", bg: "#f3edff", label: "Competition" },
+  competition_joined: { icon: "📥", color: "#2d5cf6", bg: "#eef2ff", label: "New Participant" },
+  competition_join_request: {
+    icon: "📥",
+    color: "#2d5cf6",
+    bg: "#eef2ff",
+    label: "Competition Join Request",
+  },
+  competition_submission: { icon: "📤", color: "#0c8599", bg: "#e3fafc", label: "Submission" },
+  data_sample_flagged: { icon: "🚩", color: "#b85200", bg: "#fff4e6", label: "Flagged" },
+  data_sample_validated: { icon: "✔️", color: "#1a7a44", bg: "#e6f9ef", label: "Validated" },
+  general: { icon: "📣", color: "#555", bg: "#f7f8fb", label: "Info" },
 };
 
 function typeConfig(type) {
@@ -36,17 +42,18 @@ function timeAgo(dateStr) {
   const m = Math.floor(diff / 60000);
   const h = Math.floor(m / 60);
   const d = Math.floor(h / 24);
-  if (m < 1)  return "just now";
+  if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
   if (h < 24) return `${h}h ago`;
   if (d === 1) return "yesterday";
-  if (d < 7)  return `${d}d ago`;
+  if (d < 7) return `${d}d ago`;
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+
 // ── Single notification row ───────────────────────────────────────────────────
 
-function NotifRow({ notif, onRead, onDelete, onAction }) {
+function NotifRow({ notif, onRead, onDelete, onAction, onNavigate }) {
   const cfg = typeConfig(notif.type);
   const [actioning, setActioning] = useState(false);
 
@@ -71,9 +78,14 @@ function NotifRow({ notif, onRead, onDelete, onAction }) {
       setActioning(false);
     }
   }
+  function handleNavigate() {
+    onNavigate(notif);
+  }
 
   return (
     <div
+      onClick={handleNavigate}
+
       style={{
         display: "flex",
         gap: 12,
@@ -89,25 +101,29 @@ function NotifRow({ notif, onRead, onDelete, onAction }) {
     >
       {/* Unread dot */}
       {!notif.is_read && (
-        <div style={{
-          position: "absolute", top: 16, left: 5,
-          width: 6, height: 6, borderRadius: "50%", background: "#2d5cf6",
-        }} />
+        <div
+          style={{
+            position: "absolute", top: 16, left: 5,
+            width: 6, height: 6, borderRadius: "50%", background: "#2d5cf6",
+          }} />
       )}
 
       {/* Icon */}
-      <div style={{
-        width: 36, height: 36, borderRadius: 10,
-        background: cfg.bg, flexShrink: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 17,
-      }}>
+      <div
+        style={{
+          width: 36, height: 36, borderRadius: 10,
+          background: cfg.bg, flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 17,
+        }}>
         {cfg.icon}
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+      <div
+        style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
           <span style={{
             fontSize: 10, fontWeight: 700, letterSpacing: "0.06em",
             color: cfg.color, background: cfg.bg,
@@ -137,7 +153,8 @@ function NotifRow({ notif, onRead, onDelete, onAction }) {
 
         {/* Action buttons */}
         {(hasInviteAction || hasJoinAction) && (
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <div
+            style={{ display: "flex", gap: 6, marginTop: 8 }}>
             <button
               onClick={e => { e.stopPropagation(); doAction(hasInviteAction ? "accept-invitation" : "accept-join-request"); }}
               disabled={actioning}
@@ -180,7 +197,8 @@ function NotifRow({ notif, onRead, onDelete, onAction }) {
       </div>
 
       {/* Row controls */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+      <div
+        style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
         <button
           title={notif.is_read ? "Mark unread" : "Mark read"}
           onClick={e => { e.stopPropagation(); onRead(notif.id, !notif.is_read); }}
@@ -216,10 +234,10 @@ function NotifRow({ notif, onRead, onDelete, onAction }) {
 
 export default function NotificationPopup() {
   const navigate = useNavigate();
-  const [open, setOpen]           = useState(false);
-  const [notifs, setNotifs]       = useState([]);
-  const [unread, setUnread]       = useState(0);
-  const [loading, setLoading]     = useState(false);
+  const [open, setOpen] = useState(false);
+  const [notifs, setNotifs] = useState([]);
+  const [unread, setUnread] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [pollingId, setPollingId] = useState(null);
   const popupRef = useRef(null);
 
@@ -236,7 +254,7 @@ export default function NotificationPopup() {
       const data = await res.json();
       setNotifs(data.items || []);
       setUnread(data.unread_count || 0);
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   // ── Poll every 30 s for unread badge ─────────────────────────────────────
@@ -312,9 +330,33 @@ export default function NotificationPopup() {
       setNotifs(prev => prev.map(n => n.id === id ? updated : n));
     }
   }
+  function handleNavigate(notif) {
+    if (!notif.is_read) {
+      handleRead(notif.id, true);
+    }
 
+    setOpen(false);
+
+    if (
+      notif.type === "competition_join_request" &&
+      notif.competition_id
+    ) {
+      navigate(`/competitions/${notif.competition_id}/organizer#join-requests`);
+      return;
+    }
+
+    if (notif.team_id) {
+      navigate(`/teams/${notif.team_id}`);
+      return;
+    }
+
+    if (notif.competition_id) {
+      navigate(`/competitions/${notif.competition_id}`);
+    }
+  }
   return (
-    <div ref={popupRef} style={{ position: "relative" }}>
+    <div
+      ref={popupRef} style={{ position: "relative" }}>
       {/* Bell button */}
       <button
         onClick={handleToggle}
@@ -347,18 +389,19 @@ export default function NotificationPopup() {
 
       {/* Dropdown */}
       {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 10px)", right: 0,
-          width: 380, maxHeight: 520,
-          background: "#fff",
-          border: "1px solid #e8e9ec",
-          borderRadius: 14,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)",
-          zIndex: 2000,
-          display: "flex", flexDirection: "column",
-          overflow: "hidden",
-          animation: "popupIn 0.18s ease",
-        }}>
+        <div
+          style={{
+            position: "absolute", top: "calc(100% + 10px)", right: 0,
+            width: 380, maxHeight: 520,
+            background: "#fff",
+            border: "1px solid #e8e9ec",
+            borderRadius: 14,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)",
+            zIndex: 2000,
+            display: "flex", flexDirection: "column",
+            overflow: "hidden",
+            animation: "popupIn 0.18s ease",
+          }}>
           <style>{`
             @keyframes popupIn {
               from { opacity: 0; transform: translateY(-6px) scale(0.98); }
@@ -367,13 +410,15 @@ export default function NotificationPopup() {
           `}</style>
 
           {/* Header */}
-          <div style={{
-            padding: "14px 16px 12px",
-            borderBottom: "1px solid #f0f1f4",
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            flexShrink: 0,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div
+            style={{
+              padding: "14px 16px 12px",
+              borderBottom: "1px solid #f0f1f4",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              flexShrink: 0,
+            }}>
+            <div
+              style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: "#1a1c20" }}>
                 Notifications
               </span>
@@ -401,15 +446,20 @@ export default function NotificationPopup() {
           </div>
 
           {/* List */}
-          <div style={{ overflowY: "auto", flex: 1 }}>
+          <div
+            style={{ overflowY: "auto", flex: 1 }}>
             {loading ? (
-              <div style={{ padding: "32px 16px", textAlign: "center", color: "#bbb", fontSize: 13 }}>
+              <div
+                style={{ padding: "32px 16px", textAlign: "center", color: "#bbb", fontSize: 13 }}>
                 Loading…
               </div>
             ) : notifs.length === 0 ? (
-              <div style={{ padding: "40px 16px", textAlign: "center" }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>🔔</div>
-                <div style={{ fontSize: 13, color: "#bbb", fontWeight: 500 }}>
+              <div
+                style={{ padding: "40px 16px", textAlign: "center" }}>
+                <div
+                  style={{ fontSize: 32, marginBottom: 8 }}>🔔</div>
+                <div
+                  style={{ fontSize: 13, color: "#bbb", fontWeight: 500 }}>
                   You're all caught up!
                 </div>
               </div>
@@ -421,17 +471,19 @@ export default function NotificationPopup() {
                   onRead={handleRead}
                   onDelete={handleDelete}
                   onAction={handleAction}
+                  onNavigate={handleNavigate}
                 />
               ))
             )}
           </div>
 
           {/* Footer */}
-          <div style={{
-            borderTop: "1px solid #f0f1f4",
-            padding: "11px 16px",
-            flexShrink: 0,
-          }}>
+          <div
+            style={{
+              borderTop: "1px solid #f0f1f4",
+              padding: "11px 16px",
+              flexShrink: 0,
+            }}>
             <button
               onClick={() => { setOpen(false); navigate("/notifications"); }}
               style={{

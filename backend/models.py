@@ -56,6 +56,9 @@ class Competition(Base):
 
     dataset_config = Column(Text, nullable=True, default="{}")
 
+    # "auto" = automatic acceptance (after validation); "manual" = organizer approves each request
+    join_method = Column(String, nullable=False, default="auto")
+
     datasets = relationship(
         "CompetitionDataset",
         back_populates="competition",
@@ -84,6 +87,20 @@ class CompetitionParticipant(Base):
     joined_at = Column(String, nullable=True)
 
 
+class CompetitionJoinRequest(Base):
+    """Pending join requests when competition.join_method == 'manual'."""
+    __tablename__ = "competition_join_requests"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    competition_id = Column(String, nullable=False, index=True)
+    user_id = Column(String, nullable=False, index=True)
+    team_id = Column(String, nullable=True)
+    message = Column(Text, nullable=True)
+    status = Column(String, default="pending")
+    created_at = Column(String, nullable=True)
+    updated_at = Column(String, nullable=True)
+
+
 class RecentCompetition(Base):
     __tablename__ = "recent_competitions"
 
@@ -96,7 +113,6 @@ class RecentCompetition(Base):
     score = Column(String, nullable=False)
     sync = Column(String, nullable=False)
     icon = Column(String, nullable=False)
-
 
 class CompetitionPrompt(Base):
     __tablename__ = "competition_prompts"

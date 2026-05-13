@@ -53,6 +53,8 @@ class CompetitionOut(BaseModel):
     validation_date: str | None = None
     freeze_date: str | None = None
 
+    join_method: str | None = "auto"
+
     class Config:
         from_attributes = True
 
@@ -99,11 +101,26 @@ class CompetitionCreateIn(BaseModel):
     validation_date: Optional[str] = None
     freeze_date: Optional[str] = None
     task_config: Optional[dict] = None
+    join_method: str = "auto"  # "auto" | "manual"
 
 
 class CompetitionActionOut(BaseModel):
     message: str
     competition_id: str
+
+
+class CompetitionJoinRequestOut(BaseModel):
+    id: str
+    competition_id: str
+    user_id: str
+    team_id: Optional[str] = None
+    message: Optional[str] = None
+    status: str
+    created_at: Optional[str] = None
+    username: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 
 class DataSampleIn(BaseModel):

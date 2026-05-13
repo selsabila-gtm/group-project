@@ -24,6 +24,7 @@ from models import (
     Competition,
     CompetitionOrganizer,
     CompetitionParticipant,
+    CompetitionJoinRequest,
     CompetitionPrompt,
     DashboardStat,
     RecentCompetition,
@@ -147,6 +148,7 @@ def competition_display_dict(competition: Competition) -> dict:
             "footer": footer,
             "muted": False,
             "datasets_json": "[]",
+            "join_method": competition.join_method or "auto",
         }
     )
 
@@ -274,6 +276,7 @@ def build_competition_record(data: CompetitionCreateIn, is_draft: bool) -> Compe
         validation_date=data.validation_date,
         freeze_date=data.freeze_date,
         dataset_config=json.dumps(config_to_store),
+        join_method=getattr(data, "join_method", "auto") or "auto",
     )
 
 
@@ -621,15 +624,17 @@ def is_joined_competition(
 @router.post("/competitions/{competition_id}/join")
 def join_competition(
     competition_id: str,
+    body: dict = {},
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    from models import UserProfile
+
     competition = (
         db.query(Competition)
         .filter(Competition.id == competition_id, Competition.is_draft == False)
         .first()
     )
-
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
 
@@ -637,31 +642,288 @@ def join_competition(
     if real_status != "OPEN":
         raise HTTPException(status_code=400, detail=f"Competition is {real_status.lower()} and cannot be joined")
 
-    if get_user_role(db, competition_id, current_user.id) == "organizer":
+    current_role = get_user_role(db, competition_id, current_user.id)
+    if current_role == "organizer":
         raise HTTPException(status_code=400, detail="Organizer cannot join as participant")
-
-    if get_user_role(db, competition_id, current_user.id) == "participant":
+    if current_role == "participant":
         raise HTTPException(status_code=400, detail="Already joined this competition")
 
-    participants_count = db.query(CompetitionParticipant).filter(CompetitionParticipant.competition_id == competition_id).count()
+    existing_req = (
+        db.query(CompetitionJoinRequest)
+        .filter(
+            CompetitionJoinRequest.competition_id == competition_id,
+            CompetitionJoinRequest.user_id == current_user.id,
+            CompetitionJoinRequest.status == "pending",
+        )
+        .first()
+    )
+    if existing_req:
+        raise HTTPException(status_code=400, detail="You already have a pending join request for this competition")
 
-    if competition.max_teams and competition.max_teams > 0 and participants_count >= competition.max_teams:
-        raise HTTPException(status_code=400, detail="Competition is full")
+    required_skills = _parse_skills(competition.required_skills)
+    if required_skills:
+        user_skills = _get_user_skills(db, current_user.id)
+        missing = set(required_skills) - set(user_skills)
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You are missing required skill(s): {', '.join(sorted(missing))}",
+            )
 
+    join_method = competition.join_method or "auto"
+
+    if join_method == "manual":
+        message = (body.get("message") or "").strip() or None
+        now = datetime.utcnow().isoformat()
+
+        req = CompetitionJoinRequest(
+            competition_id=competition_id,
+            user_id=str(current_user.id),
+            team_id=None,
+            message=message,
+            status="pending",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(req)
+
+        from .notifications import create_notification
+
+        organizers = db.query(CompetitionOrganizer).filter(
+            CompetitionOrganizer.competition_id == competition_id
+        ).all()
+
+        profile = db.query(UserProfile).filter(UserProfile.user_id == str(current_user.id)).first()
+        actor_name = profile.full_name if profile else "A user"
+
+        for org in organizers:
+            create_notification(
+                db,
+                user_id=org.user_id,
+                type="competition_join_request",
+                title="New Competition Join Request",
+                message=f"{actor_name} requested to join \"{competition.title}\".",
+                actor_id=str(current_user.id),
+                actor_name=actor_name,
+                competition_id=competition.id,
+                competition_name=competition.title,
+            )
+
+        db.commit()
+        return {"message": "Join request submitted. Waiting for organizer approval.", "status": "pending"}
+
+    _do_join_competition(db, competition, str(current_user.id), team_id=None)
+    db.commit()
+    return {"message": "Joined competition successfully", "status": "joined"}
+
+
+@router.post("/competitions/{competition_id}/join-team")
+def join_competition_as_team(
+    competition_id: str,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Team join. Only the team LEADER may call this.
+    Validates:
+      - caller is team leader
+      - team size matches competition's exact size requirement (if any)
+      - team collectively covers all required skills
+    Then either auto-joins or creates a pending request.
+    """
+    from models import UserProfile
+    from models_teams import Team, TeamMember
+
+    competition = (
+        db.query(Competition)
+        .filter(Competition.id == competition_id, Competition.is_draft == False)
+        .first()
+    )
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    real_status = compute_competition_status(competition)
+    if real_status != "OPEN":
+        raise HTTPException(status_code=400, detail=f"Competition is {real_status.lower()} and cannot be joined")
+
+    team_id = str(body.get("team_id") or "").strip()
+    if not team_id:
+        raise HTTPException(status_code=400, detail="team_id is required")
+
+    team = db.query(Team).filter(Team.id == int(team_id)).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    # Caller must be the team leader
+    leader_row = (
+        db.query(TeamMember)
+        .filter(
+            TeamMember.team_id == int(team_id),
+            TeamMember.user_id == str(current_user.id),
+            TeamMember.role == "leader",
+        )
+        .first()
+    )
+    if not leader_row:
+        raise HTTPException(status_code=403, detail="Only the team leader can submit a join request")
+
+    # Team already joined?
+    already = (
+        db.query(CompetitionParticipant)
+        .filter(
+            CompetitionParticipant.competition_id == competition_id,
+            CompetitionParticipant.team_id == team_id,
+        )
+        .first()
+    )
+    if already:
+        raise HTTPException(status_code=400, detail="This team has already joined the competition")
+
+    # Pending request already?
+    existing_req = (
+        db.query(CompetitionJoinRequest)
+        .filter(
+            CompetitionJoinRequest.competition_id == competition_id,
+            CompetitionJoinRequest.team_id == team_id,
+            CompetitionJoinRequest.status == "pending",
+        )
+        .first()
+    )
+    if existing_req:
+        raise HTTPException(status_code=400, detail="This team already has a pending join request")
+
+    # Team member list
+    member_rows = (
+        db.query(TeamMember)
+        .filter(TeamMember.team_id == int(team_id))
+        .all()
+    )
+    team_size = len(member_rows)
+
+    # ── Team size validation ──────────────────────────────────────────────────
+    min_m = competition.min_members
+    max_m = competition.max_members
+    if min_m and team_size < min_m:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Team has {team_size} member(s) but the competition requires at least {min_m}",
+        )
+    if max_m and team_size > max_m:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Team has {team_size} member(s) but the competition allows at most {max_m}",
+        )
+
+    # ── Collective skill validation ───────────────────────────────────────────
+    required_skills = _parse_skills(competition.required_skills)
+    if required_skills:
+        member_user_ids = [str(m.user_id) for m in member_rows]
+        profiles = (
+            db.query(UserProfile)
+            .filter(UserProfile.user_id.in_(member_user_ids))
+            .all()
+        )
+        team_skills: set = set()
+        for p in profiles:
+            team_skills.update(_get_user_skills(db, p.user_id))
+        missing = set(required_skills) - team_skills
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Team is missing required skill(s): {', '.join(sorted(missing))}. Distribute them across members or recruit someone with those skills.",
+            )
+
+    join_method = competition.join_method or "auto"
+    message = (body.get("message") or "").strip() or None
+
+    if join_method == "manual":
+        now = datetime.utcnow().isoformat()
+        req = CompetitionJoinRequest(
+            competition_id=competition_id,
+            user_id=str(current_user.id),
+            team_id=team_id,
+            message=message,
+            status="pending",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(req)
+        from .notifications import create_notification
+
+        organizers = db.query(CompetitionOrganizer).filter(
+            CompetitionOrganizer.competition_id == competition_id
+        ).all()
+
+        for org in organizers:
+            create_notification(
+                db,
+                user_id=org.user_id,
+                type="competition_join_request",
+                title="New Team Join Request",
+                message=f"Team \"{team.name}\" requested to join \"{competition.title}\".",
+                actor_id=str(current_user.id),
+                team_id=team.id,
+                team_name=team.name,
+                competition_id=competition.id,
+                competition_name=competition.title,
+            )
+        db.commit()
+        return {"message": "Join request submitted. Waiting for organizer approval.", "status": "pending"}
+
+    # AUTO — add all team members as participants
+    for m in member_rows:
+        already_p = (
+            db.query(CompetitionParticipant)
+            .filter(
+                CompetitionParticipant.competition_id == competition_id,
+                CompetitionParticipant.user_id == str(m.user_id),
+            )
+            .first()
+        )
+        if not already_p:
+            _do_join_competition(db, competition, str(m.user_id), team_id=team_id)
+    db.commit()
+    return {"message": f"Team '{team.name}' joined competition successfully", "status": "joined"}
+
+
+# ── Helpers for join logic ─────────────────────────────────────────────────────
+
+def _parse_skills(raw) -> list:
+    """Return list of skill strings from JSON or None."""
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        return [str(s).strip() for s in (parsed if isinstance(parsed, list) else []) if str(s).strip()]
+    except Exception:
+        return []
+
+def _get_user_skills(db: Session, user_id: str) -> list[str]:
+    row = db.execute(
+        text("SELECT skills FROM user_profiles WHERE user_id = :uid"),
+        {"uid": str(user_id)},
+    ).first()
+
+    if not row or not row[0]:
+        return []
+
+    return [str(s).strip() for s in row[0] if str(s).strip()]
+
+def _do_join_competition(db: Session, competition: Competition, user_id: str, team_id=None):
     db.add(
         CompetitionParticipant(
-            competition_id=competition_id,
-            user_id=current_user.id,
-            team_id=None,
+            competition_id=competition.id,
+            user_id=user_id,
+            team_id=team_id,
             status="joined",
             joined_at=datetime.utcnow().isoformat(),
         )
     )
-
     db.add(
         RecentCompetition(
             competition_id=competition.id,
-            user_id=current_user.id,
+            user_id=user_id,
             title=competition.title,
             type=task_category(competition),
             status="IN PROGRESS",
@@ -670,11 +932,163 @@ def join_competition(
             icon=get_icon_for_task(competition.task_type),
         )
     )
+    update_dashboard_stat_for_user(db, user_id)
 
-    update_dashboard_stat_for_user(db, current_user.id)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Join-request management (organizer only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/competitions/{competition_id}/join-requests")
+def list_join_requests(
+    competition_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    from models import UserProfile
+    from models_teams import Team, TeamMember
+
+    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    if get_user_role(db, competition_id, current_user.id) != "organizer":
+        raise HTTPException(status_code=403, detail="Only the organizer can view join requests")
+
+    requests = (
+        db.query(CompetitionJoinRequest)
+        .filter(
+            CompetitionJoinRequest.competition_id == competition_id,
+            CompetitionJoinRequest.status == "pending",
+        )
+        .order_by(CompetitionJoinRequest.created_at.asc())
+        .all()
+    )
+
+    result = []
+
+    for req in requests:
+        profile = db.query(UserProfile).filter(UserProfile.user_id == req.user_id).first()
+
+        team_info = None
+
+        if req.team_id:
+            team = db.query(Team).filter(Team.id == int(req.team_id)).first()
+            members = db.query(TeamMember).filter(TeamMember.team_id == int(req.team_id)).all()
+
+            team_members = []
+
+            for m in members:
+                p = db.query(UserProfile).filter(UserProfile.user_id == str(m.user_id)).first()
+
+                team_members.append({
+                    "user_id": str(m.user_id),
+                    "username": p.full_name if p else str(m.user_id),
+                    "email": p.email if p else None,
+                    "role": m.role,
+                    "skills": _get_user_skills(db, m.user_id),
+                })
+
+            team_info = {
+                "id": req.team_id,
+                "name": team.name if team else f"Team #{req.team_id}",
+                "members": team_members,
+                "member_count": len(team_members),
+            }
+
+        result.append({
+            "id": req.id,
+            "competition_id": req.competition_id,
+            "user_id": req.user_id,
+            "username": profile.full_name if profile else req.user_id,
+            "email": profile.email if profile else None,
+            "skills": _get_user_skills(db, req.user_id),
+            "team_id": req.team_id,
+            "team": team_info,
+            "message": req.message,
+            "status": req.status,
+            "created_at": req.created_at,
+        })
+
+    return result
+
+@router.post("/competitions/{competition_id}/join-requests/{request_id}/approve")
+def approve_join_request(
+    competition_id: str,
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Organizer approves a pending join request."""
+    from models_teams import TeamMember
+
+    if get_user_role(db, competition_id, current_user.id) != "organizer":
+        raise HTTPException(status_code=403, detail="Only the organizer can approve join requests")
+
+    req = db.query(CompetitionJoinRequest).filter(
+        CompetitionJoinRequest.id == request_id,
+        CompetitionJoinRequest.competition_id == competition_id,
+        CompetitionJoinRequest.status == "pending",
+    ).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Join request not found")
+
+    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+
+    if req.team_id:
+        # Approve whole team
+        member_rows = (
+            db.query(TeamMember)
+            .filter(TeamMember.team_id == int(req.team_id))
+            .all()
+        )
+        for m in member_rows:
+            already = db.query(CompetitionParticipant).filter(
+                CompetitionParticipant.competition_id == competition_id,
+                CompetitionParticipant.user_id == str(m.user_id),
+            ).first()
+            if not already:
+                _do_join_competition(db, competition, str(m.user_id), team_id=req.team_id)
+    else:
+        # Approve solo
+        already = db.query(CompetitionParticipant).filter(
+            CompetitionParticipant.competition_id == competition_id,
+            CompetitionParticipant.user_id == req.user_id,
+        ).first()
+        if not already:
+            _do_join_competition(db, competition, req.user_id, team_id=None)
+
+    req.status = "approved"
+    req.updated_at = datetime.utcnow().isoformat()
     db.commit()
+    return {"message": "Join request approved"}
 
-    return {"message": "Joined competition successfully"}
+
+@router.post("/competitions/{competition_id}/join-requests/{request_id}/reject")
+def reject_join_request(
+    competition_id: str,
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Organizer rejects a pending join request."""
+    if get_user_role(db, competition_id, current_user.id) != "organizer":
+        raise HTTPException(status_code=403, detail="Only the organizer can reject join requests")
+
+    req = db.query(CompetitionJoinRequest).filter(
+        CompetitionJoinRequest.id == request_id,
+        CompetitionJoinRequest.competition_id == competition_id,
+        CompetitionJoinRequest.status == "pending",
+    ).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Join request not found")
+
+    req.status = "rejected"
+    req.updated_at = datetime.utcnow().isoformat()
+    db.commit()
+    return {"message": "Join request rejected"}
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -742,6 +1156,18 @@ def get_competition_details(
     d["is_participant"] = role == "participant"
     d["datasets_count"] = db.query(CompetitionDataset).filter(CompetitionDataset.competition_id == competition_id).count()
 
+    # Expose whether this user has a pending manual join request
+    pending_req = (
+        db.query(CompetitionJoinRequest)
+        .filter(
+            CompetitionJoinRequest.competition_id == competition_id,
+            CompetitionJoinRequest.user_id == current_user.id,
+            CompetitionJoinRequest.status == "pending",
+        )
+        .first()
+    )
+    d["has_pending_request"] = pending_req is not None
+
     return d
 
 
@@ -799,6 +1225,7 @@ def update_competition(
     competition.validation_date = data.validation_date
     competition.freeze_date = data.freeze_date
     competition.is_draft = False
+    competition.join_method = getattr(data, "join_method", "auto") or "auto"
 
     # Save updated task config
     task_config = getattr(data, "task_config", None) or {}

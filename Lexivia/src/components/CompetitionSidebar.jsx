@@ -46,7 +46,7 @@ const NAV_ITEMS = [
     },
     
     {
-        key: "experiments",
+        key: "experiment-registry",
         label: "Experiments",
         icon: (
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
