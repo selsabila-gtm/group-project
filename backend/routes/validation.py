@@ -70,17 +70,32 @@ def _parse_annotation(annotation) -> dict:
 
 
 def _parse_json_list(value) -> list:
-    if not value:
+    """
+    Safely coerce a value to a Python list.
+
+    Handles three cases that can appear in the DB:
+      1. Already a list (correct — Column(JSON) returning native Python).
+      2. A JSON string encoding a list  e.g. '[{"user_id":…}]'
+         (legacy rows written with json.dumps() before this fix).
+      3. A double-encoded string  e.g. '"[{…}]"'  (old bug — two json.dumps calls).
+    """
+    if not value and value != 0:
         return []
     if isinstance(value, list):
         return value
     if isinstance(value, dict):
         return []
-    try:
-        r = json.loads(value)
-        return r if isinstance(r, list) else []
-    except Exception:
-        return []
+    # String path — may be single- or double-encoded
+    if isinstance(value, str):
+        try:
+            result = json.loads(value)
+            # Double-encoded: json.loads returned another string
+            if isinstance(result, str):
+                result = json.loads(result)
+            return result if isinstance(result, list) else []
+        except Exception:
+            return []
+    return []
 
 
 def _require_access(competition_id: str, user_id: str, db: Session) -> bool:
@@ -321,7 +336,9 @@ def approve_sample(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
-    sample.approvals_json = json.dumps(approvals)
+    # approvals_json is Column(JSON) — assign the Python list directly.
+    # Never call json.dumps() on a JSON column; SQLAlchemy serialises it automatically.
+    sample.approvals_json = approvals
 
     approve_count = len([a for a in approvals if a.get("action") == "approve"])
     sample.approval_count = approve_count
@@ -330,12 +347,12 @@ def approve_sample(
         sample.status = "rejected"
         flags = _parse_json_list(sample.flags)
         flags.append(f"Rejected by {approvals[-1]['name']}: {note or 'No reason given'}")
-        sample.flags = json.dumps(flags)
+        sample.flags = flags          # Column(JSON) — assign list, not json.dumps(list)
     elif action == "flag":
         sample.status = "flagged"
         flags = _parse_json_list(sample.flags)
         flags.append(f"Flagged by {approvals[-1]['name']}: {note or 'No reason given'}")
-        sample.flags = json.dumps(flags)
+        sample.flags = flags          # Column(JSON) — assign list, not json.dumps(list)
     elif approve_count >= REQUIRED_APPROVALS:
         sample.status = "can_be_validated"
 
@@ -376,20 +393,19 @@ def update_sample_status(
     # Any member can do anything — just check they belong to this competition
     _require_access(sample.competition_id, str(current_user.id), db)
 
-    # 2-annotator rule: "validated" requires at least 2 distinct contributors
+    # 2-annotator rule: "validated" requires REQUIRED_APPROVALS approvals
+    # on THIS specific sample — not a competition-wide contributor count.
+    # (A sample in "can_be_validated" already passed this check via the approve flow.)
     if new_status == "validated":
-        distinct = (
-            db.query(func.count(DataSample.contributor_id.distinct()))
-            .filter(DataSample.competition_id == sample.competition_id)
-            .scalar()
-        )
-        if distinct < 2:
+        approvals     = _parse_json_list(getattr(sample, "approvals_json", None))
+        approve_count = len([a for a in approvals if a.get("action") == "approve"])
+        if approve_count < REQUIRED_APPROVALS and sample.status != "can_be_validated":
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    f"Cannot validate: at least 2 distinct annotators must have submitted "
-                    f"to this competition. Currently {distinct} annotator(s). "
-                    "Have a second team member contribute before validating."
+                    f"Cannot validate: this sample needs {REQUIRED_APPROVALS} approvals "
+                    f"but only has {approve_count}. "
+                    "Have another team member click ✓ Approve on this sample first."
                 ),
             )
 
@@ -463,10 +479,10 @@ async def _run_revalidation(competition_id: str, task_type: str):
             sample.status = result.status
             if result.quality_score is not None:
                 sample.quality_score = float(result.quality_score)
-            sample.flags = json.dumps(result.reasons)
+            sample.flags = result.reasons   # Column(JSON) — assign list directly
             if hasattr(sample, "score_breakdown"):
-                sample.score_breakdown = json.dumps(
-                    getattr(result, "score_breakdown", []))
+                # score_breakdown is Column(JSON) — assign list directly, no json.dumps()
+                sample.score_breakdown = getattr(result, "score_breakdown", [])
         db.commit()
     except Exception as exc:
         db.rollback()
