@@ -167,33 +167,58 @@ function CompetitionDetails() {
 
     // Team join (leader submits on behalf of team)
     const joinAsTeam = async () => {
-        if (!selectedTeamId) { alert("Please select a team."); return; }
+        if (!selectedTeamId) {
+            alert("Please select a team.")
+            return
+        }
+
         try {
-            setJoining(true);
-            const token = localStorage.getItem("token");
+            setJoining(true)
+
+            const token = localStorage.getItem("token")
+
             const res = await fetch(`http://127.0.0.1:8000/competitions/${competitionId}/join-team`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ team_id: selectedTeamId, message: joinMessage }),
-            });
-            const data = await res.json();
-            if (!res.ok) { alert(data.detail || "Could not submit team join request"); return; }
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    team_id: selectedTeamId,
+                    message: joinMessage,
+                }),
+            })
 
-            setShowTeamModal(false);
+            const text = await res.text()
+
+            let data = {}
+            try {
+                data = text ? JSON.parse(text) : {}
+            } catch {
+                data = { detail: text }
+            }
+
+            if (!res.ok) {
+                alert(data.detail || "Could not submit team join request")
+                return
+            }
+
+            setShowTeamModal(false)
+
             if (data.status === "pending") {
-                setHasPendingRequest(true);
-                alert("Team join request submitted and is awaiting organizer approval.");
+                setHasPendingRequest(true)
+                alert("Team join request submitted and is awaiting organizer approval.")
             } else {
-                setIsJoined(true);
-                navigate(`/competitions/${competitionId}/data-collection`);
+                setIsJoined(true)
+                navigate(`/competitions/${competitionId}/data-collection`)
             }
         } catch (error) {
-            console.error(error);
-            alert("Backend error while joining competition");
+            console.error(error)
+            alert(error.message || "Backend error while joining competition")
         } finally {
-            setJoining(false);
+            setJoining(false)
         }
-    };
+    }
 
     // Legacy shim — called by the plain "Join Competition" button when no team size is required
     const joinCompetition = joinSolo;

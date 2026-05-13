@@ -12,22 +12,33 @@ router = APIRouter(tags=["auth"])
 
 @router.post("/sync-user")
 def sync_user(data: dict, db: Session = Depends(get_db)):
-    user_id   = data.get("user_id")
-    full_name = data.get("full_name")
-    email     = data.get("email", "")
+    user_id = data.get("user_id")
+    full_name = data.get("full_name") or ""
+    email = data.get("email") or ""
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Missing user_id")
 
     existing = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+
     if existing:
-        if not existing.email and email:   # backfill if missing
-            existing.email = email
-            db.commit()
-        return {"message": "User already exists"}
+        existing.full_name = full_name or existing.full_name
+        existing.email = email or existing.email
+        db.commit()
+        db.refresh(existing)
+        return {"message": "User profile updated"}
 
-    db.add(UserProfile(user_id=user_id, full_name=full_name, email=email))
+    db_user = UserProfile(
+        user_id=user_id,
+        full_name=full_name,
+        email=email,
+    )
+
+    db.add(db_user)
     db.commit()
+    db.refresh(db_user)
+
     return {"message": "User profile created"}
-
-
 @router.post("/signup")
 def signup(user: UserCreate, db: Session = Depends(get_db)):
     # 1. Create the user in Supabase auth

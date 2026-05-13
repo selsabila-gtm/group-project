@@ -32,6 +32,7 @@ import subprocess
 import uuid
 import os
 import socket
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -98,12 +99,24 @@ def get_workspace_path(competition_id: str, user_id: str) -> Path:
     path.mkdir(parents=True, exist_ok=True)
 
     defaults = {
-    "main_modeling.py": (
-        "import pandas as pd\n\n"
+        "main_modeling.py": (
+        "import pandas as pd\n"
+        "import pickle\n"
+        "from sklearn.feature_extraction.text import TfidfVectorizer\n"
+        "from sklearn.linear_model import LogisticRegression\n"
+        "from sklearn.pipeline import Pipeline\n\n"
         "train_df = pd.read_csv('/home/jovyan/work/data/train.csv')\n"
         "test_df = pd.read_csv('/home/jovyan/work/data/test.csv')\n\n"
-        "print(train_df.head())\n"
-        "print(test_df.head())\n"
+        "train_df['text_content'] = train_df['text_content'].fillna('').astype(str)\n"
+        "train_df['label'] = train_df['label'].fillna('').astype(str)\n\n"
+        "model = Pipeline([\n"
+        "    ('tfidf', TfidfVectorizer()),\n"
+        "    ('clf', LogisticRegression(max_iter=1000))\n"
+        "])\n\n"
+        "model.fit(train_df['text_content'], train_df['label'])\n\n"
+        "with open('model.pkl', 'wb') as f:\n"
+        "    pickle.dump(model, f)\n\n"
+        "print('Model saved to model.pkl')\n"
     ),
 
     "utils.py": "# Helper functions\n",
@@ -906,7 +919,7 @@ def list_experiments(
 
     return runs
 
-def compute_model_accuracy_from_test_csv(base_path: Path, model_filename: str):
+def try_compute_model_accuracy_from_test_csv(base_path: Path, model_filename: str):
     import pickle
     import pandas as pd
     from sklearn.metrics import accuracy_score
@@ -921,26 +934,25 @@ def compute_model_accuracy_from_test_csv(base_path: Path, model_filename: str):
         )
 
     if not test_path.exists():
-        raise HTTPException(
-            status_code=400,
-            detail="test.csv not found. Click Load Dataset before saving the model.",
-        )
+        return None, None, "test.csv not found, so the model was saved without evaluation."
 
-    test_df = pd.read_csv(test_path)
+    try:
+        test_df = pd.read_csv(test_path)
 
-    if "text_content" not in test_df.columns or "label" not in test_df.columns:
-        raise HTTPException(
-            status_code=400,
-            detail="test.csv must contain text_content and label columns.",
-        )
+        if "text_content" not in test_df.columns or "label" not in test_df.columns:
+            return None, None, "test.csv must contain text_content and label columns. Saved without evaluation."
 
-    with model_path.open("rb") as f:
-        model = pickle.load(f)
+        with model_path.open("rb") as f:
+            model = pickle.load(f)
 
-    preds = model.predict(test_df["text_content"])
-    accuracy = accuracy_score(test_df["label"].astype(str), [str(p) for p in preds])
+        preds = model.predict(test_df["text_content"].fillna("").astype(str))
+        accuracy = accuracy_score(test_df["label"].astype(str), [str(p) for p in preds])
 
-    return "accuracy", str(round(float(accuracy), 4))
+        return "accuracy", str(round(float(accuracy), 4)), None
+
+    except Exception as exc:
+        return None, None, f"Evaluation failed, but model was saved: {exc}"
+
 
 @router.post("/competitions/{competition_id}/experiments")
 def save_experiment(
@@ -960,38 +972,82 @@ def save_experiment(
         raise HTTPException(status_code=400, detail="Launch a workspace before saving model")
 
     base_path = get_workspace_path(competition_id, current_user.id)
-    model_filename = body.get("model_filename") or body.get("artifact_path") or "model.pkl"
 
-    metric_name, metric_value = compute_model_accuracy_from_test_csv(
-    base_path,
-    model_filename,
-)
+    model_filename = (
+        body.get("model_filename")
+        or body.get("artifact_path")
+        or "model.pkl"
+    )
+
+    model_path = safe_file_path(base_path, model_filename)
+
+    if not model_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model file not found: {model_filename}. Click Run first and make sure your code creates this file.",
+        )
+
+    metric_name, metric_value, evaluation_warning = try_compute_model_accuracy_from_test_csv(
+        base_path,
+        model_filename,
+    )
+
+    model_name = body.get("name") or "Untitled Model"
+    suffix = model_path.suffix or ".pkl"
+
+    artifact_filename = f"{safe_name(model_name)}-{uuid.uuid4().hex[:8]}{suffix}"
+
+    storage_path = (
+        f"{competition_id}/"
+        f"{current_user.id}/"
+        f"{artifact_filename}"
+    )
+
+    try:
+        with model_path.open("rb") as f:
+            supabase.storage.from_("experiment-models").upload(
+                path=storage_path,
+                file=f,
+                file_options={
+                    "content-type": "application/octet-stream",
+                    "upsert": "true",
+                },
+            )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Model upload to Supabase Storage failed: {exc}",
+        )
+
+    parameters = {
+        "dataset_version": body.get("dataset_version"),
+        "dataset_files": body.get("dataset_files") or [],
+        "hyperparameters": body.get("hyperparameters") or {},
+        "resource_tier": body.get("resource_tier"),
+        "active_file": body.get("active_file"),
+        "model_filename": model_filename,
+        "supabase_bucket": "experiment-models",
+        "supabase_storage_path": storage_path,
+        "evaluation_warning": evaluation_warning,
+    }
 
     run = ExperimentRun(
         workspace_id=workspace.id,
         competition_id=competition_id,
         user_id=current_user.id,
-        name=body.get("name") or "Untitled Model",
+        name=model_name,
         notes=body.get("notes") or "",
         metric_name=metric_name,
         metric_value=metric_value,
-        parameters_json=json.dumps({
-            "dataset_version": body.get("dataset_version"),
-            "dataset_files": body.get("dataset_files") or [],
-            "hyperparameters": body.get("hyperparameters") or {},
-            "resource_tier": body.get("resource_tier"),
-            "active_file": body.get("active_file"),
-            "model_filename": body.get("model_filename"),
-        }),
-        artifact_path=body.get("artifact_path"),
+        parameters_json=json.dumps(parameters),
+        artifact_path=storage_path,
     )
 
     db.add(run)
     db.commit()
     db.refresh(run)
+
     return run
-
-
 def _read_csv_from_supabase(storage_path: str):
     import pandas as pd
     import io

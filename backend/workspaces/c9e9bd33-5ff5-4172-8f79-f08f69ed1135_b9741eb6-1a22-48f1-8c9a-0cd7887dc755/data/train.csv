@@ -1,9 +1,0 @@
-id,text_content,label,audio_url,quality_score,version_tag,submitted_at,annotation_json
-304519ae-ff2d-4cc5-bbb6-803c12c69a74,Shipping was acceptable,neutral,,0.946,,2026-05-12 23:22:49.675242+00:00,"{""label"": ""neutral"", ""aspects"": [], ""sentiment"": ""neutral"", ""confidence"": 0.8}"
-5088dd7f-55ad-4dbc-91c0-783248f926fa,"It is okay, nothing special",neutral,,0.957,,2026-05-12 23:20:55.848194+00:00,"{""label"": ""neutral"", ""aspects"": [], ""sentiment"": ""neutral"", ""confidence"": 0.8}"
-96b66aec-9429-4d7c-849e-69b765cff17f,The quality is amazing,positive,,0.952,,2026-05-12 23:20:38.245638+00:00,"{""label"": ""positive"", ""aspects"": [], ""sentiment"": ""positive"", ""confidence"": 0.8}"
-0fac012f-7fe1-4dfa-ac67-2dce37cdc095,customer support solved my issue quickly,positive,,0.963,,2026-05-12 23:23:13.109583+00:00,"{""label"": ""positive"", ""aspects"": [], ""sentiment"": ""positive"", ""confidence"": 0.8}"
-e738ec99-987b-47d9-ac19-d32febd36031,Very satisfied with the product,positive,,0.957,,2026-05-12 23:21:48.457392+00:00,"{""label"": ""positive"", ""aspects"": [], ""sentiment"": ""positive"", ""confidence"": 0.8}"
-728e5688-6284-4f67-bfab-9f17c8503d8a,The package arrived damaged,negative,,0.952,,2026-05-12 23:22:07.027856+00:00,"{""label"": ""negative"", ""aspects"": [], ""sentiment"": ""negative"", ""confidence"": 0.8}"
-92138324-ab84-44f0-b3b6-9ebb7389460c,The experience was average,neutral,,0.952,,2026-05-12 23:23:38.140478+00:00,"{""label"": ""neutral"", ""aspects"": [], ""sentiment"": ""neutral"", ""confidence"": 0.8}"
-5c873e53-5f83-4627-a1c4-42c0f3beab6a,The service was terrible,negative,,0.952,,2026-05-12 23:21:23.809607+00:00,"{""label"": ""negative"", ""aspects"": [], ""sentiment"": ""negative"", ""confidence"": 0.8}"

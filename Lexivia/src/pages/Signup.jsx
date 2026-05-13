@@ -1,15 +1,15 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
 import Navbar from "../components/Navbar"
-import { signInWithGoogle, signInWithGithub } from "../lib/auth"
-import { supabase } from "../config/supabase.js"
+import { signUp, signInWithGoogle, signInWithGithub } from "../lib/auth"
+import { syncProfile } from "../lib/syncProfile"
 
 // Must be registered in Supabase Dashboard → Authentication → URL Configuration → Redirect URLs
 const REDIRECT_URL = `${window.location.origin}/auth/callback`
 
 export default function Signup() {
-  const [form, setForm]       = useState({ full_name: "", email: "", password: "", confirm: "" })
-  const [error, setError]     = useState("")
+  const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm: "" })
+  const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -20,53 +20,61 @@ export default function Signup() {
     setError("")
     setSuccess("")
 
-    // ── Client-side validation ─────────────────────────────────────────────
-    if (!form.full_name.trim())             { setError("Please enter your full name"); return }
-    if (!form.email.trim())                 { setError("Please enter your email"); return }
-    if (form.password !== form.confirm)     { setError("Passwords do not match"); return }
-    if (form.password.length < 6)           { setError("Password must be at least 6 characters"); return }
+    if (!form.full_name.trim()) {
+      setError("Please enter your full name")
+      return
+    }
+
+    if (!form.email.trim()) {
+      setError("Please enter your email")
+      return
+    }
+
+    if (form.password !== form.confirm) {
+      setError("Passwords do not match")
+      return
+    }
+
+    if (form.password.length < 6) {
+      setError("Password must be at least 6 characters")
+      return
+    }
 
     setLoading(true)
+
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email:    form.email.trim(),
+      const { user, session } = await signUp({
+        fullName: form.full_name,
+        email: form.email,
         password: form.password,
-        options: {
-          data:            { full_name: form.full_name.trim() },
-          emailRedirectTo: REDIRECT_URL,   // ← where Supabase sends the confirmation link
-        },
       })
 
-      if (signUpError) throw signUpError
-
-      const { user, session } = data
-
-      if (session) {
-        // ── Email confirmation is OFF in Supabase → session returned immediately ──
+      if (session && user) {
         localStorage.setItem("token", session.access_token)
-        localStorage.setItem("user",  JSON.stringify(user))
+        localStorage.setItem("user", JSON.stringify(user))
 
-        // Sync profile to backend (fire-and-forget)
-        syncProfile(user.id, form.full_name.trim(), user.email, session.access_token)
-
-        window.location.href = "/dashboard"
-
-      } else if (user) {
-        // ── Email confirmation is ON → user exists but no session yet ────────
-        // Store full_name so AuthCallback can use it after the redirect
-        sessionStorage.setItem("pending_full_name", form.full_name.trim())
-        setSuccess(
-          "Account created! Check your email and click the confirmation link to activate your account."
+        await syncProfile(
+          user.id,
+          form.full_name.trim(),
+          user.email,
+          session.access_token
         )
 
-      } else {
-        // Should not happen, but handle gracefully
-        throw new Error("Signup returned no user. Please try again.")
+        window.location.href = "/dashboard"
+        return
       }
 
+      if (user && !session) {
+        sessionStorage.setItem("pending_full_name", form.full_name.trim())
+        setSuccess("Account created! Check your email and click the confirmation link to activate your account.")
+        return
+      }
+
+      throw new Error("Signup returned no user. Please try again.")
     } catch (err) {
-      // Supabase error for already-registered email
-      if (err.message?.toLowerCase().includes("already registered")) {
+      const msg = String(err.message || "").toLowerCase()
+
+      if (msg.includes("already registered") || msg.includes("already exists")) {
         setError("An account with this email already exists. Try logging in instead.")
       } else {
         setError(err.message || "Signup failed. Please try again.")
@@ -260,17 +268,3 @@ export default function Signup() {
 
 // ── Helper: sync profile to your backend ───────────────────────────────────────
 // Exported so AuthCallback.jsx can reuse it
-export async function syncProfile(userId, fullName, email, token) {
-  try {
-    await fetch("http://127.0.0.1:8000/sync-user", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ user_id: userId, full_name: fullName, email }),
-    })
-  } catch (err) {
-    console.error("sync-user failed:", err)
-  }
-}

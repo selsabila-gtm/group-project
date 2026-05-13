@@ -1,11 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { supabase } from "../config/supabase.js";
 import CompetitionSidebar from "../components/CompetitionSidebar";
 import "./Experiments.css";
 
 const API = "http://127.0.0.1:8000";
 
-function getToken() {
+async function getFreshToken() {
+    const {
+        data: { session },
+        error,
+    } = await supabase.auth.getSession();
+
+    if (error) {
+        console.warn("Supabase session error:", error);
+    }
+
+    if (session?.access_token) {
+        localStorage.setItem("token", session.access_token);
+        localStorage.setItem("user", JSON.stringify(session.user));
+        return session.access_token;
+    }
+
     return (
         localStorage.getItem("token") ||
         localStorage.getItem("access_token") ||
@@ -13,16 +29,54 @@ function getToken() {
     );
 }
 
-function authHeader() {
-    const token = getToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 function clearAuthAndGoLogin() {
     localStorage.removeItem("token");
     localStorage.removeItem("access_token");
     localStorage.removeItem("jwt");
+    localStorage.removeItem("user");
+
     window.location.href = "/login";
+}
+
+async function fetchWithFreshAuth(url, options = {}) {
+    let token = await getFreshToken();
+
+    let res = await fetch(url, {
+        ...options,
+        headers: {
+            ...(options.headers || {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+    });
+
+    if (res.status !== 401) {
+        return res;
+    }
+
+    const { data, error } = await supabase.auth.refreshSession();
+
+    if (!error && data.session?.access_token) {
+        token = data.session.access_token;
+
+        localStorage.setItem("token", token);
+        localStorage.setItem("user", JSON.stringify(data.session.user));
+
+        res = await fetch(url, {
+            ...options,
+            headers: {
+                ...(options.headers || {}),
+                Authorization: `Bearer ${token}`,
+            },
+        });
+    }
+
+    if (res.status === 401) {
+        clearAuthAndGoLogin();
+        throw new Error("Session expired. Please login again.");
+    }
+
+    return res;
 }
 
 const RESOURCE_TIERS = {
@@ -251,15 +305,7 @@ export default function Experiments() {
     };
 
     const request = async (url, options = {}) => {
-        const res = await fetch(url, {
-            ...options,
-            headers: { ...(options.headers || {}), ...authHeader() },
-        });
-
-        if (res.status === 401) {
-            clearAuthAndGoLogin();
-            throw new Error("Session expired. Please login again.");
-        }
+        const res = await fetchWithFreshAuth(url, options);
 
         const data = await safeJson(res);
 
@@ -394,14 +440,12 @@ export default function Experiments() {
         try {
             await saveCurrentFile();
 
-            const res = await fetch(
+            const res = await fetchWithFreshAuth(
                 `${API}/competitions/${competitionId}/workspace/download?filename=${encodeURIComponent(
                     activeFile
-                )}`,
-                { headers: authHeader() }
+                )}`
             );
 
-            if (res.status === 401) return clearAuthAndGoLogin();
             if (!res.ok) throw new Error("Download failed");
 
             const blob = await res.blob();
@@ -450,14 +494,16 @@ export default function Experiments() {
         formData.append("file", file);
 
         try {
-            const res = await fetch(
+            const res = await fetchWithFreshAuth(
                 `${API}/competitions/${competitionId}/workspace/upload`,
-                { method: "POST", headers: authHeader(), body: formData }
+                {
+                    method: "POST",
+                    body: formData,
+                }
             );
 
             const data = await safeJson(res);
 
-            if (res.status === 401) return clearAuthAndGoLogin();
             if (!res.ok) throw new Error(data.detail || "Could not upload file");
 
             await loadPage();
@@ -658,10 +704,53 @@ export default function Experiments() {
     };
 
     const saveExperiment = async (form) => {
-        setSavingRun(true);
+        if (!activeFile) {
+            setRunOutput("⚠ No active file selected.")
+            return
+        }
+
+        setSavingRun(true)
+        setShowSaveModal(false)
 
         try {
-            await saveCurrentFile();
+            setRunOutput("Preparing model save...\n\n1. Saving current file...")
+            await saveCurrentFile()
+
+            setRunOutput((prev) => `${prev}\n2. Running training code to create ${form.model_filename}...`)
+
+            const stdin = activeStdin
+                ? activeStdin.endsWith("\n")
+                    ? activeStdin
+                    : `${activeStdin}\n`
+                : ""
+
+            const runData = await request(
+                `${API}/competitions/${competitionId}/workspace/run`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        filename: activeFile,
+                        content: fileContent,
+                        stdin,
+                    }),
+                }
+            )
+
+            const output =
+                `${runData.stdout || ""}` +
+                `${runData.stderr ? `\nERROR:\n${runData.stderr}` : ""}` +
+                `${runData.exit_code !== undefined ? `\n\nExit code: ${runData.exit_code}` : ""}`
+
+            setRunOutput(output)
+
+            if (runData.exit_code !== 0) {
+                throw new Error(
+                    "Training code failed. Fix the error above before saving the model."
+                )
+            }
+
+            setRunOutput((prev) => `${prev}\n\n3. Saving model record to database...`)
 
             const data = await request(
                 `${API}/competitions/${competitionId}/experiments`,
@@ -684,21 +773,28 @@ export default function Experiments() {
                         resource_tier: resourceTier,
                         active_file: activeFile,
 
-                        model_filename: form.model_filename,
-                        artifact_path: form.model_filename,
+                        model_filename: form.model_filename || "model.pkl",
+                        artifact_path: form.model_filename || "model.pkl",
                     }),
                 }
-            );
+            )
 
-            setExperiments((prev) => [data, ...prev]);
-            setShowSaveModal(false);
-            showToast("Model saved");
+            setExperiments((prev) => [data, ...prev])
+
+            setRunOutput((prev) =>
+                `${prev}\n\n✓ Model saved successfully.\nArtifact: ${data.artifact_path || "model.pkl"}\nMetric: ${data.metric_name || "not evaluated"} ${data.metric_value || ""}`
+            )
+
+            showToast("Model saved")
+            await loadPage()
         } catch (err) {
-            setPageError(String(err.message || err));
+            const msg = String(err.message || err)
+            setRunOutput((prev) => `${prev}\n\n⚠ Save model failed:\n${msg}`)
+            showToast("Save model failed")
         } finally {
-            setSavingRun(false);
+            setSavingRun(false)
         }
-    };
+    }
 
     const pushChanges = async () => {
         await saveCurrentFile();
@@ -988,10 +1084,10 @@ export default function Experiments() {
 
                             <button
                                 className="ws-nb-btn ws-nb-btn--save"
-                                disabled={!runOutput}
+                                disabled={!isRunning || running || savingRun}
                                 onClick={() => setShowSaveModal(true)}
                             >
-                                ↑ Save Model
+                                {savingRun ? "Saving Model..." : "↑ Save Model"}
                             </button>
                         </div>
 

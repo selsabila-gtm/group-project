@@ -25,6 +25,7 @@ import Experiments from "./pages/Experiments";
 
 import ExperimentRegistry from "./pages/ExperimentRegistry";
 import Leaderboard from "./pages/leaderboard";
+import SetPassword from "./pages/SetPassword";
 
 import "./index.css";
 
@@ -75,7 +76,9 @@ function App() {
           <Route path="/signup" element={<Signup />} />
         </Route>
 
-        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/auth/callback" element={<AuthCallback />}
+        />
+        <Route path="/set-password" element={<SetPassword />} />
 
         {/* Protected pages */}
         <Route element={<ProtectedRoute />}>
@@ -87,13 +90,13 @@ function App() {
           <Route path="/competitions/:competitionId/data-collection" element={<DataCollection />} />
           <Route path="/competitions/:competitionId/experiments" element={<Experiments />} />
 
-<Route
-  path="/competitions/:competitionId/leaderboard"
-  element={<Leaderboard />}
-/>
+          <Route
+            path="/competitions/:competitionId/leaderboard"
+            element={<Leaderboard />}
+          />
 
-<Route path="/competitions/:id/dataset-hub" element={<DatasetHub />} />
-<Route path="/competitions/:competitionId/experiment-registry" element={<ExperimentRegistry />} />
+          <Route path="/competitions/:id/dataset-hub" element={<DatasetHub />} />
+          <Route path="/competitions/:competitionId/experiment-registry" element={<ExperimentRegistry />} />
 
           <Route
             path="/competitions/:competitionId/organizer"
