@@ -23,6 +23,18 @@ Changes in this version
    yt-dlp's writecomments feature instead of BeautifulSoup (YouTube renders
    comments client-side so httpx alone cannot extract them).
 
+6. YOUTUBE CDN TIMEOUT FIX  — the /scrape/video endpoint now handles the
+   "Connection to rr*.googlevideo.com timed out" error gracefully:
+     a) yt-dlp options hardened: geo_bypass, nocheckcertificate, browser UA
+        headers, fragment_retries=10, higher socket_timeout, extractor_args
+        to reduce bot-detection throttling.
+     b) Two-phase download: audio task first attempts a full download; if
+        the CDN connection times out, a subtitle-only retry is attempted
+        automatically and text segments are returned with audio_url=None
+        instead of crashing with 422.
+     c) Clear error distinction: "no subtitles found" vs "network/CDN error"
+        vs "video unavailable" each surface a different user-readable message.
+
 Two public endpoints (unchanged interface):
   POST /scrape/video   — yt-dlp subtitles + optional audio clips
   POST /scrape/text    — httpx + BeautifulSoup (or yt-dlp for YT comments)
@@ -388,6 +400,103 @@ def _upload_audio_to_storage(local_path: str, competition_id: str) -> Optional[s
 # FIX 2: Restored real _annotate() call (was hard-coded dummy)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _build_ydl_opts(
+    tmpdir: str,
+    is_audio_task: bool,
+    skip_download: bool = False,
+) -> dict:
+    """
+    Return a hardened yt-dlp options dict.
+
+    FIX 6a: geo_bypass, nocheckcertificate, browser User-Agent, and
+    fragment_retries are added to maximise connectivity against YouTube's
+    CDN throttling / bot-detection that causes the
+    'googlevideo.com timed out' error seen in production.
+    """
+    sub_path   = os.path.join(tmpdir, "video.%(ext)s")
+    audio_path = os.path.join(tmpdir, "audio.%(ext)s")
+
+    opts: dict = {
+        # Subtitles
+        "writesubtitles":    True,
+        "writeautomaticsub": True,
+        "subtitleslangs":    ["en", "en-US"],
+        "subtitlesformat":   "vtt/srt/best",
+
+        # Download behaviour
+        "skip_download": skip_download or (not is_audio_task),
+        "format":        "bestaudio[ext=m4a]/bestaudio/best" if (is_audio_task and not skip_download)
+                         else "bestvideo[height<=144]+bestaudio/bestvideo[height<=144]/best",
+        "outtmpl":       audio_path if (is_audio_task and not skip_download) else sub_path,
+
+        # Post-processing: convert to WAV for audio tasks
+        "postprocessors": ([{
+            "key":              "FFmpegExtractAudio",
+            "preferredcodec":   "wav",
+            "preferredquality": "0",
+        }] if (is_audio_task and not skip_download) else []),
+
+        # ── FIX 6a: network hardening ──────────────────────────────────────
+        "socket_timeout":    120,          # was 20 (default) — CDN can be slow
+        "retries":           10,           # retry individual HTTP requests
+        "fragment_retries":  10,           # retry individual DASH/HLS fragments
+        "extractor_retries": 5,
+        "geo_bypass":        True,         # bypass regional blocks
+        "nocheckcertificate": True,        # skip SSL verify (proxy-friendly)
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/125.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+        # Reduce chance of triggering YouTube's bot throttle
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["web", "android"],
+                "skip": ["dash", "hls"],   # prefer direct HTTP segments
+            }
+        },
+        # ──────────────────────────────────────────────────────────────────
+        "quiet":       True,
+        "no_warnings": True,
+    }
+    return opts
+
+
+def _is_cdn_timeout(err: Exception) -> bool:
+    """Return True when the error is a googlevideo.com / CDN connectivity failure."""
+    msg = str(err).lower()
+    return any(kw in msg for kw in (
+        "timed out", "timeout", "connect timeout",
+        "googlevideo", "connection refused", "network", "ssl",
+    ))
+
+
+def _collect_subtitles(tmpdir: str) -> list[dict]:
+    """Walk tmpdir and parse the first .vtt or .srt found."""
+    for root, _, files in os.walk(tmpdir):
+        for fname in files:
+            fpath = os.path.join(root, fname)
+            if fname.endswith(".vtt"):
+                with open(fpath, encoding="utf-8", errors="ignore") as fh:
+                    return _parse_vtt(fh.read())
+            if fname.endswith(".srt"):
+                with open(fpath, encoding="utf-8", errors="ignore") as fh:
+                    return _parse_srt(fh.read())
+    return []
+
+
+def _collect_audio_file(tmpdir: str) -> Optional[str]:
+    """Return path to the first .wav found under tmpdir, or None."""
+    for root, _, files in os.walk(tmpdir):
+        for fname in files:
+            if fname.endswith(".wav"):
+                return os.path.join(root, fname)
+    return None
+
+
 @router.post("/scrape/video")
 async def scrape_video(
     req: VideoScrapeRequest,
@@ -412,76 +521,111 @@ async def scrape_video(
     try:
         import yt_dlp
     except ImportError:
-        raise HTTPException(status_code=500,
-            detail="yt-dlp is not installed. Run: pip install yt-dlp")
+        raise HTTPException(
+            status_code=500,
+            detail="yt-dlp is not installed. Run: pip install yt-dlp",
+        )
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        sub_path   = os.path.join(tmpdir, "video.%(ext)s")
-        audio_path = os.path.join(tmpdir, "audio.%(ext)s")
+        # ── Phase 1: attempt full download (audio + subtitles) ────────────
+        audio_download_failed = False
+        downloaded_audio: Optional[str] = None
+        info: Optional[dict] = None
 
-        ydl_sub_opts = {
-            "writesubtitles":     True,
-            "writeautomaticsub":  True,
-            "subtitleslangs":     ["en", "en-US"],
-            "subtitlesformat":    "vtt/srt/best",
-            "skip_download":      not is_audio_task,
-            "format":             "bestaudio/best" if is_audio_task else "bestvideo[height<=144]",
-            "outtmpl":            sub_path if not is_audio_task else audio_path,
-
-            # 🔥 ADD THESE HERE
-            "retries": 5,
-            "socket_timeout": 60,
-            "extractor_retries": 3,
-
-
-            "postprocessors":     ([{
-                "key":             "FFmpegExtractAudio",
-                "preferredcodec":  "wav",
-                "preferredquality":"0",
-            }] if is_audio_task else []),
-            "quiet":      True,
-            "no_warnings": True,
-        }
-
-        with yt_dlp.YoutubeDL(ydl_sub_opts) as ydl:
+        opts = _build_ydl_opts(tmpdir, is_audio_task, skip_download=False)
+        with yt_dlp.YoutubeDL(opts) as ydl:
             try:
                 info = ydl.extract_info(req.url, download=True)
-            except yt_dlp.utils.DownloadError as e:
-                raise HTTPException(status_code=422, detail=f"yt-dlp: {e}")
+            except yt_dlp.utils.DownloadError as exc:
+                # ── FIX 6b: two-phase fallback ────────────────────────────
+                if is_audio_task and _is_cdn_timeout(exc):
+                    # CDN timed out — retry subtitle-only so we can at least
+                    # return text segments instead of a blank 422.
+                    audio_download_failed = True
+                    fallback_opts = _build_ydl_opts(tmpdir, is_audio_task, skip_download=True)
+                    with yt_dlp.YoutubeDL(fallback_opts) as ydl2:
+                        try:
+                            info = ydl2.extract_info(req.url, download=False)
+                        except yt_dlp.utils.DownloadError as exc2:
+                            # ── FIX 6c: distinct error messages ──────────
+                            err_msg = str(exc2).lower()
+                            if "private" in err_msg or "unavailable" in err_msg:
+                                raise HTTPException(
+                                    status_code=422,
+                                    detail="This video is private or unavailable.",
+                                )
+                            if "age" in err_msg or "sign in" in err_msg:
+                                raise HTTPException(
+                                    status_code=422,
+                                    detail=(
+                                        "This video requires sign-in or age verification. "
+                                        "Try a different video."
+                                    ),
+                                )
+                            raise HTTPException(
+                                status_code=422,
+                                detail=(
+                                    "Could not reach YouTube's servers — the network connection "
+                                    "from this backend is being blocked or throttled. "
+                                    "Try again in a moment, or paste the video's subtitle/transcript "
+                                    "text directly."
+                                ),
+                            )
+                else:
+                    # Non-audio task or non-timeout error — surface clearly
+                    err_msg = str(exc).lower()
+                    if "private" in err_msg or "unavailable" in err_msg:
+                        raise HTTPException(
+                            status_code=422,
+                            detail="This video is private or unavailable.",
+                        )
+                    if "age" in err_msg or "sign in" in err_msg:
+                        raise HTTPException(
+                            status_code=422,
+                            detail=(
+                                "This video requires sign-in or age verification. "
+                                "Try a different video."
+                            ),
+                        )
+                    raise HTTPException(status_code=422, detail=f"yt-dlp: {exc}")
 
-        video_title = info.get("title", "Untitled video")
+        video_title = (info or {}).get("title", "Untitled video")
 
-        # Find and parse subtitle file
-        segments: list[dict] = []
-        for root, _, files in os.walk(tmpdir):
-            for fname in files:
-                if fname.endswith(".vtt"):
-                    with open(os.path.join(root, fname), encoding="utf-8", errors="ignore") as f:
-                        segments = _parse_vtt(f.read())
-                    break
-                if fname.endswith(".srt"):
-                    with open(os.path.join(root, fname), encoding="utf-8", errors="ignore") as f:
-                        segments = _parse_srt(f.read())
-                    break
+        # ── Collect subtitles ─────────────────────────────────────────────
+        segments: list[dict] = _collect_subtitles(tmpdir)
 
         if not segments:
-            description = info.get("description", "") or ""
-            chunks = [s.strip() for s in re.split(r"[\n.!?]+", description) if len(s.strip()) > 20]
-            for i, chunk in enumerate(chunks[:req.max_segments]):
+            description = (info or {}).get("description", "") or ""
+            chunks = [
+                s.strip() for s in re.split(r"[\n.!?]+", description) if len(s.strip()) > 20
+            ]
+            for i, chunk in enumerate(chunks[: req.max_segments]):
                 segments.append({"start": i * 30.0, "end": (i + 1) * 30.0, "text": chunk})
 
-        segments = segments[:req.max_segments]
+        if not segments:
+            if audio_download_failed:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "YouTube's CDN timed out and this video has no subtitles/captions, "
+                        "so no content could be extracted. Try a video that has auto-captions enabled."
+                    ),
+                )
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "No subtitles, captions, or description found for this video. "
+                    "Enable auto-captions on the video or try a different URL."
+                ),
+            )
 
-        downloaded_audio = None
-        if is_audio_task:
-            for root, _, files in os.walk(tmpdir):
-                for fname in files:
-                    if fname.endswith(".wav"):
-                        downloaded_audio = os.path.join(root, fname)
-                        break
-                if downloaded_audio:
-                    break
+        segments = segments[: req.max_segments]
 
+        # ── Collect downloaded audio (Phase 1 only) ───────────────────────
+        if is_audio_task and not audio_download_failed:
+            downloaded_audio = _collect_audio_file(tmpdir)
+
+        # ── Build result items ────────────────────────────────────────────
         async def process_segment(seg: dict) -> dict:
             item_id = str(uuid.uuid4())
             audio_url = None
@@ -489,16 +633,21 @@ async def scrape_video(
 
             if is_audio_task and downloaded_audio:
                 seg_wav = os.path.join(tmpdir, f"{item_id}.wav")
-                ok = _extract_audio_segment(downloaded_audio, seg["start"], seg["end"], seg_wav)
+                ok = _extract_audio_segment(
+                    downloaded_audio, seg["start"], seg["end"], seg_wav
+                )
                 if ok:
                     audio_url = _upload_audio_to_storage(seg_wav, req.competition_id)
 
-            # FIX 2: was hard-coded dummy — now calls real AI
+            # FIX 2: real _annotate() call (not a dummy)
             ann_result = await _annotate(seg["text"], task_type, config)
+
+            # If CDN timed out, mark items so the UI can show a banner
+            item_type = "audio" if (is_audio_task and not audio_download_failed) else "text"
 
             return {
                 "id":                    item_id,
-                "type":                  "audio" if is_audio_task else "text",
+                "type":                  item_type,
                 "text_content":          seg["text"],
                 "audio_url":             audio_url,
                 "audio_duration":        round(audio_duration, 2),
@@ -506,11 +655,18 @@ async def scrape_video(
                 "annotation_suggestion": ann_result["annotation"],
                 "ai_confidence":         ann_result["confidence"],
                 "ai_status":             ann_result["status"],
+                # Extra field — UI can surface "audio unavailable" badge
+                "audio_unavailable":     audio_download_failed,
             }
 
         items = await asyncio.gather(*[process_segment(s) for s in segments])
 
-    return {"items": list(items), "source": video_title}
+    return {
+        "items": list(items),
+        "source": video_title,
+        # Lets the frontend show a non-blocking warning when audio fell back
+        "audio_fallback": audio_download_failed,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
