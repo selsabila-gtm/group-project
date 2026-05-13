@@ -1,4 +1,0 @@
-id,text_content,label,audio_url,quality_score,version_tag,submitted_at,annotation_json
-0990b95c-effd-4d12-b152-fb3723657a41,The delivery was very slow,negative,,0.957,,2026-05-12 23:19:44.390072+00:00,"{""label"": ""negative"", ""aspects"": [], ""sentiment"": ""negative"", ""confidence"": 0.8}"
-a4a4f213-a1c6-4967-bf5c-d902b394bcf1,The price is too expensive,negative,,0.957,,2026-05-12 23:20:09.764472+00:00,"{""label"": ""negative"", ""aspects"": [], ""sentiment"": ""negative"", ""confidence"": 0.8}"
-25634f6f-5db6-4192-baf0-8350d79af2b0,Excellent value for the money,positive,,0.957,,2026-05-12 23:24:00.597909+00:00,"{""label"": ""positive"", ""aspects"": [], ""sentiment"": ""positive"", ""confidence"": 0.8}"
