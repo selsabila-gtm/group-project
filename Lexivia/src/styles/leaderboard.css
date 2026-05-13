@@ -1,0 +1,402 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Leaderboard.css
+   Matches the ExperimentRegistry design language.
+───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Layout ── */
+.lb-root {
+    display: flex;
+    min-height: 100vh;
+    background: var(--bg, #0f1117);
+    color: var(--text, #e2e8f0);
+    font-family: var(--font-body, "IBM Plex Mono", monospace);
+}
+
+.lb-main {
+    flex: 1;
+    padding: 32px 40px 60px;
+    max-width: 1200px;
+}
+
+/* ── Loading / Error ── */
+.lb-loading, .lb-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    min-height: 300px;
+    color: var(--text-muted, #94a3b8);
+}
+
+.lb-spinner {
+    width: 32px; height: 32px;
+    border: 3px solid rgba(99, 102, 241, 0.2);
+    border-top-color: #6366f1;
+    border-radius: 50%;
+    animation: lb-spin 0.7s linear infinite;
+}
+@keyframes lb-spin { to { transform: rotate(360deg); } }
+
+/* ── Page header ── */
+.lb-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.lb-page-eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--text-muted, #64748b);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.lb-page-title {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0 0 6px;
+    color: var(--text, #e2e8f0);
+}
+
+.lb-competition-name {
+    font-size: 13px;
+    color: var(--text-muted, #94a3b8);
+    margin-bottom: 8px;
+}
+
+.lb-header-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.lb-metric-chip {
+    font-size: 11px;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    color: #a5b4fc;
+    padding: 3px 10px;
+    border-radius: 20px;
+}
+
+.lb-order-chip {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid;
+}
+.lb-order-chip--higher {
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.3);
+    color: #86efac;
+}
+.lb-order-chip--lower {
+    background: rgba(251, 191, 36, 0.1);
+    border-color: rgba(251, 191, 36, 0.3);
+    color: #fde68a;
+}
+
+.lb-page-header-right {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* ── Buttons ── */
+.lb-btn {
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s;
+}
+.lb-btn:hover { opacity: 0.85; }
+.lb-btn--outline {
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: var(--text-muted, #94a3b8);
+}
+.lb-btn--ghost {
+    background: transparent;
+    color: #6366f1;
+}
+
+/* ── My Rank Banner ── */
+.lb-my-rank-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.08));
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 10px;
+    padding: 16px 24px;
+    margin-bottom: 16px;
+}
+
+.lb-my-rank-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.lb-my-rank-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #a5b4fc;
+}
+
+.lb-my-rank-num {
+    font-size: 32px;
+    font-weight: 800;
+    color: #e0e7ff;
+    line-height: 1;
+}
+
+.lb-my-rank-right {
+    text-align: right;
+}
+
+.lb-my-rank-score {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.lb-my-rank-score-val {
+    font-size: 24px;
+    font-weight: 700;
+    color: #c7d2fe;
+}
+
+.lb-my-rank-score-metric {
+    font-size: 11px;
+    color: #818cf8;
+}
+
+.lb-my-rank-team {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+
+/* ── Stats strip ── */
+.lb-stats-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.lb-stat {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 14px 16px;
+}
+
+.lb-stat-num {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    color: #e2e8f0;
+    font-variant-numeric: tabular-nums;
+}
+
+.lb-stat-lbl {
+    display: block;
+    font-size: 10px;
+    color: var(--text-muted, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 2px;
+}
+
+/* ── Table ── */
+.lb-table-wrap {
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.lb-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.lb-th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted, #64748b);
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    white-space: nowrap;
+}
+
+.lb-th--rank  { width: 80px; text-align: center; }
+.lb-th--score { width: 140px; }
+.lb-th--bar   { width: 120px; }
+
+.lb-td {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    vertical-align: middle;
+    color: var(--text, #cbd5e1);
+}
+
+.lb-td--rank  { text-align: center; }
+.lb-td--score { font-variant-numeric: tabular-nums; }
+.lb-td--bar   { padding-right: 20px; }
+
+/* Row styles */
+.lb-row:last-child .lb-td { border-bottom: none; }
+.lb-row:hover .lb-td { background: rgba(255, 255, 255, 0.025); }
+
+.lb-row--me .lb-td {
+    background: rgba(99, 102, 241, 0.06);
+}
+.lb-row--me:hover .lb-td {
+    background: rgba(99, 102, 241, 0.10);
+}
+
+.lb-row--top1 .lb-td { background: rgba(251, 191, 36, 0.04); }
+.lb-row--top2 .lb-td { background: rgba(148, 163, 184, 0.04); }
+.lb-row--top3 .lb-td { background: rgba(180, 120, 60, 0.04); }
+
+/* Rank badge */
+.lb-rank {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 700;
+    color: #94a3b8;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.lb-rank--medal { font-size: 22px; line-height: 1; }
+.lb-rank--me { color: #a5b4fc; }
+
+/* Participant cell */
+.lb-participant-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.lb-avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.lb-participant-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.lb-participant-sub {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 1px;
+}
+
+.lb-you-tag {
+    font-size: 10px;
+    color: #818cf8;
+    font-weight: 400;
+    margin-left: 4px;
+}
+
+/* Score */
+.lb-score {
+    font-size: 15px;
+    font-weight: 700;
+    color: #cbd5e1;
+    font-variant-numeric: tabular-nums;
+}
+.lb-score--first { color: #fbbf24; }
+
+/* Score bar */
+.lb-bar-track {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    overflow: hidden;
+    min-width: 60px;
+}
+
+.lb-bar-fill {
+    height: 100%;
+    background: linear-gradient(to right, #6366f1, #8b5cf6);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+}
+
+/* Filename */
+.lb-filename {
+    font-size: 11px;
+    color: #64748b;
+    font-family: "IBM Plex Mono", monospace;
+}
+
+.lb-td--date {
+    font-size: 12px;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+/* ── Empty state ── */
+.lb-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: #64748b;
+}
+
+.lb-empty-icon { font-size: 48px; margin-bottom: 16px; }
+.lb-empty-title { font-size: 18px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; }
+.lb-empty-sub { font-size: 13px; }
+
+.lb-link {
+    background: none;
+    border: none;
+    color: #6366f1;
+    cursor: pointer;
+    font-size: 13px;
+    text-decoration: underline;
+    padding: 0;
+}
+
+/* ── Table footer ── */
+.lb-table-footer {
+    margin-top: 12px;
+    font-size: 11px;
+    color: #4b5563;
+    text-align: right;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+    .lb-main { padding: 20px 16px 40px; }
+    .lb-stats-strip { grid-template-columns: repeat(2, 1fr); }
+    .lb-th--bar, .lb-td--bar { display: none; }
+}

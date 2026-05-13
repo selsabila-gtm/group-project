@@ -1,4 +1,4 @@
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import "./CompetitionSidebar.css";
 
 const NAV_ITEMS = [
@@ -33,9 +33,8 @@ const NAV_ITEMS = [
             </svg>
         ),
     },
-    
     {
-        key: "experiments",
+        key: "models",
         label: "Models",
         icon: (
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -44,7 +43,6 @@ const NAV_ITEMS = [
             </svg>
         ),
     },
-    
     {
         key: "experiment-registry",
         label: "Experiments",
@@ -80,14 +78,18 @@ const NAV_ITEMS = [
     },
 ];
 
-function CompetitionSidebar({ competitionId, competitionTitle, taskType }) {
+function CompetitionSidebar({ competitionId: propCompetitionId, competitionTitle, taskType }) {
     const navigate = useNavigate();
     const location = useLocation();
+    const { competitionId: paramCompetitionId } = useParams();
 
-    // derive active step from URL: /competitions/:id/data-collection → "data-collection"
+    // Use prop if passed in, otherwise read it directly from the URL
+    const competitionId = propCompetitionId || paramCompetitionId;
+
+    // derive active step from URL: /competitions/:id/data-collection -> "data-collection"
     const pathParts = location.pathname.split("/");
     const activeKey = pathParts[pathParts.length - 1] || "data-collection";
-    
+
     return (
         <aside className="csidebar">
             <button

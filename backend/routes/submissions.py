@@ -1,4 +1,11 @@
 # routes/submissions.py
+#
+# CHANGES vs previous version:
+#  - submit_model: records team_id on the submission row
+#  - submit_model: passes primary_metric to the Docker evaluator
+#  - leaderboard: groups by team (best score per team, not per user)
+#  - leaderboard: sorts correctly for lower-is-better metrics
+
 import os
 import uuid
 import tempfile
@@ -16,24 +23,99 @@ from models import (
     CompetitionOrganizer,
     ExperimentWorkspace,
     Submission,
+    UserProfile,
 )
 from supabase_client import supabase
 from .utils import get_db, get_current_user
 
 router = APIRouter(tags=["submissions"])
 
-WORKSPACES_DIR = Path("./workspaces").resolve()
+WORKSPACES_DIR   = Path("./workspaces").resolve()
 EVAL_RUNNER_PATH = Path(__file__).parent / "eval_runner.py"
-STORAGE_BUCKET = "competition-datasets"
+STORAGE_BUCKET   = "competition-datasets"
+
+KNOWN_METRICS = {
+    "accuracy", "f1", "f1_macro", "f1_weighted",
+    "precision", "recall", "auc", "roc_auc",
+    "mse", "mae", "rmse", "r2",
+    "exact_match", "bleu", "rouge_l", "rouge_1", "rouge_2",
+    "wer", "cer",
+}
+
+METRIC_HIGHER_IS_BETTER = {
+    "accuracy": True,  "f1": True,       "f1_macro": True,  "f1_weighted": True,
+    "precision": True, "recall": True,   "auc": True,       "roc_auc": True,
+    "mse": False,      "mae": False,     "rmse": False,     "r2": True,
+    "exact_match": True, "bleu": True,   "rouge_l": True,   "rouge_1": True,
+    "rouge_2": True,   "wer": False,     "cer": False,
+}
+
+TASK_DEFAULT_METRIC = {
+    "TEXT_CLASSIFICATION": "accuracy",
+    "SENTIMENT_ANALYSIS":  "accuracy",
+    "NER":                 "f1",
+    "QUESTION_ANSWERING":  "exact_match",
+    "TRANSLATION":         "bleu",
+    "SUMMARIZATION":       "rouge_l",
+    "REGRESSION":          "rmse",
+}
 
 
 def safe_name(value: str):
     return "".join(c if c.isalnum() else "-" for c in value)[:40]
 
 
+def _resolve_metric(competition: Competition) -> str:
+    primary = (competition.primary_metric or "").strip().lower()
+    if primary and primary in KNOWN_METRICS:
+        return primary
+    task = (competition.task_type or "").upper()
+    return TASK_DEFAULT_METRIC.get(task, "accuracy")
+
+
+def _get_user_team_id(user_id: str, competition_id: str, db: Session) -> str | None:
+    """
+    Returns the team_id (as str) for the user in this competition, or None.
+
+    Two-phase lookup:
+      1. competition_participants.team_id (fast path — already stamped)
+      2. team_members cross-referenced with competition participants (covers the
+         common case where team_id was never written to the participant row)
+    """
+    from models_teams import TeamMember  # local import to avoid circular deps
+
+    # Phase 1 — already stored
+    participant = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.competition_id == competition_id,
+        CompetitionParticipant.user_id == user_id,
+    ).first()
+    if participant and participant.team_id:
+        return str(participant.team_id)
+
+    # Phase 2 — look through team_members
+    try:
+        user_teams = db.query(TeamMember).filter(
+            TeamMember.user_id == str(user_id),
+        ).all()
+        for tm in user_teams:
+            teammate_ids = [
+                str(m.user_id)
+                for m in db.query(TeamMember).filter(TeamMember.team_id == tm.team_id).all()
+            ]
+            overlap = db.query(CompetitionParticipant).filter(
+                CompetitionParticipant.competition_id == competition_id,
+                CompetitionParticipant.user_id.in_(teammate_ids),
+            ).first()
+            if overlap:
+                return str(tm.team_id)
+    except Exception:
+        pass
+
+    return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # POST /competitions/{id}/submit
-# The user says "submit this model file from my workspace"
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/competitions/{competition_id}/submit")
@@ -45,14 +127,6 @@ def submit_model(
 ):
     """
     body = { "model_filename": "model.pkl" }
-    
-    Steps:
-    1. Check user is a participant
-    2. Find the model file in their workspace
-    3. Find the hidden test dataset in Supabase Storage
-    4. Download the test dataset to a temp folder
-    5. Run evaluation in a fresh Docker container
-    6. Save score to submissions table
     """
 
     # ── 1. Check participation ────────────────────────────────────────────────
@@ -76,13 +150,12 @@ def submit_model(
     # ── 2. Find model file in workspace ──────────────────────────────────────
     model_filename = body.get("model_filename", "model.pkl")
     workspace_path = WORKSPACES_DIR / f"{safe_name(competition_id)}_{safe_name(current_user.id)}"
-    model_path = workspace_path / model_filename
+    model_path     = workspace_path / model_filename
 
     if not model_path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Model file '{model_filename}' not found in your workspace. "
-                   f"Make sure your training script saves the model as '{model_filename}'."
+            detail=f"Model file '{model_filename}' not found in your workspace.",
         )
 
     # ── 3. Find hidden test dataset ───────────────────────────────────────────
@@ -94,14 +167,19 @@ def submit_model(
     if not hidden_dataset:
         raise HTTPException(
             status_code=404,
-            detail="No hidden test dataset uploaded yet. Ask the organizer to upload one."
+            detail="No hidden test dataset uploaded yet.",
         )
 
-    # ── 4. Create submission record (status=pending) ──────────────────────────
+    # ── 4. Resolve metric & team ──────────────────────────────────────────────
+    primary_metric = _resolve_metric(competition)
+    team_id        = _get_user_team_id(current_user.id, competition_id, db)
+
+    # ── 5. Create submission record ───────────────────────────────────────────
     submission = Submission(
         id=str(uuid.uuid4()),
         competition_id=competition_id,
         user_id=current_user.id,
+        team_id=team_id,
         model_filename=model_filename,
         status="running",
         submitted_at=datetime.utcnow().isoformat(),
@@ -110,7 +188,7 @@ def submit_model(
     db.commit()
     db.refresh(submission)
 
-    # ── 5. Download hidden test file from Supabase Storage ────────────────────
+    # ── 6. Download hidden test file ──────────────────────────────────────────
     try:
         file_bytes = supabase.storage.from_(STORAGE_BUCKET).download(hidden_dataset.storage_path)
     except Exception as e:
@@ -119,23 +197,24 @@ def submit_model(
         db.commit()
         raise HTTPException(status_code=500, detail=f"Could not download test dataset: {e}")
 
-    # ── 6. Run evaluation in Docker ───────────────────────────────────────────
+    # ── 7. Run evaluation in Docker ───────────────────────────────────────────
     score, metric_name, error = run_evaluation_in_docker(
         model_path=str(model_path),
         test_file_bytes=file_bytes,
         test_filename=hidden_dataset.original_filename,
         task_type=competition.task_type or "TEXT_CLASSIFICATION",
+        primary_metric=primary_metric,
         submission_id=submission.id,
     )
 
-    # ── 7. Save result ────────────────────────────────────────────────────────
+    # ── 8. Save result ────────────────────────────────────────────────────────
     if error:
-        submission.status = "failed"
+        submission.status        = "failed"
         submission.error_message = error
     else:
-        submission.status = "done"
-        submission.score = score
-        submission.metric_name = metric_name
+        submission.status       = "done"
+        submission.score        = score
+        submission.metric_name  = metric_name
         submission.evaluated_at = datetime.utcnow().isoformat()
 
     db.commit()
@@ -143,15 +222,34 @@ def submit_model(
 
     return {
         "submission_id": submission.id,
-        "status": submission.status,
-        "score": submission.score,
-        "metric_name": submission.metric_name,
-        "error": submission.error_message,
+        "status":        submission.status,
+        "score":         submission.score,
+        "metric_name":   submission.metric_name,
+        "error":         submission.error_message,
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# The Docker evaluation function
+# Docker evaluation
+#
+# NOTE ON KUBERNETES:
+# When running in production with many concurrent teams, replace subprocess.run()
+# with a Kubernetes Job submission via the `kubernetes` Python client:
+#
+#   from kubernetes import client, config
+#   config.load_incluster_config()   # or load_kube_config() locally
+#   batch_v1 = client.BatchV1Api()
+#   job = build_eval_job_manifest(submission_id, model_path, ...)
+#   batch_v1.create_namespaced_job("default", job)
+#   # Then poll job status or use a webhook to update submission.status
+#
+# K8s advantages over subprocess for production:
+#   - Auto-scheduling across nodes (many teams can submit simultaneously)
+#   - Resource quotas enforced by K8s, not Docker flags
+#   - Job retry on node failure
+#   - Full audit trail in K8s events
+#
+# For local development, Docker subprocess is correct and sufficient.
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_evaluation_in_docker(
@@ -159,45 +257,41 @@ def run_evaluation_in_docker(
     test_file_bytes: bytes,
     test_filename: str,
     task_type: str,
+    primary_metric: str,
     submission_id: str,
 ):
     """
-    Creates a temporary folder, copies model + test data + eval script into it,
-    spins a Docker container, runs eval_runner.py, reads the score.
     Returns (score_float, metric_name_str, error_str_or_None)
     """
-
+    import json
     container_name = f"lexivia-eval-{submission_id[:12]}"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
 
-        # Copy model file into temp dir
-        model_dest = tmpdir / "model.pkl"
-        model_dest.write_bytes(Path(model_path).read_bytes())
+        (tmpdir / "model.pkl").write_bytes(Path(model_path).read_bytes())
+        (tmpdir / test_filename).write_bytes(test_file_bytes)
+        (tmpdir / "eval_runner.py").write_bytes(EVAL_RUNNER_PATH.read_bytes())
 
-        # Write test data into temp dir
-        test_dest = tmpdir / test_filename
-        test_dest.write_bytes(test_file_bytes)
+        # Write hint including the organizer's chosen metric
+        (tmpdir / "columns_hint.json").write_text(
+            json.dumps({
+                "task_type":      task_type,
+                "primary_metric": primary_metric,
+            }),
+            encoding="utf-8",
+        )
 
-        # Copy eval_runner.py into temp dir
-        eval_dest = tmpdir / "eval_runner.py"
-        eval_dest.write_bytes(EVAL_RUNNER_PATH.read_bytes())
-
-        # Build docker run command
-        # --network none  = no internet access (prevents cheating)
-        # --cpus 1        = fair resource limit for evaluation
-        # --memory 2g     = fair memory limit
-        # --rm            = auto-delete container when done
-        # -v              = mount our temp folder into the container
         cmd = [
             "docker", "run",
             "--rm",
-            "--name", container_name,
+            "--name",    container_name,
             "--network", "none",
-            "--cpus", "1",
-            "--memory", "2g",
-            "-v", f"{str(tmpdir)}:/eval",
+            "--cpus",    "1",
+            "--memory",  "2g",
+            "--read-only",
+            "--tmpfs",   "/tmp:size=512m",
+            "-v",        f"{str(tmpdir)}:/eval:ro",
             "jupyter/scipy-notebook:python-3.10",
             "python", "/eval/eval_runner.py",
             "/eval/model.pkl",
@@ -210,10 +304,9 @@ def run_evaluation_in_docker(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300,  # 5 minutes max
+                timeout=300,
             )
         except subprocess.TimeoutExpired:
-            # Force remove container if it's still running
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
             return None, None, "Evaluation timed out after 5 minutes"
         except FileNotFoundError:
@@ -223,7 +316,6 @@ def run_evaluation_in_docker(
             error = result.stderr or result.stdout or "Unknown error"
             return None, None, f"Evaluation failed: {error[:500]}"
 
-        # Parse score from stdout — format: "accuracy=0.91" or "f1=0.87"
         score, metric_name = parse_score_output(result.stdout)
         if score is None:
             return None, None, f"Could not parse score from output: {result.stdout[:200]}"
@@ -232,13 +324,11 @@ def run_evaluation_in_docker(
 
 
 def parse_score_output(output: str):
-    """Reads lines like 'accuracy=0.91' or 'f1=0.87' and returns (float, str)"""
-    KNOWN_METRICS = {"accuracy", "f1", "exact_match", "precision", "recall", "auc", "mse", "mae", "rmse"}
     for line in output.splitlines():
         line = line.strip()
         if "=" in line:
             name, value = line.split("=", 1)
-            name = name.strip().lower()
+            name  = name.strip().lower()
             value = value.strip()
             if name in KNOWN_METRICS:
                 try:
@@ -249,7 +339,7 @@ def parse_score_output(output: str):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# GET /competitions/{id}/submissions  — list my submissions
+# GET /competitions/{id}/submissions
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/competitions/{competition_id}/submissions")
@@ -265,21 +355,22 @@ def list_my_submissions(
 
     return [
         {
-            "id": s.id,
-            "model_filename": s.model_filename,
-            "status": s.status,
-            "score": s.score,
-            "metric_name": s.metric_name,
-            "error_message": s.error_message,
-            "submitted_at": s.submitted_at,
-            "evaluated_at": s.evaluated_at,
+            "id":              s.id,
+            "model_filename":  s.model_filename,
+            "team_id":         s.team_id,
+            "status":          s.status,
+            "score":           s.score,
+            "metric_name":     s.metric_name,
+            "error_message":   s.error_message,
+            "submitted_at":    s.submitted_at,
+            "evaluated_at":    s.evaluated_at,
         }
         for s in submissions
     ]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# GET /competitions/{id}/leaderboard  — all teams ranked by best score
+# GET /competitions/{id}/leaderboard — simple leaderboard (team-aware)
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/competitions/{competition_id}/leaderboard")
@@ -288,32 +379,49 @@ def get_leaderboard(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # Get the best score per user (highest score = best)
+    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    primary_metric   = _resolve_metric(competition)
+    higher_is_better = METRIC_HIGHER_IS_BETTER.get(primary_metric, True)
+
     all_done = db.query(Submission).filter(
         Submission.competition_id == competition_id,
         Submission.status == "done",
     ).all()
 
-    # Group by user_id, keep best score
-    best_by_user = {}
+    # Best score per team (or user if no team)
+    # Also retroactively resolve team_id for old submissions stored without it
+    best_by_key: dict[str, Submission] = {}
     for s in all_done:
-        if s.user_id not in best_by_user:
-            best_by_user[s.user_id] = s
+        effective_team_id = s.team_id or _get_user_team_id(s.user_id, competition_id, db)
+        key = effective_team_id if effective_team_id else s.user_id
+        if key not in best_by_key:
+            best_by_key[key] = s
         else:
-            if (s.score or 0) > (best_by_user[s.user_id].score or 0):
-                best_by_user[s.user_id] = s
+            existing = best_by_key[key].score or 0
+            new      = s.score or 0
+            if higher_is_better and new > existing:
+                best_by_key[key] = s
+            elif not higher_is_better and new < existing:
+                best_by_key[key] = s
 
-    # Sort by score descending
-    ranked = sorted(best_by_user.values(), key=lambda s: s.score or 0, reverse=True)
+    ranked = sorted(
+        best_by_key.values(),
+        key=lambda s: s.score or 0,
+        reverse=higher_is_better,
+    )
 
     return [
         {
-            "rank": i + 1,
-            "user_id": s.user_id,
-            "score": s.score,
-            "metric_name": s.metric_name,
+            "rank":          i + 1,
+            "user_id":       s.user_id,
+            "team_id":       s.team_id,
+            "score":         s.score,
+            "metric_name":   s.metric_name,
             "submission_id": s.id,
-            "submitted_at": s.submitted_at,
+            "submitted_at":  s.submitted_at,
         }
         for i, s in enumerate(ranked)
     ]

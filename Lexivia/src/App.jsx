@@ -24,6 +24,7 @@ import AuthCallback from "./pages/AuthCallback";
 import Experiments from "./pages/Experiments";
 
 import ExperimentRegistry from "./pages/ExperimentRegistry";
+import Leaderboard from "./pages/leaderboard";
 
 import "./index.css";
 
@@ -85,8 +86,14 @@ function App() {
           <Route path="/create-competition" element={<CreateCompetition />} />
           <Route path="/competitions/:competitionId/data-collection" element={<DataCollection />} />
           <Route path="/competitions/:competitionId/experiments" element={<Experiments />} />
-          <Route path="/competitions/:id/dataset-hub" element={<DatasetHub />} />
-          <Route path="/competitions/:competitionId/experiment-registry" element={<ExperimentRegistry />} />
+
+<Route
+  path="/competitions/:competitionId/leaderboard"
+  element={<Leaderboard />}
+/>
+
+<Route path="/competitions/:id/dataset-hub" element={<DatasetHub />} />
+<Route path="/competitions/:competitionId/experiment-registry" element={<ExperimentRegistry />} />
 
           <Route
             path="/competitions/:competitionId/organizer"

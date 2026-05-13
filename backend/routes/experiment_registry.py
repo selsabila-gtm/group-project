@@ -1,18 +1,21 @@
 """
 routes/experiment_registry.py
 
-New endpoints for the Experiment Registry page.
-Keeps all existing experiments.py logic untouched.
+FIXES in this version:
+  - Team resolution now reads from `team_members` table (the source of truth),
+    NOT from competition_participants.team_id which was never being populated.
+  - _get_user_team_id: looks up the user's team via TeamMember rows for members
+    of any team that is registered as participating in this competition.
+  - _get_team_user_ids: fetches ALL members of the team from team_members.
+  - Submission now correctly stamps team_id from team_members so leaderboard
+    groups by team instead of showing every user individually.
+  - Solo participants (no team) still appear solo on the leaderboard.
+  - Leaderboard shows team name as the display name when team_id is set.
 
 Endpoints:
-  GET  /competitions/{id}/experiment-registry          — all runs for this competition
-                                                         across ALL users, with user names
-  POST /competitions/{id}/experiment-registry/submit   — pick an experiment run, evaluate
-                                                         against hidden dataset in Docker,
-                                                         save to submissions table
-  GET  /competitions/{id}/leaderboard                  — already in submissions.py,
-                                                         but we add user name resolution here
-                                                         as a richer alternative endpoint
+  GET  /competitions/{id}/experiment-registry        — runs for current user's team
+  POST /competitions/{id}/experiment-registry/submit — evaluate a run via Docker
+  GET  /competitions/{id}/leaderboard-rich           — full leaderboard with team info
 """
 
 import os
@@ -34,77 +37,187 @@ from models import (
     ExperimentRun,
     ExperimentWorkspace,
     Submission,
-    UserProfile,          # make sure this is exported from models.py
+    UserProfile,
 )
+
+from models_teams import Team, TeamMember
+
 from supabase_client import supabase
 from .utils import get_db, get_current_user
 
 router = APIRouter(tags=["experiment-registry"])
 
-WORKSPACES_DIR     = Path("./workspaces").resolve()
-EVAL_RUNNER_PATH   = Path(__file__).parent / "eval_runner.py"
-STORAGE_BUCKET     = "competition-datasets"
+WORKSPACES_DIR   = Path("./workspaces").resolve()
+EVAL_RUNNER_PATH = Path(__file__).parent / "eval_runner.py"
+STORAGE_BUCKET   = "competition-datasets"
+
+# ─── All metrics an organizer can choose ─────────────────────────────────────
+KNOWN_METRICS = {
+    "accuracy", "f1", "f1_macro", "f1_weighted",
+    "precision", "recall", "auc", "roc_auc",
+    "mse", "mae", "rmse", "r2",
+    "exact_match", "bleu", "rouge_l", "rouge_1", "rouge_2",
+    "wer", "cer",
+}
+
+METRIC_HIGHER_IS_BETTER = {
+    "accuracy": True,  "f1": True,       "f1_macro": True,  "f1_weighted": True,
+    "precision": True, "recall": True,   "auc": True,       "roc_auc": True,
+    "mse": False,      "mae": False,     "rmse": False,     "r2": True,
+    "exact_match": True, "bleu": True,   "rouge_l": True,   "rouge_1": True,
+    "rouge_2": True,   "wer": False,     "cer": False,
+}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Helpers
+# Team resolution helpers
+#
+# ROOT CAUSE FIX:
+#   competition_participants.team_id is varchar and was NEVER being written
+#   by the teams join/invite flow, so it was always NULL.
+#
+#   The authoritative source for "which team is a user on?" is team_members.
+#   We resolve the user's team by:
+#     1. Finding all teams the user belongs to (via team_members).
+#     2. Checking which of those teams has at least one OTHER member who is
+#        also a participant in this competition — that's their competition team.
+#     3. If none found, the user is solo.
+#
+#   This works without any schema changes.
 # ─────────────────────────────────────────────────────────────────────────────
 
-def safe_name(value: str) -> str:
-    return "".join(c if c.isalnum() else "-" for c in value)[:40]
+def _get_user_team_id(user_id: str, competition_id: str, db: Session) -> str | None:
+    """
+    Returns the team_id (as string) for the user in this competition,
+    resolved via team_members (NOT competition_participants.team_id).
+
+    Strategy:
+      - Get all teams the user is a member of.
+      - For each team, check if any other member is also a participant
+        in this competition.
+      - Return the first matching team_id, or None if solo.
+
+    Why this approach: team_members is always up-to-date when someone
+    joins/accepts a team invitation. competition_participants.team_id
+    was historically not being written.
+    """
+    # All teams this user belongs to
+    my_memberships = db.query(TeamMember).filter(
+        TeamMember.user_id == str(user_id)
+    ).all()
+
+    if not my_memberships:
+        return None
+
+    my_team_ids = [str(m.team_id) for m in my_memberships]
+
+    # All participants in this competition
+    participants = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.competition_id == competition_id,
+    ).all()
+    participant_user_ids = {str(p.user_id) for p in participants}
+
+    # For each of the user's teams, find members who are also in this competition
+    for team_id_str in my_team_ids:
+        try:
+            tid_int = int(team_id_str)
+        except (ValueError, TypeError):
+            continue
+
+        team_member_ids = {
+            str(m.user_id)
+            for m in db.query(TeamMember).filter(TeamMember.team_id == tid_int).all()
+        }
+        # If any team member (including self) is a competition participant,
+        # this is the user's competition team.
+        if team_member_ids & participant_user_ids:
+            return team_id_str
+
+    return None
+
+
+def _get_team_user_ids(team_id: str | None, current_user_id: str, competition_id: str, db: Session) -> list[str]:
+    """
+    Returns all user_ids who are:
+      (a) members of this team (via team_members), AND
+      (b) participants in this competition.
+
+    If team_id is None, returns just [current_user_id] (solo).
+    """
+    if not team_id:
+        return [current_user_id]
+
+    try:
+        tid_int = int(team_id)
+    except (ValueError, TypeError):
+        return [current_user_id]
+
+    # All members of this team
+    team_members = db.query(TeamMember).filter(
+        TeamMember.team_id == tid_int
+    ).all()
+    team_user_ids = {str(m.user_id) for m in team_members}
+
+    # All participants in this competition
+    participants = db.query(CompetitionParticipant).filter(
+        CompetitionParticipant.competition_id == competition_id,
+    ).all()
+    participant_user_ids = {str(p.user_id) for p in participants}
+
+    # Intersection: team members who are also competition participants
+    visible = list(team_user_ids & participant_user_ids)
+
+    # Always include current user even if not yet in competition_participants
+    if current_user_id not in visible:
+        visible.append(current_user_id)
+
+    return visible
+
+
+def _get_team_name(team_id: str | None, db: Session) -> str | None:
+    """Fetch team name by team_id (string or int)."""
+    if not team_id:
+        return None
+    try:
+        team = db.query(Team).filter(Team.id == int(team_id)).first()
+        return team.name if team else None
+    except Exception:
+        return None
 
 
 def _resolve_user_names(user_ids: list[str], db: Session) -> dict[str, str]:
-    """
-    Returns {user_id: display_name} for a list of user IDs.
-    Falls back to user_id itself when no profile row exists.
-    """
+    """Returns {user_id: display_name}."""
     if not user_ids:
         return {}
-    profiles = (
-        db.query(UserProfile)
-        .filter(UserProfile.user_id.in_(user_ids))
-        .all()
-    )
+    profiles = db.query(UserProfile).filter(UserProfile.user_id.in_(user_ids)).all()
     mapping = {}
     for p in profiles:
-        display = p.full_name or p.username or p.user_id
+        display = p.full_name or getattr(p, "username", None) or p.user_id
         mapping[p.user_id] = display
-    # fill in any missing ids
     for uid in user_ids:
         if uid not in mapping:
             mapping[uid] = uid
     return mapping
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Dataset column / task type helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
 def _peek_hidden_dataset_columns(storage_path: str) -> list[str]:
-    """
-    Downloads just the first ~4 KB of the hidden dataset from Supabase
-    and returns the column names.  Works for CSV and JSONL.
-    Returns [] on any failure so callers can fall back gracefully.
-    """
     import io
     import pandas as pd
-
     try:
         raw = supabase.storage.from_(STORAGE_BUCKET).download(storage_path)
-    except Exception:
-        return []
-
-    if isinstance(raw, str):
-        raw = raw.encode("utf-8")
-
-    # Only read first 4 KB to get header
-    snippet = raw[:4096]
-    ext = storage_path.rsplit(".", 1)[-1].lower()
-
-    try:
+        if isinstance(raw, str):
+            raw = raw.encode("utf-8")
+        snippet = raw[:4096]
+        ext = storage_path.rsplit(".", 1)[-1].lower()
         if ext == "csv":
             df = pd.read_csv(io.BytesIO(snippet), nrows=1)
         elif ext == "jsonl":
             df = pd.read_json(io.BytesIO(snippet), lines=True, nrows=1)
         else:
-            # Try CSV first, then JSONL
             try:
                 df = pd.read_csv(io.BytesIO(snippet), nrows=1)
             except Exception:
@@ -115,15 +228,9 @@ def _peek_hidden_dataset_columns(storage_path: str) -> list[str]:
 
 
 def _infer_task_type_from_columns(columns: list[str], declared_task: str) -> str:
-    """
-    If the competition task_type is unknown/generic, try to infer from column names.
-    Otherwise trust the declared value.
-    """
     if declared_task and declared_task.upper() not in ("", "UNKNOWN", "GENERIC"):
         return declared_task.upper()
-
     col_set = {c.lower() for c in columns}
-
     if "sentiment" in col_set:
         return "SENTIMENT_ANALYSIS"
     if {"context", "question", "answer"} & col_set:
@@ -136,30 +243,51 @@ def _infer_task_type_from_columns(columns: list[str], declared_task: str) -> str
         return "TEXT_CLASSIFICATION"
     if "label" in col_set:
         return "TEXT_CLASSIFICATION"
-
     return "GENERIC"
+
+
+def _resolve_metric(competition: Competition) -> str:
+    TASK_DEFAULT = {
+        "TEXT_CLASSIFICATION": "accuracy",
+        "SENTIMENT_ANALYSIS":  "accuracy",
+        "NER":                 "f1",
+        "QUESTION_ANSWERING":  "exact_match",
+        "TRANSLATION":         "bleu",
+        "SUMMARIZATION":       "rouge_l",
+        "REGRESSION":          "rmse",
+    }
+    primary = (competition.primary_metric or "").strip().lower()
+    if primary and primary in KNOWN_METRICS:
+        return primary
+    task = (competition.task_type or "").upper()
+    return TASK_DEFAULT.get(task, "accuracy")
+
+
+def safe_name(value: str) -> str:
+    return "".join(c if c.isalnum() else "-" for c in value)[:40]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GET /competitions/{id}/experiment-registry
-# Returns every ExperimentRun for this competition (all users) + user names.
+#
+# TEAM-SCOPED: participants see only their team's experiments.
+# Organizers see all experiments (for oversight).
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/competitions/{competition_id}/experiment-registry")
-def list_all_experiments(
+def list_team_experiments(
     competition_id: str,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """
-    Returns all experiment runs for this competition across all users.
-    Each row includes the submitter's display name.
+    Returns experiment runs scoped to the current user's team.
 
-    Access:
-      - Organizers  → see everyone
-      - Participants → see everyone (transparency / fairness tracking)
+    Access model:
+      - Organizers  → see ALL experiments (oversight role)
+      - Participants in a team → see only their team's experiments
+      - Solo participants (no team) → see only their own experiments
     """
-    # Auth: must be participant or organizer
     is_organizer = db.query(CompetitionOrganizer).filter(
         CompetitionOrganizer.competition_id == competition_id,
         CompetitionOrganizer.user_id == current_user.id,
@@ -177,17 +305,37 @@ def list_all_experiments(
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
 
-    runs = (
-        db.query(ExperimentRun)
-        .filter(ExperimentRun.competition_id == competition_id)
-        .order_by(ExperimentRun.created_at.desc())
-        .all()
-    )
+    # ── Determine which user_ids to show ──────────────────────────────────────
+    if is_organizer:
+        # Organizer sees all runs
+        runs = (
+            db.query(ExperimentRun)
+            .filter(ExperimentRun.competition_id == competition_id)
+            .order_by(ExperimentRun.created_at.desc())
+            .all()
+        )
+        team_id          = None
+        team_name        = None
+        visible_user_ids = list({r.user_id for r in runs})
+    else:
+        # Participant: resolve team via team_members (the fix)
+        team_id          = _get_user_team_id(current_user.id, competition_id, db)
+        visible_user_ids = _get_team_user_ids(team_id, current_user.id, competition_id, db)
+        team_name        = _get_team_name(team_id, db)
 
-    # Batch-resolve user names
-    user_ids   = list({r.user_id for r in runs})
-    name_map   = _resolve_user_names(user_ids, db)
+        runs = (
+            db.query(ExperimentRun)
+            .filter(
+                ExperimentRun.competition_id == competition_id,
+                ExperimentRun.user_id.in_(visible_user_ids),
+            )
+            .order_by(ExperimentRun.created_at.desc())
+            .all()
+        )
+
+    name_map    = _resolve_user_names(list({r.user_id for r in runs}), db)
     current_uid = current_user.id
+    metric_name = _resolve_metric(competition)
 
     result = []
     for r in runs:
@@ -196,7 +344,7 @@ def list_all_experiments(
             try:
                 params = json.loads(r.parameters_json)
             except Exception:
-                params = {}
+                pass
 
         result.append({
             "id":              r.id,
@@ -210,7 +358,6 @@ def list_all_experiments(
             "user_id":         r.user_id,
             "user_name":       name_map.get(r.user_id, r.user_id),
             "is_mine":         r.user_id == current_uid,
-            # Flattened params for display
             "model_filename":  params.get("model_filename") or r.artifact_path or "model.pkl",
             "hyperparameters": params.get("hyperparameters") or {},
             "dataset_version": params.get("dataset_version") or "",
@@ -219,26 +366,21 @@ def list_all_experiments(
         })
 
     return {
-        "competition_id":   competition_id,
+        "competition_id":    competition_id,
         "competition_title": competition.title,
-        "task_type":        competition.task_type or "",
-        "total":            len(result),
-        "experiments":      result,
+        "task_type":         competition.task_type or "",
+        "primary_metric":    metric_name,
+        "team_id":           team_id,
+        "team_name":         team_name,
+        "team_member_ids":   visible_user_ids if not is_organizer else [],
+        "is_organizer_view": bool(is_organizer),
+        "total":             len(result),
+        "experiments":       result,
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # POST /competitions/{id}/experiment-registry/submit
-#
-# Body: { "experiment_run_id": "<uuid>" }
-#
-# Steps:
-#   1. Verify the run belongs to the current user
-#   2. Find model file in their workspace
-#   3. Find hidden test dataset in Supabase Storage
-#   4. Peek at column names to confirm / infer task type
-#   5. Run evaluation in isolated Docker container (no network)
-#   6. Save result to submissions table
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/competitions/{competition_id}/experiment-registry/submit")
@@ -249,9 +391,12 @@ def submit_from_experiment(
     current_user=Depends(get_current_user),
 ):
     """
-    Submit a model that was saved as an ExperimentRun.
-    The model .pkl is read from the user's local workspace folder.
-    Evaluation runs in an offline Docker container against the hidden dataset.
+    Submit a model for evaluation.
+    - Only the run owner can submit.
+    - Evaluation metric comes from competition.primary_metric.
+    - team_id is resolved from team_members (the fix — no longer from
+      competition_participants.team_id which was always NULL).
+    - Evaluation runs in an isolated Docker container.
     """
 
     # ── 1. Load the experiment run ────────────────────────────────────────────
@@ -273,7 +418,7 @@ def submit_from_experiment(
             detail="You can only submit your own experiment runs",
         )
 
-    # ── 2. Resolve competition & access ──────────────────────────────────────
+    # ── 2. Competition & access check ─────────────────────────────────────────
     competition = db.query(Competition).filter(Competition.id == competition_id).first()
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
@@ -291,7 +436,7 @@ def submit_from_experiment(
     if not is_participant and not is_organizer:
         raise HTTPException(status_code=403, detail="You must join the competition first")
 
-    # ── 3. Resolve model filename from experiment params ──────────────────────
+    # ── 3. Resolve model filename ─────────────────────────────────────────────
     params = {}
     if run.parameters_json:
         try:
@@ -299,12 +444,7 @@ def submit_from_experiment(
         except Exception:
             pass
 
-    model_filename = (
-        params.get("model_filename")
-        or run.artifact_path
-        or "model.pkl"
-    )
-
+    model_filename = params.get("model_filename") or run.artifact_path or "model.pkl"
     workspace_path = WORKSPACES_DIR / f"{safe_name(competition_id)}_{safe_name(current_user.id)}"
     model_path     = workspace_path / model_filename
 
@@ -313,8 +453,7 @@ def submit_from_experiment(
             status_code=404,
             detail=(
                 f"Model file '{model_filename}' not found in your workspace. "
-                f"Make sure the experiment was saved with the correct model filename "
-                f"and the file still exists at: {model_path}"
+                f"Make sure the experiment was saved with the correct model filename."
             ),
         )
 
@@ -332,16 +471,14 @@ def submit_from_experiment(
     if not hidden_dataset:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "No hidden test dataset found for this competition. "
-                "The organizer must upload a hidden_test dataset before submissions can be evaluated."
-            ),
+            detail="No hidden test dataset found. The organizer must upload one first.",
         )
 
-    # ── 5. Peek at hidden dataset columns → infer task type ──────────────────
-    declared_task = competition.task_type or "TEXT_CLASSIFICATION"
-    columns       = _peek_hidden_dataset_columns(hidden_dataset.storage_path)
-    task_type     = _infer_task_type_from_columns(columns, declared_task)
+    # ── 5. Resolve task type & organizer metric ───────────────────────────────
+    declared_task  = competition.task_type or "TEXT_CLASSIFICATION"
+    columns        = _peek_hidden_dataset_columns(hidden_dataset.storage_path)
+    task_type      = _infer_task_type_from_columns(columns, declared_task)
+    primary_metric = _resolve_metric(competition)
 
     # ── 6. Download hidden test file ──────────────────────────────────────────
     try:
@@ -349,11 +486,17 @@ def submit_from_experiment(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not download test dataset: {e}")
 
-    # ── 7. Create submission record (status=running) ──────────────────────────
+    # ── 7. Resolve team_id via team_members (THE FIX) ─────────────────────────
+    # Previously this read competition_participants.team_id which was always NULL.
+    # Now we resolve via team_members which is always populated on join/accept.
+    team_id = _get_user_team_id(current_user.id, competition_id, db)
+
+    # ── 8. Create submission record ───────────────────────────────────────────
     submission = Submission(
         id=str(uuid.uuid4()),
         competition_id=competition_id,
         user_id=current_user.id,
+        team_id=team_id,           # ← now correctly set from team_members
         model_filename=model_filename,
         status="running",
         submitted_at=datetime.utcnow().isoformat(),
@@ -362,17 +505,18 @@ def submit_from_experiment(
     db.commit()
     db.refresh(submission)
 
-    # ── 8. Run evaluation in Docker ───────────────────────────────────────────
+    # ── 9. Run evaluation in Docker ───────────────────────────────────────────
     score, metric_name, error = _run_evaluation_in_docker(
         model_path=str(model_path),
         test_file_bytes=file_bytes,
         test_filename=hidden_dataset.original_filename,
         task_type=task_type,
+        primary_metric=primary_metric,
         submission_id=submission.id,
         detected_columns=columns,
     )
 
-    # ── 9. Persist result ─────────────────────────────────────────────────────
+    # ── 10. Persist result ────────────────────────────────────────────────────
     if error:
         submission.status        = "failed"
         submission.error_message = error
@@ -386,24 +530,25 @@ def submit_from_experiment(
     db.refresh(submission)
 
     return {
-        "submission_id":    submission.id,
+        "submission_id":     submission.id,
         "experiment_run_id": run_id,
-        "experiment_name":  run.name,
-        "model_filename":   model_filename,
-        "task_type_used":   task_type,
-        "dataset_columns":  columns,
-        "status":           submission.status,
-        "score":            submission.score,
-        "metric_name":      submission.metric_name,
-        "error":            submission.error_message,
-        "submitted_at":     submission.submitted_at,
-        "evaluated_at":     submission.evaluated_at,
+        "experiment_name":   run.name,
+        "model_filename":    model_filename,
+        "task_type_used":    task_type,
+        "primary_metric":    primary_metric,
+        "dataset_columns":   columns,
+        "status":            submission.status,
+        "score":             submission.score,
+        "metric_name":       submission.metric_name,
+        "error":             submission.error_message,
+        "submitted_at":      submission.submitted_at,
+        "evaluated_at":      submission.evaluated_at,
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GET /competitions/{id}/leaderboard-rich
-# Like leaderboard in submissions.py but with user names and experiment names.
+# Team-aware leaderboard: best score per team (or per user if solo).
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/competitions/{competition_id}/leaderboard-rich")
@@ -413,10 +558,17 @@ def get_rich_leaderboard(
     current_user=Depends(get_current_user),
 ):
     """
-    Returns the leaderboard for a competition:
-      - One row per user (best submission score)
-      - Includes display name
-      - Marks the current user's own row
+    Returns the leaderboard:
+      - One row per team (or per individual if no team)
+      - Best submission score per team
+      - Shows current user's rank
+      - Marks the user's own row
+      - Shows team name as the display name for team entries
+      - Solo users appear with their own name
+
+    For OLD submissions that were recorded before this fix (team_id=NULL even
+    for team members), we do a best-effort re-resolution of team_id at read
+    time so the leaderboard self-heals without needing a data migration.
     """
     is_organizer = db.query(CompetitionOrganizer).filter(
         CompetitionOrganizer.competition_id == competition_id,
@@ -431,6 +583,13 @@ def get_rich_leaderboard(
     if not is_organizer and not is_participant:
         raise HTTPException(status_code=403, detail="Join the competition to view the leaderboard")
 
+    competition = db.query(Competition).filter(Competition.id == competition_id).first()
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    primary_metric   = _resolve_metric(competition)
+    higher_is_better = METRIC_HIGHER_IS_BETTER.get(primary_metric, True)
+
     all_done = (
         db.query(Submission)
         .filter(
@@ -440,39 +599,87 @@ def get_rich_leaderboard(
         .all()
     )
 
-    # Best score per user
-    best_by_user: dict[str, Submission] = {}
+    # ── Self-healing: re-resolve team_id for legacy NULL submissions ──────────
+    # For any submission where team_id is NULL, look up the submitter's team
+    # via team_members so old submissions are grouped correctly without migration.
     for s in all_done:
-        if s.user_id not in best_by_user:
-            best_by_user[s.user_id] = s
+        if not s.team_id:
+            resolved = _get_user_team_id(s.user_id, competition_id, db)
+            if resolved:
+                s.team_id = resolved
+    # (We don't commit these — they are in-memory corrections for display only)
+
+    # ── Build {team_key: best_submission} ─────────────────────────────────────
+    # team_key = str(team_id) if set, else user_id (solo participant)
+    best_by_key: dict[str, Submission] = {}
+    for s in all_done:
+        key = str(s.team_id) if s.team_id else s.user_id
+        if key not in best_by_key:
+            best_by_key[key] = s
         else:
-            if (s.score or 0) > (best_by_user[s.user_id].score or 0):
-                best_by_user[s.user_id] = s
+            existing_score = float(best_by_key[key].score or 0)
+            new_score      = float(s.score or 0)
+            if higher_is_better:
+                is_better = new_score > existing_score
+            else:
+                is_better = new_score < existing_score
+            if is_better:
+                best_by_key[key] = s
 
-    ranked = sorted(best_by_user.values(), key=lambda s: s.score or 0, reverse=True)
+    # ── Sort ──────────────────────────────────────────────────────────────────
+    ranked = sorted(
+        best_by_key.values(),
+        key=lambda s: float(s.score or 0),
+        reverse=higher_is_better,
+    )
 
-    user_ids = [s.user_id for s in ranked]
-    name_map = _resolve_user_names(user_ids, db)
+    # ── Resolve display names ─────────────────────────────────────────────────
+    all_user_ids = list({s.user_id for s in ranked})
+    name_map     = _resolve_user_names(all_user_ids, db)
 
-    return [
-        {
-            "rank":         i + 1,
-            "user_id":      s.user_id,
-            "user_name":    name_map.get(s.user_id, s.user_id),
-            "is_me":        s.user_id == current_user.id,
-            "score":        float(s.score) if s.score is not None else None,
-            "metric_name":  s.metric_name,
-            "submission_id": s.id,
-            "model_filename": s.model_filename,
-            "submitted_at": s.submitted_at,
-            "evaluated_at": s.evaluated_at,
-        }
-        for i, s in enumerate(ranked)
-    ]
+    team_ids = list({str(s.team_id) for s in ranked if s.team_id})
+    team_name_map: dict[str, str] = {}
+    for tid in team_ids:
+        team_name_map[tid] = _get_team_name(tid, db) or tid
+
+    # ── Current user's key (for highlighting their row) ───────────────────────
+    current_team_id  = _get_user_team_id(current_user.id, competition_id, db)
+    current_user_key = str(current_team_id) if current_team_id else current_user.id
+
+    return {
+        "competition_id":    competition_id,
+        "competition_title": competition.title,
+        "primary_metric":    primary_metric,
+        "higher_is_better":  higher_is_better,
+        "my_rank": next(
+            (i + 1 for i, s in enumerate(ranked)
+             if (str(s.team_id) if s.team_id else s.user_id) == current_user_key),
+            None,
+        ),
+        "entries": [
+            {
+                "rank":           i + 1,
+                "team_id":        str(s.team_id) if s.team_id else None,
+                # team_name is the primary display name for team entries
+                "team_name":      team_name_map.get(str(s.team_id)) if s.team_id else None,
+                "user_id":        s.user_id,
+                # user_name shown as subtitle under team name (or as main name if solo)
+                "user_name":      name_map.get(s.user_id, s.user_id),
+                "is_me":          (str(s.team_id) if s.team_id else s.user_id) == current_user_key,
+                "score":          float(s.score) if s.score is not None else None,
+                "metric_name":    s.metric_name or primary_metric,
+                "submission_id":  s.id,
+                "model_filename": s.model_filename,
+                "submitted_at":   s.submitted_at,
+                "evaluated_at":   s.evaluated_at,
+            }
+            for i, s in enumerate(ranked)
+        ],
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Docker evaluation  (self-contained, offline, resource-limited)
+# Docker evaluation
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _run_evaluation_in_docker(
@@ -480,19 +687,18 @@ def _run_evaluation_in_docker(
     test_file_bytes: bytes,
     test_filename: str,
     task_type: str,
+    primary_metric: str,
     submission_id: str,
     detected_columns: list[str],
 ) -> tuple[float | None, str | None, str | None]:
     """
     Spins up a Docker container with:
-      --network none   → no internet access (prevents cheating / data leakage)
-      --cpus 1         → fair CPU quota per evaluation job
-      --memory 2g      → fair RAM quota per evaluation job
+      --network none   → no internet access
+      --cpus 1         → fair CPU quota
+      --memory 2g      → fair RAM quota
       --rm             → auto-cleaned after run
-
-    Copies model.pkl + hidden test file + eval_runner.py into a temp dir,
-    mounts it read-only into the container, runs eval_runner.py,
-    and parses the printed score.
+      --read-only      → immutable container filesystem
+      --tmpfs /tmp     → writable scratch space
 
     Returns (score_float, metric_name, error_string_or_None).
     """
@@ -501,31 +707,30 @@ def _run_evaluation_in_docker(
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
 
-        # Copy model
         (tmp / "model.pkl").write_bytes(Path(model_path).read_bytes())
-
-        # Write hidden test data
         (tmp / test_filename).write_bytes(test_file_bytes)
 
-        # Write detected columns hint so eval_runner can adapt
         (tmp / "columns_hint.json").write_text(
-            json.dumps({"columns": detected_columns, "task_type": task_type}),
+            json.dumps({
+                "columns":        detected_columns,
+                "task_type":      task_type,
+                "primary_metric": primary_metric,
+            }),
             encoding="utf-8",
         )
 
-        # Copy eval_runner
         (tmp / "eval_runner.py").write_bytes(EVAL_RUNNER_PATH.read_bytes())
 
         cmd = [
             "docker", "run",
             "--rm",
-            "--name",    container_name,
-            "--network", "none",          # ← no internet — data-leakage prevention
-            "--cpus",    "1",             # ← CPU quota
-            "--memory",  "2g",            # ← RAM quota
-            "-v",        f"{str(tmp)}:/eval:ro",   # read-only mount
-            # writable /tmp so model can be loaded in-process
-            "--tmpfs",   "/tmp:size=512m",
+            "--name",       container_name,
+            "--network",    "none",
+            "--cpus",       "1",
+            "--memory",     "2g",
+            "--read-only",
+            "--tmpfs",      "/tmp:size=512m",
+            "-v",           f"{str(tmp)}:/eval:ro",
             "jupyter/scipy-notebook:python-3.10",
             "python", "/eval/eval_runner.py",
             "/eval/model.pkl",
@@ -538,7 +743,7 @@ def _run_evaluation_in_docker(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300,  # 5-minute wall-clock limit
+                timeout=300,
             )
         except subprocess.TimeoutExpired:
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
@@ -556,7 +761,7 @@ def _run_evaluation_in_docker(
         score, metric = _parse_score_output(result.stdout)
         if score is None:
             return None, None, (
-                f"Could not parse a score from the evaluation output. "
+                f"Could not parse a score from evaluation output. "
                 f"Raw output: {result.stdout[:300]}"
             )
 
@@ -564,18 +769,14 @@ def _run_evaluation_in_docker(
 
 
 def _parse_score_output(output: str) -> tuple[float | None, str | None]:
-    """Parses lines like  accuracy=0.91  or  f1=0.87"""
-    KNOWN = {
-        "accuracy", "f1", "exact_match", "precision",
-        "recall", "auc", "mse", "mae", "rmse", "bleu", "rouge_l", "wer",
-    }
+    """Parses lines like  accuracy=0.91  or  rouge_l=0.74"""
     for line in output.splitlines():
         line = line.strip()
         if "=" in line:
             name, value = line.split("=", 1)
             name  = name.strip().lower()
             value = value.strip()
-            if name in KNOWN:
+            if name in KNOWN_METRICS:
                 try:
                     return float(value), name
                 except ValueError:

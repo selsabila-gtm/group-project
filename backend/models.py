@@ -238,6 +238,12 @@ class Submission(Base):
     competition_id = Column(String, ForeignKey("competitions.id"), nullable=False, index=True)
     user_id = Column(String, ForeignKey("user_profiles.user_id"), nullable=False, index=True)
 
+    # Team the submitter belongs to (nullable for solo participants)
+    team_id = Column(String, nullable=True)
+
+    # The .pkl (or other) filename evaluated against the hidden test set
+    model_filename = Column(String, nullable=True)
+
     file_name = Column(String, nullable=True)
     file_path = Column(String, nullable=True)
     storage_path = Column(String, nullable=True)
@@ -246,6 +252,10 @@ class Submission(Base):
     metric_name = Column(String, nullable=True)
     metric_value = Column(String, nullable=True)
 
+    # Human-readable error when status == "failed"
+    error_message = Column(Text, nullable=True)
+
     status = Column(String, default="pending")
     submitted_at = Column(String, default=lambda: datetime.utcnow().isoformat())
+    evaluated_at = Column(String, nullable=True)
     created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
