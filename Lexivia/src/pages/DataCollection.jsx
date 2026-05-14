@@ -23,18 +23,19 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CompetitionSidebar from "../components/CompetitionSidebar";
 import "./DataCollection.css";
+import CompetitionTopbar from "../components/CompetitionTopbar";
 
-import TextClassificationWidget  from "./widgets/TextClassificationWidget";
-import NERWidget                  from "./widgets/NERWidget";
-import SentimentWidget            from "./widgets/SentimentWidget";
-import TranslationWidget          from "./widgets/TranslationWidget";
-import QuestionAnsweringWidget    from "./widgets/QuestionAnsweringWidget";
-import SummarizationWidget        from "./widgets/SummarizationWidget";
-import AudioSynthesisWidget       from "./widgets/AudioSynthesisWidget";
-import AudioTranscriptionWidget   from "./widgets/AudioTranscriptionWidget";
-import SpeechEmotionWidget        from "./widgets/SpeechEmotionWidget";
-import AudioEventDetectionWidget  from "./widgets/AudioEventDetectionWidget";
-import BulkImportPanel            from "./widgets/BulkImportPanel";
+import TextClassificationWidget from "./widgets/TextClassificationWidget";
+import NERWidget from "./widgets/NERWidget";
+import SentimentWidget from "./widgets/SentimentWidget";
+import TranslationWidget from "./widgets/TranslationWidget";
+import QuestionAnsweringWidget from "./widgets/QuestionAnsweringWidget";
+import SummarizationWidget from "./widgets/SummarizationWidget";
+import AudioSynthesisWidget from "./widgets/AudioSynthesisWidget";
+import AudioTranscriptionWidget from "./widgets/AudioTranscriptionWidget";
+import SpeechEmotionWidget from "./widgets/SpeechEmotionWidget";
+import AudioEventDetectionWidget from "./widgets/AudioEventDetectionWidget";
+import BulkImportPanel from "./widgets/BulkImportPanel";
 import ScrapingAssistantPanel from "./widgets/ScrapingAssistantPanel";
 
 const API = "http://127.0.0.1:8000";
@@ -45,55 +46,31 @@ function authHeader() {
 
 // Widget registry — task_type values must exactly match what's stored in DB
 const WIDGET_MAP = {
-  TEXT_CLASSIFICATION:   TextClassificationWidget,
-  NER:                   NERWidget,
-  SENTIMENT_ANALYSIS:    SentimentWidget,
-  TRANSLATION:           TranslationWidget,
-  QUESTION_ANSWERING:    QuestionAnsweringWidget,
-  SUMMARIZATION:         SummarizationWidget,
-  AUDIO_SYNTHESIS:       AudioSynthesisWidget,
-  AUDIO_TRANSCRIPTION:   AudioTranscriptionWidget,
-  SPEECH_EMOTION:        SpeechEmotionWidget,
+  TEXT_CLASSIFICATION: TextClassificationWidget,
+  NER: NERWidget,
+  SENTIMENT_ANALYSIS: SentimentWidget,
+  TRANSLATION: TranslationWidget,
+  QUESTION_ANSWERING: QuestionAnsweringWidget,
+  SUMMARIZATION: SummarizationWidget,
+  AUDIO_SYNTHESIS: AudioSynthesisWidget,
+  AUDIO_TRANSCRIPTION: AudioTranscriptionWidget,
+  SPEECH_EMOTION: SpeechEmotionWidget,
   AUDIO_EVENT_DETECTION: AudioEventDetectionWidget,
 };
 
 const TASK_LABELS = {
-  TEXT_CLASSIFICATION:   "Text Classification",
-  NER:                   "Named Entity Recognition",
-  SENTIMENT_ANALYSIS:    "Sentiment Analysis",
-  TRANSLATION:           "Translation",
-  QUESTION_ANSWERING:    "Question Answering",
-  SUMMARIZATION:         "Summarization",
-  AUDIO_SYNTHESIS:       "Audio Synthesis",
-  AUDIO_TRANSCRIPTION:   "Audio Transcription",
-  SPEECH_EMOTION:        "Speech Emotion",
+  TEXT_CLASSIFICATION: "Text Classification",
+  NER: "Named Entity Recognition",
+  SENTIMENT_ANALYSIS: "Sentiment Analysis",
+  TRANSLATION: "Translation",
+  QUESTION_ANSWERING: "Question Answering",
+  SUMMARIZATION: "Summarization",
+  AUDIO_SYNTHESIS: "Audio Synthesis",
+  AUDIO_TRANSCRIPTION: "Audio Transcription",
+  SPEECH_EMOTION: "Speech Emotion",
   AUDIO_EVENT_DETECTION: "Audio Event Detection",
 };
 
-// ── CompetitionTopbar ─────────────────────────────────────────
-function CompetitionTopbar({ competition }) {
-  return (
-    <div className="comp-topbar">
-      <div className="comp-topbar-left">
-        <span className="comp-topbar-name">{competition?.title || "…"}</span>
-        <span className="comp-lab-badge">LAB ACTIVE</span>
-        <nav className="comp-topbar-tabs">
-          {["Overview", "Rules", "Resources"].map((t, i) => (
-            <button key={t} type="button" className={`comp-topbar-tab ${i === 0 ? "active" : ""}`}>{t}</button>
-          ))}
-        </nav>
-      </div>
-      <div className="comp-topbar-right">
-        <button type="button" className="comp-icon-btn" title="Search">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-        </button>
-        <div className="comp-avatar">U</div>
-      </div>
-    </div>
-  );
-}
 
 // ── TeamProgress panel ────────────────────────────────────────
 function TeamProgress({ myStats, teamStats, quota }) {
@@ -188,16 +165,16 @@ function DataCollection() {
   const competitionId = params.id ?? params.competitionId;
   const navigate = useNavigate();
 
-  const [competition,    setCompetition]    = useState(null);
-  const [datasetConfig,  setDatasetConfig]  = useState(null);
-  const [prompt,         setPrompt]         = useState(null);   // current organizer prompt
-  const [promptLoading,  setPromptLoading]  = useState(false);
-  const [myStats,        setMyStats]        = useState({ validated: 0, flagged: 0 });
-  const [teamStats,      setTeamStats]      = useState({ total: 0, members: [] });
-  const [totalSamples,   setTotalSamples]   = useState(0);
-  const [activeTab,      setActiveTab]      = useState("Manual Entry");
-  const [submitting,     setSubmitting]     = useState(false);
-  const [toast,          setToast]          = useState(null);
+  const [competition, setCompetition] = useState(null);
+  const [datasetConfig, setDatasetConfig] = useState(null);
+  const [prompt, setPrompt] = useState(null);   // current organizer prompt
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [myStats, setMyStats] = useState({ validated: 0, flagged: 0 });
+  const [teamStats, setTeamStats] = useState({ total: 0, members: [] });
+  const [totalSamples, setTotalSamples] = useState(0);
+  const [activeTab, setActiveTab] = useState("Manual Entry");
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState(null);
 
   // ── Prompt fetcher (works for all task types) ─────────────────────────────
   // Returns null silently when the competition has no prompts configured —
@@ -251,7 +228,7 @@ function DataCollection() {
               setDatasetConfig(cfg);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
 
         loadNextPrompt();
       })
@@ -263,11 +240,11 @@ function DataCollection() {
     const load = () => {
       const h = authHeader();
       fetch(`${API}/competitions/${competitionId}/my-stats`, { headers: h })
-        .then((r) => r.json()).then(setMyStats).catch(() => {});
+        .then((r) => r.json()).then(setMyStats).catch(() => { });
       fetch(`${API}/competitions/${competitionId}/team-stats`, { headers: h })
-        .then((r) => r.json()).then(setTeamStats).catch(() => {});
+        .then((r) => r.json()).then(setTeamStats).catch(() => { });
       fetch(`${API}/data-samples/count?competition_id=${competitionId}`, { headers: h })
-        .then((r) => r.json()).then((d) => setTotalSamples(d.count ?? 0)).catch(() => {});
+        .then((r) => r.json()).then((d) => setTotalSamples(d.count ?? 0)).catch(() => { });
     };
     load();
     const iv = setInterval(load, 15_000);
@@ -325,8 +302,8 @@ function DataCollection() {
 
     if (activeTab === "Scraping Assistant")
       return (
-       <ScrapingAssistantPanel
-         competition={competition}
+        <ScrapingAssistantPanel
+          competition={competition}
           config={datasetConfig}
           onSubmit={handleSubmit}
           submitting={submitting}
@@ -360,7 +337,12 @@ function DataCollection() {
       />
 
       <div className="dc-main">
-        <CompetitionTopbar competition={competition} />
+        <CompetitionTopbar
+          competitionId={competitionId}
+          competitionTitle={competition?.title || "Competition"}
+          status="LAB ACTIVE"
+          showDatasetHub={false}
+        />
 
         <div className="dc-body">
           <div className="dc-header">
@@ -377,10 +359,10 @@ function DataCollection() {
                 onClick={() => navigate(`/competitions/${competitionId}/dataset-hub`)}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                  <path d="M3 5v14a9 3 0 0 0 18 0V5"/>
-                  <path d="M3 12a9 3 0 0 0 18 0"/>
-                  <path d="M9 12l2 2 4-4"/>
+                  <ellipse cx="12" cy="5" rx="9" ry="3" />
+                  <path d="M3 5v14a9 3 0 0 0 18 0V5" />
+                  <path d="M3 12a9 3 0 0 0 18 0" />
+                  <path d="M9 12l2 2 4-4" />
                 </svg>
                 Dataset Hub
               </button>

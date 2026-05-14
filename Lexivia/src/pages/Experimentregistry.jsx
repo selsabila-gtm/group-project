@@ -11,6 +11,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import CompetitionSidebar from "../components/CompetitionSidebar";
+import CompetitionTopbar from "../components/CompetitionTopbar";
 import "../Styles/ExperimentRegistry.css";
 
 const API = "http://127.0.0.1:8000";
@@ -366,6 +367,12 @@ export default function ExperimentRegistry() {
             <div className="er-root" style={{ background: "#f4f6fa", color: "#111827" }}>
                 <CompetitionSidebar competitionId={competitionId} />
                 <div className="er-main" style={{ background: "#f4f6fa" }}>
+                    <CompetitionTopbar
+                        competitionId={competitionId}
+                        competitionTitle="Competition"
+                        status="LAB ACTIVE"
+                    />
+
                     <div className="er-loading">
                         <span className="er-spinner er-spinner--lg" />
                         <p>Loading experiment registry…</p>
@@ -379,13 +386,24 @@ export default function ExperimentRegistry() {
         return (
             <div className="er-root" style={{ background: "#f4f6fa", color: "#111827" }}>
                 <CompetitionSidebar competitionId={competitionId} />
+
                 <div className="er-main" style={{ background: "#f4f6fa" }}>
+                    <CompetitionTopbar
+                        competitionId={competitionId}
+                        competitionTitle="Competition"
+                        status="LAB ACTIVE"
+                    />
+
                     <div className="er-error">
                         <IconWarning size={28} />
                         <p>Your session has expired.</p>
                         <div style={{ display: "flex", gap: 10 }}>
-                            <button className="er-btn er-btn--ghost" onClick={fetchRegistry}>Retry</button>
-                            <button className="er-btn er-btn--primary" onClick={clearAuthAndGoLogin}>Log in again</button>
+                            <button className="er-btn er-btn--ghost" onClick={fetchRegistry}>
+                                Retry
+                            </button>
+                            <button className="er-btn er-btn--primary" onClick={clearAuthAndGoLogin}>
+                                Log in again
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -397,11 +415,20 @@ export default function ExperimentRegistry() {
         return (
             <div className="er-root" style={{ background: "#f4f6fa", color: "#111827" }}>
                 <CompetitionSidebar competitionId={competitionId} />
+
                 <div className="er-main" style={{ background: "#f4f6fa" }}>
+                    <CompetitionTopbar
+                        competitionId={competitionId}
+                        competitionTitle="Competition"
+                        status="LAB ACTIVE"
+                    />
+
                     <div className="er-error">
                         <IconWarning size={28} />
                         <p>{error}</p>
-                        <button className="er-btn er-btn--ghost" onClick={fetchRegistry}>Retry</button>
+                        <button className="er-btn er-btn--ghost" onClick={fetchRegistry}>
+                            Retry
+                        </button>
                     </div>
                 </div>
             </div>
@@ -419,225 +446,236 @@ export default function ExperimentRegistry() {
     const uniqueContributors = new Set(data?.experiments?.map((r) => r.user_id) ?? []).size;
 
     return (
-        <div className="er-root" style={{ background: "#f4f6fa", color: "#111827" }}>
+        <div className="er-root">
             <CompetitionSidebar competitionId={competitionId} />
 
-            <div className="er-main" style={{ background: "#f4f6fa" }}>
+            <div className="er-main">
+                <CompetitionTopbar
+                    competitionId={competitionId}
+                    competitionTitle={
+                        data?.competition_title ||
+                        data?.title ||
+                        "Competition"
+                    }
+                    status="LAB ACTIVE"
+                />
 
-                {/* ── Header ── */}
-                <div className="er-page-header">
-                    <div className="er-page-header-left">
-                        <div className="er-page-eyebrow">EXPERIMENTAL WORKFLOW</div>
-                        <h1 className="er-page-title">Experiment Registry</h1>
-                        <div className="er-header-chips">
-                            {taskType && (
-                                <span className="er-task-chip">{taskType.replace(/_/g, " ")}</span>
-                            )}
-                            <span className="er-metric-chip">
-                                Scored by: <strong>{primaryMetric}</strong>
-                            </span>
-                            {isOrganizerView ? (
-                                <span className="er-organizer-chip">Organizer View</span>
-                            ) : teamName ? (
-                                <span className="er-team-chip">
-                                    <IconTag size={11} />
-                                    {teamName}
-                                    {teamMemberCount > 0 && (
-                                        <span className="er-team-count"> · {teamMemberCount} members</span>
-                                    )}
+                <div className="er-content">
+                    {/* ── Header ── */}
+                    <div className="er-page-header">
+                        <div className="er-page-header-left">
+                            <div className="er-page-eyebrow">EXPERIMENTAL WORKFLOW</div>
+                            <h1 className="er-page-title">Experiment Registry</h1>
+                            <div className="er-header-chips">
+                                {taskType && (
+                                    <span className="er-task-chip">{taskType.replace(/_/g, " ")}</span>
+                                )}
+                                <span className="er-metric-chip">
+                                    Scored by: <strong>{primaryMetric}</strong>
                                 </span>
-                            ) : (
-                                <span className="er-team-chip er-team-chip--solo">Solo</span>
-                            )}
+                                {isOrganizerView ? (
+                                    <span className="er-organizer-chip">Organizer View</span>
+                                ) : teamName ? (
+                                    <span className="er-team-chip">
+                                        <IconTag size={11} />
+                                        {teamName}
+                                        {teamMemberCount > 0 && (
+                                            <span className="er-team-count"> · {teamMemberCount} members</span>
+                                        )}
+                                    </span>
+                                ) : (
+                                    <span className="er-team-chip er-team-chip--solo">Solo</span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="er-page-header-right">
+                            <button
+                                className="er-btn er-btn--outline"
+                                onClick={() => navigate(`/competitions/${competitionId}/leaderboard`)}
+                            >
+                                <IconTrophy size={13} /> Leaderboard
+                            </button>
+                            <button
+                                className="er-btn er-btn--outline"
+                                onClick={() => navigate(`/competitions/${competitionId}/experiments`)}
+                            >
+                                <IconChevronLeft size={13} /> Workspace
+                            </button>
+                            <button className="er-btn er-btn--outline" onClick={fetchRegistry} title="Refresh">
+                                <IconRefresh size={13} />
+                            </button>
                         </div>
                     </div>
 
-                    <div className="er-page-header-right">
-                        <button
-                            className="er-btn er-btn--outline"
-                            onClick={() => navigate(`/competitions/${competitionId}/leaderboard`)}
-                        >
-                            <IconTrophy size={13} /> Leaderboard
-                        </button>
-                        <button
-                            className="er-btn er-btn--outline"
-                            onClick={() => navigate(`/competitions/${competitionId}/experiments`)}
-                        >
-                            <IconChevronLeft size={13} /> Workspace
-                        </button>
-                        <button className="er-btn er-btn--outline" onClick={fetchRegistry} title="Refresh">
-                            <IconRefresh size={13} />
-                        </button>
-                    </div>
-                </div>
 
 
 
+                    {/* ── Stats strip ── */}
+                    <div className="er-stats-strip">
+                        <div className="er-stat">
+                            <span className="er-stat-num">{totalAll}</span>
+                            <span className="er-stat-lbl">{isOrganizerView ? "Total Runs" : "Team Runs"}</span>
+                        </div>
+                        <div className="er-stat">
+                            <span className="er-stat-num">{myRunsCount}</span>
+                            <span className="er-stat-lbl">My Runs</span>
+                        </div>
+                        <div className="er-stat">
+                            <span className="er-stat-num">{uniqueContributors}</span>
+                            <span className="er-stat-lbl">{isOrganizerView ? "All Contributors" : "Teammates"}</span>
+                        </div>
+                        <div className="er-stat">
+                            <span className="er-stat-num">
+                                {data?.experiments?.filter(
+                                    (r) => r.metric_value && parseFloat(r.metric_value) >= 0.9
+                                ).length ?? 0}
+                            </span>
+                            <span className="er-stat-lbl">High-score Runs</span>
+                        </div>
+                    </div>
 
-                {/* ── Stats strip ── */}
-                <div className="er-stats-strip">
-                    <div className="er-stat">
-                        <span className="er-stat-num">{totalAll}</span>
-                        <span className="er-stat-lbl">{isOrganizerView ? "Total Runs" : "Team Runs"}</span>
+                    {/* ── Toolbar ── */}
+                    <div className="er-toolbar">
+                        <div className="er-search-wrap">
+                            <span className="er-search-icon"><IconSearch size={14} /></span>
+                            <input
+                                className="er-search"
+                                placeholder="Search by name, notes, resource tier…"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                            />
+                        </div>
+                        <label className="er-toggle-label">
+                            <input
+                                type="checkbox"
+                                className="er-toggle-input"
+                                checked={onlyMine}
+                                onChange={(e) => setOnlyMine(e.target.checked)}
+                            />
+                            <span className="er-toggle-track"><span className="er-toggle-thumb" /></span>
+                            <span className="er-toggle-text">My runs only</span>
+                        </label>
                     </div>
-                    <div className="er-stat">
-                        <span className="er-stat-num">{myRunsCount}</span>
-                        <span className="er-stat-lbl">My Runs</span>
-                    </div>
-                    <div className="er-stat">
-                        <span className="er-stat-num">{uniqueContributors}</span>
-                        <span className="er-stat-lbl">{isOrganizerView ? "All Contributors" : "Teammates"}</span>
-                    </div>
-                    <div className="er-stat">
-                        <span className="er-stat-num">
-                            {data?.experiments?.filter(
-                                (r) => r.metric_value && parseFloat(r.metric_value) >= 0.9
-                            ).length ?? 0}
-                        </span>
-                        <span className="er-stat-lbl">High-score Runs</span>
-                    </div>
-                </div>
 
-                {/* ── Toolbar ── */}
-                <div className="er-toolbar">
-                    <div className="er-search-wrap">
-                        <span className="er-search-icon"><IconSearch size={14} /></span>
-                        <input
-                            className="er-search"
-                            placeholder="Search by name, notes, resource tier…"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
-                    </div>
-                    <label className="er-toggle-label">
-                        <input
-                            type="checkbox"
-                            className="er-toggle-input"
-                            checked={onlyMine}
-                            onChange={(e) => setOnlyMine(e.target.checked)}
-                        />
-                        <span className="er-toggle-track"><span className="er-toggle-thumb" /></span>
-                        <span className="er-toggle-text">My runs only</span>
-                    </label>
-                </div>
-
-                {/* ── Table ── */}
-                <div className="er-table-wrap">
-                    <table className="er-table">
-                        <thead>
-                            <tr>
-                                <th className="er-th er-th--check" />
-                                <th className="er-th er-th--sortable" onClick={() => toggleSort("name")}>
-                                    Run {sortArrow("name")}
-                                </th>
-                                <th className="er-th er-th--sortable" onClick={() => toggleSort("user_name")}>
-                                    {isOrganizerView ? "User" : "Teammate"} {sortArrow("user_name")}
-                                </th>
-                                <th className="er-th">Model File</th>
-                                <th className="er-th er-th--sortable" onClick={() => toggleSort("metric_value")}>
-                                    Local Metric {sortArrow("metric_value")}
-                                </th>
-                                <th className="er-th">Resource Tier</th>
-                                <th className="er-th er-th--sortable" onClick={() => toggleSort("created_at")}>
-                                    Saved At {sortArrow("created_at")}
-                                </th>
-                                <th className="er-th er-th--action">Submit</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {experiments.length === 0 ? (
+                    {/* ── Table ── */}
+                    <div className="er-table-wrap">
+                        <table className="er-table">
+                            <thead>
                                 <tr>
-                                    <td colSpan={8} className="er-empty">
-                                        {onlyMine
-                                            ? "You have no saved experiment runs yet. Train a model in your workspace and click Save Model."
-                                            : teamName
-                                                ? `No experiment runs from team "${teamName}" yet.`
-                                                : "No experiment runs found yet."}
-                                    </td>
+                                    <th className="er-th er-th--check" />
+                                    <th className="er-th er-th--sortable" onClick={() => toggleSort("name")}>
+                                        Run {sortArrow("name")}
+                                    </th>
+                                    <th className="er-th er-th--sortable" onClick={() => toggleSort("user_name")}>
+                                        {isOrganizerView ? "User" : "Teammate"} {sortArrow("user_name")}
+                                    </th>
+                                    <th className="er-th">Model File</th>
+                                    <th className="er-th er-th--sortable" onClick={() => toggleSort("metric_value")}>
+                                        Local Metric {sortArrow("metric_value")}
+                                    </th>
+                                    <th className="er-th">Resource Tier</th>
+                                    <th className="er-th er-th--sortable" onClick={() => toggleSort("created_at")}>
+                                        Saved At {sortArrow("created_at")}
+                                    </th>
+                                    <th className="er-th er-th--action">Submit</th>
                                 </tr>
-                            ) : (
-                                experiments.map((run) => (
-                                    <tr key={run.id} className={`er-row ${run.is_mine ? "er-row--mine" : ""}`}>
-                                        <td className="er-td er-td--check">
-                                            {run.is_mine && <span className="er-mine-dot" title="Your run" />}
-                                        </td>
-                                        <td className="er-td">
-                                            <div className="er-run-name">{run.name}</div>
-                                            <div className="er-run-id">{String(run.id).slice(0, 8)}</div>
-                                            {run.notes && (
-                                                <div className="er-run-notes" title={run.notes}>
-                                                    {run.notes.length > 60 ? run.notes.slice(0, 60) + "…" : run.notes}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="er-td">
-                                            <div className="er-user-cell">
-                                                <div className="er-avatar">
-                                                    {run.user_name.slice(0, 1).toUpperCase()}
-                                                </div>
-                                                <span className={`er-username ${run.is_mine ? "er-username--me" : ""}`}>
-                                                    {run.user_name}
-                                                    {run.is_mine && <span className="er-you-tag"> (you)</span>}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="er-td">
-                                            <code className="er-filename">{run.model_filename || "model.pkl"}</code>
-                                        </td>
-                                        <td className="er-td er-td--metric">
-                                            {run.metric_value ? (
-                                                <span className={metricBadgeClass(run.metric_value)}>
-                                                    {run.metric_name && (
-                                                        <span className="er-badge-label">{run.metric_name}</span>
-                                                    )}
-                                                    {parseFloat(run.metric_value).toFixed(4)}
-                                                </span>
-                                            ) : (
-                                                <span className="er-badge er-badge--neutral">—</span>
-                                            )}
-                                        </td>
-                                        <td className="er-td">
-                                            <span className="er-tier-chip">{run.resource_tier || "—"}</span>
-                                        </td>
-                                        <td className="er-td er-td--date">{fmtDate(run.created_at)}</td>
-                                        <td className="er-td er-td--action">
-                                            {run.is_mine ? (
-                                                <button
-                                                    className="er-submit-btn"
-                                                    onClick={() => { setSelectedRun(run); setSubmitResult(null); }}
-                                                >
-                                                    Submit
-                                                </button>
-                                            ) : (
-                                                <span className="er-submit-na" title="You can only submit your own runs">—</span>
-                                            )}
+                            </thead>
+                            <tbody>
+                                {experiments.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={8} className="er-empty">
+                                            {onlyMine
+                                                ? "You have no saved experiment runs yet. Train a model in your workspace and click Save Model."
+                                                : teamName
+                                                    ? `No experiment runs from team "${teamName}" yet.`
+                                                    : "No experiment runs found yet."}
                                         </td>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                ) : (
+                                    experiments.map((run) => (
+                                        <tr key={run.id} className={`er-row ${run.is_mine ? "er-row--mine" : ""}`}>
+                                            <td className="er-td er-td--check">
+                                                {run.is_mine && <span className="er-mine-dot" title="Your run" />}
+                                            </td>
+                                            <td className="er-td">
+                                                <div className="er-run-name">{run.name}</div>
+                                                <div className="er-run-id">{String(run.id).slice(0, 8)}</div>
+                                                {run.notes && (
+                                                    <div className="er-run-notes" title={run.notes}>
+                                                        {run.notes.length > 60 ? run.notes.slice(0, 60) + "…" : run.notes}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="er-td">
+                                                <div className="er-user-cell">
+                                                    <div className="er-avatar">
+                                                        {run.user_name.slice(0, 1).toUpperCase()}
+                                                    </div>
+                                                    <span className={`er-username ${run.is_mine ? "er-username--me" : ""}`}>
+                                                        {run.user_name}
+                                                        {run.is_mine && <span className="er-you-tag"> (you)</span>}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="er-td">
+                                                <code className="er-filename">{run.model_filename || "model.pkl"}</code>
+                                            </td>
+                                            <td className="er-td er-td--metric">
+                                                {run.metric_value ? (
+                                                    <span className={metricBadgeClass(run.metric_value)}>
+                                                        {run.metric_name && (
+                                                            <span className="er-badge-label">{run.metric_name}</span>
+                                                        )}
+                                                        {parseFloat(run.metric_value).toFixed(4)}
+                                                    </span>
+                                                ) : (
+                                                    <span className="er-badge er-badge--neutral">—</span>
+                                                )}
+                                            </td>
+                                            <td className="er-td">
+                                                <span className="er-tier-chip">{run.resource_tier || "—"}</span>
+                                            </td>
+                                            <td className="er-td er-td--date">{fmtDate(run.created_at)}</td>
+                                            <td className="er-td er-td--action">
+                                                {run.is_mine ? (
+                                                    <button
+                                                        className="er-submit-btn"
+                                                        onClick={() => { setSelectedRun(run); setSubmitResult(null); }}
+                                                    >
+                                                        Submit
+                                                    </button>
+                                                ) : (
+                                                    <span className="er-submit-na" title="You can only submit your own runs">—</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
 
-                <div className="er-table-footer">
-                    Showing {experiments.length} of {totalAll} runs
-                    {!isOrganizerView && teamName && (
-                        <span className="er-table-footer-team"> in team "{teamName}"</span>
+                    <div className="er-table-footer">
+                        Showing {experiments.length} of {totalAll} runs
+                        {!isOrganizerView && teamName && (
+                            <span className="er-table-footer-team"> in team "{teamName}"</span>
+                        )}
+                    </div>
+
+                    {selectedRun && (
+                        <SubmitModal
+                            run={selectedRun}
+                            primaryMetric={primaryMetric}
+                            onClose={closeModal}
+                            onConfirm={handleSubmit}
+                            submitting={submitting}
+                            result={submitResult}
+                        />
                     )}
+
+                    {toast && <div className="er-toast">{toast}</div>}
                 </div>
-
-                {selectedRun && (
-                    <SubmitModal
-                        run={selectedRun}
-                        primaryMetric={primaryMetric}
-                        onClose={closeModal}
-                        onConfirm={handleSubmit}
-                        submitting={submitting}
-                        result={submitResult}
-                    />
-                )}
-
-                {toast && <div className="er-toast">{toast}</div>}
             </div>
         </div>
     );

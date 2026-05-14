@@ -1681,3 +1681,22 @@
     font-family: Consolas, Monaco, monospace;
     font-size: 13px;
 }
+
+.ws-shell {
+    font-family: var(--app-font);
+}
+
+.ws-ide {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.ws-chrome {
+    flex-shrink: 0;
+}
+
+.ws-body {
+    min-height: 0;
+}

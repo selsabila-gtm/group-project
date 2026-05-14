@@ -33,6 +33,7 @@ import Experiments from "./pages/Experiments";
 import ExperimentRegistry from "./pages/ExperimentRegistry";
 import Leaderboard from "./pages/leaderboard";
 import SetPassword from "./pages/SetPassword";
+import CompetitionTopbar from "./components/CompetitionTopbar";
 
 import "./index.css";
 
@@ -64,66 +65,66 @@ function CompetitionSimplePage({ title, description }) {
   const { competitionId } = useParams();
 
   return (
-    <div
-      style={{
-        display: "flex",
-        minHeight: "100vh",
-        background: "#f7f8fc",
-        fontFamily: "Inter, Arial, sans-serif",
-      }}
-    >
+    <div className="competition-layout">
       <CompetitionSidebar competitionId={competitionId} />
 
-      <main style={{ flex: 1, padding: "38px 44px" }}>
-        <div
-          style={{
-            maxWidth: "900px",
-            background: "#fff",
-            border: "1px solid #e5e7ef",
-            borderRadius: "18px",
-            padding: "28px",
-            boxShadow: "0 4px 30px rgba(15, 23, 42, 0.04)",
-          }}
-        >
-          <p
-            style={{
-              fontSize: "11px",
-              letterSpacing: "1.4px",
-              textTransform: "uppercase",
-              color: "#718096",
-              fontWeight: 700,
-              margin: "0 0 8px",
-            }}
-          >
-            Competition Workspace
-          </p>
+      <div className="competition-page">
+        <CompetitionTopbar
+          competitionId={competitionId}
+          competitionTitle="Competition"
+          status="LAB ACTIVE"
+        />
 
-          <h1
+        <main style={{ padding: "38px 44px" }}>
+          <div
             style={{
-              fontSize: "28px",
-              color: "#101827",
-              margin: "0 0 10px",
+              maxWidth: "900px",
+              background: "#fff",
+              border: "1px solid #e5e7ef",
+              borderRadius: "18px",
+              padding: "28px",
+              boxShadow: "0 4px 30px rgba(15, 23, 42, 0.04)",
             }}
           >
-            {title}
-          </h1>
+            <p
+              style={{
+                fontSize: "11px",
+                letterSpacing: "1.4px",
+                textTransform: "uppercase",
+                color: "#718096",
+                fontWeight: 700,
+                margin: "0 0 8px",
+              }}
+            >
+              Competition Workspace
+            </p>
 
-          <p
-            style={{
-              fontSize: "14px",
-              color: "#667085",
-              margin: 0,
-              lineHeight: 1.6,
-            }}
-          >
-            {description}
-          </p>
-        </div>
-      </main>
+            <h1
+              style={{
+                fontSize: "28px",
+                color: "#101827",
+                margin: "0 0 10px",
+              }}
+            >
+              {title}
+            </h1>
+
+            <p
+              style={{
+                fontSize: "14px",
+                color: "#667085",
+                margin: 0,
+                lineHeight: 1.6,
+              }}
+            >
+              {description}
+            </p>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
-
 function isLoggedIn() {
   const token = localStorage.getItem("token");
   const user = localStorage.getItem("user");

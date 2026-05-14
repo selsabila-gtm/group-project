@@ -1,25 +1,28 @@
 .csidebar {
-    width: 200px;
-    min-height: 100vh;
+    width: 205px;
+    height: 100vh;
     background: #ffffff;
-    border-right: 1px solid #e8edf8;
+    border-right: 1px solid #ececf3;
     display: flex;
     flex-direction: column;
-    flex-shrink: 0;
-    padding: 20px 0 16px;
+    justify-content: space-between;
+    padding: 22px 14px 18px;
     position: sticky;
     top: 0;
-    height: 100vh;
-    overflow-y: auto;
+    left: 0;
+    flex-shrink: 0;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
-/* ── Back button ─────────────────────────────────────────────── */
+/* Back button */
 .csidebar-back {
+    height: 34px;
     border: none;
     background: transparent;
     text-align: left;
-    padding: 0 20px;
-    margin-bottom: 20px;
+    padding: 0 4px;
+    margin-bottom: 12px;
     font-size: 10px;
     font-weight: 800;
     color: #8d94a8;
@@ -33,10 +36,10 @@
     color: #1359db;
 }
 
-/* ── Competition identity ─────────────────────────────────────── */
+/* Competition identity */
 .csidebar-identity {
-    padding: 0 20px;
-    margin-bottom: 24px;
+    margin-bottom: 18px;
+    padding: 0 4px;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -45,76 +48,65 @@
 .csidebar-brand {
     font-size: 14px;
     font-weight: 800;
-    color: #1359db;
-    line-height: 1.3;
+    color: #111827;
+    line-height: 1.35;
     word-break: break-word;
 }
 
 .csidebar-sub {
-    font-size: 9px;
-    font-weight: 800;
-    color: #8d94a8;
-    letter-spacing: 0.1em;
+    display: none;
 }
 
-/* ── Nav items ────────────────────────────────────────────────── */
+/* Nav */
 .csidebar-nav {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 1px;
-    padding: 0 10px;
+    gap: 6px;
+    flex: 1;
 }
 
 .csidebar-item {
+    height: 40px;
+    border-radius: 10px;
+    padding: 0 12px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    height: 38px;
-    padding: 0 12px;
+    gap: 12px;
+    color: #70778d;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
     border: none;
     background: transparent;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #6f778c;
+    box-sizing: border-box;
     cursor: pointer;
     text-align: left;
     width: 100%;
-    transition: background 0.12s, color 0.12s;
-    position: relative;
 }
 
 .csidebar-item:hover {
-    background: #f4f7ff;
-    color: #1d2333;
+    background: #f7f9ff;
+    color: #1359db;
 }
 
 .csidebar-item.active {
-    background: #eef3ff;
+    background: #f4f7ff;
     color: #1359db;
     font-weight: 700;
 }
 
-/* blue left bar on active item */
 .csidebar-item.active::before {
-    content: "";
-    position: absolute;
-    left: -10px;
-    top: 8px;
-    bottom: 8px;
-    width: 3px;
-    background: #1359db;
-    border-radius: 0 3px 3px 0;
+    display: none;
 }
 
 .csidebar-icon {
-    display: flex;
-    align-items: center;
+    width: 16px;
+    min-width: 16px;
+    display: inline-flex;
     justify-content: center;
-    width: 18px;
-    flex-shrink: 0;
-    opacity: 0.65;
+    align-items: center;
+    font-size: 15px;
+    opacity: 1;
 }
 
 .csidebar-item.active .csidebar-icon,
@@ -122,39 +114,46 @@
     opacity: 1;
 }
 
-/* ── Bottom utilities ─────────────────────────────────────────── */
+/* Bottom utilities */
 .csidebar-bottom {
-    padding: 10px;
-    border-top: 1px solid #f0f3fa;
-    margin-top: 12px;
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 8px;
+    border-top: none;
+    padding: 0;
+    margin-top: 16px;
 }
 
 .csidebar-util {
+    height: 40px;
+    border-radius: 10px;
+    padding: 0 12px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    height: 34px;
-    padding: 0 12px;
+    gap: 12px;
+    color: #70778d;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
     border: none;
     background: transparent;
-    border-radius: 8px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #8d94a8;
+    box-sizing: border-box;
     cursor: pointer;
     text-align: left;
     width: 100%;
-    transition: background 0.12s, color 0.12s;
 }
 
 .csidebar-util:hover {
+    background: #f7f9ff;
+    color: #1359db;
+}
+
+.csidebar-util.active {
     background: #f4f7ff;
-    color: #4f586f;
+    color: #1359db;
+    font-weight: 700;
 }
 
 .csidebar-util .csidebar-icon {
-    opacity: 0.7;
+    opacity: 1;
 }

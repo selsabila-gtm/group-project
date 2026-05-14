@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./OrganizerDashboard.css";
@@ -18,6 +18,166 @@ function money(value) {
     return `$${Number(value).toLocaleString()}`;
 }
 
+const API = "http://127.0.0.1:8000";
+
+function getToken() {
+    return (
+        localStorage.getItem("token") ||
+        localStorage.getItem("access_token") ||
+        localStorage.getItem("jwt")
+    );
+}
+
+function authHeader() {
+    const token = getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function fmtScore(value) {
+    if (value === null || value === undefined) return "—";
+    const n = Number(value);
+    if (Number.isNaN(n)) return "—";
+    return n.toFixed(4);
+}
+
+function fmtDate(value) {
+    if (!value) return "—";
+    try {
+        return new Date(value).toLocaleDateString();
+    } catch {
+        return value;
+    }
+}
+
+function TopPerformersPanel({ competitionId }) {
+    const navigate = useNavigate();
+
+    const [leaderboard, setLeaderboard] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+
+    const fetchLeaderboard = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
+        setError("");
+
+        try {
+            const res = await fetch(
+                `${API}/competitions/${competitionId}/leaderboard-rich`,
+                {
+                    headers: authHeader(),
+                }
+            );
+
+            if (res.status === 401) {
+                setError("Session expired. Please log in again.");
+                return;
+            }
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.detail || "Could not load leaderboard.");
+            }
+
+            setLeaderboard(data);
+        } catch (err) {
+            setError(err.message || "Could not load leaderboard.");
+        } finally {
+            if (!silent) setLoading(false);
+        }
+    }, [competitionId]);
+
+    useEffect(() => {
+        fetchLeaderboard();
+
+        const interval = setInterval(() => {
+            fetchLeaderboard(true);
+        }, 30000);
+
+        return () => clearInterval(interval);
+    }, [fetchLeaderboard]);
+
+    const entries = leaderboard?.entries ?? [];
+    const topEntries = entries.slice(0, 3);
+    const primaryMetric = leaderboard?.primary_metric || "Score";
+
+    return (
+        <div className="panel top-performers-panel">
+            <div className="section-row">
+                <h2>Top Performers</h2>
+                <span>{entries.length} ranked</span>
+            </div>
+
+            {loading ? (
+                <div className="empty-state">
+                    <strong>Loading leaderboard...</strong>
+                    <p>Fetching latest validated submissions.</p>
+                </div>
+            ) : error ? (
+                <div className="empty-state">
+                    <strong>Could not load leaderboard</strong>
+                    <p>{error}</p>
+                </div>
+            ) : topEntries.length === 0 ? (
+                <div className="empty-state">
+                    <strong>No leaderboard yet</strong>
+                    <p>
+                        Top teams will appear after model submissions are validated.
+                    </p>
+                </div>
+            ) : (
+                <div className="top-performers-list">
+                    {topEntries.map((entry, index) => {
+                        const rank = entry.rank ?? index + 1;
+                        const name =
+                            entry.team_name ||
+                            entry.user_name ||
+                            "Unknown participant";
+
+                        return (
+                            <div className="top-performer-card" key={entry.submission_id || rank}>
+                                <div className="top-performer-left">
+                                    <span className={`top-rank top-rank-${rank}`}>
+                                        #{rank}
+                                    </span>
+
+                                    <div>
+                                        <strong>{name}</strong>
+                                        <p>
+                                            {entry.team_name
+                                                ? `Submitted by ${entry.user_name || "Unknown"}`
+                                                : "Solo participant"}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="top-performer-score">
+                                    <strong>{fmtScore(entry.score)}</strong>
+                                    <span>{primaryMetric}</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {entries.length > 0 && (
+                <div className="leaderboard-mini-footer">
+                    <span>Best score: {fmtScore(entries[0]?.score)}</span>
+                    <span>Updated automatically</span>
+                </div>
+            )}
+
+            <button
+                className="full-btn"
+                onClick={() => navigate(`/competitions/${competitionId}/leaderboard`)}
+            >
+                View Full Leaderboard
+            </button>
+        </div>
+    );
+}
+
 function OrganizerDashboard() {
     const { competitionId } = useParams();
     const navigate = useNavigate();
@@ -29,7 +189,7 @@ function OrganizerDashboard() {
     const [requestsLoading, setRequestsLoading] = useState(false);
     ;
 
-    const token = localStorage.getItem("token");
+    const token = getToken();
 
     const fetchJoinRequests = async () => {
         if (!token) return;
@@ -291,18 +451,7 @@ function OrganizerDashboard() {
                         </div>
                     </div>
 
-                    <div className="panel">
-                        <h2>Top Performers</h2>
-
-                        <div className="empty-state">
-                            <strong>No leaderboard yet</strong>
-                            <p>
-                                Top teams will appear after model submissions are validated.
-                            </p>
-                        </div>
-
-                        <button className="full-btn">View Full Leaderboard</button>
-                    </div>
+                    <TopPerformersPanel competitionId={competitionId} />
                 </section>
 
                 <section className="panel">

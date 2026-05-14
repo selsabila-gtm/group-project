@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { supabase } from "../config/supabase.js";
 import CompetitionSidebar from "../components/CompetitionSidebar";
 import "./Experiments.css";
+import CompetitionTopbar from "../components/CompetitionTopbar";
 
 const API = "http://127.0.0.1:8000";
 
@@ -844,6 +845,12 @@ export default function Experiments() {
             />
 
             <div className="ws-ide">
+                <CompetitionTopbar
+                    competitionId={competitionId}
+                    competitionTitle={competition?.title || "Competition"}
+                    status={workspace?.status === "running" ? "LAB ACTIVE" : "LAB IDLE"}
+                />
+
                 <div className="ws-chrome">
                     <div className="ws-chrome-logo">
                         <div className="ws-logo-icon">⬡</div>

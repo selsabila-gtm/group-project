@@ -13,8 +13,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import CompetitionSidebar from "../components/CompetitionSidebar";
-import DataHealthPanel    from "../components/DataHealthPanel";
-import RawSamplesTable    from "../components/RawSamplesTable";
+import CompetitionTopbar from "../components/CompetitionTopbar";
+import DataHealthPanel from "../components/DataHealthPanel";
+import RawSamplesTable from "../components/RawSamplesTable";
 import "./DatasetHub.css";
 
 const API = "http://127.0.0.1:8000";
@@ -23,37 +24,6 @@ function authHeader() {
     return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// ─── Top bar ───────────────────────────────────────────────────────────────────
-function CompetitionTopbar({ competition }) {
-    return (
-        <div className="dh-topbar">
-            <div className="dh-topbar-left">
-                <span className="dh-topbar-name">{competition?.title || "…"}</span>
-                <span className="dh-lab-badge">LAB ACTIVE</span>
-                <nav className="dh-topbar-tabs">
-                    {["Overview","Rules","Resources"].map((t,i) => (
-                        <button key={t} type="button"
-                            className={`dh-topbar-tab${i===0?" active":""}`}>{t}</button>
-                    ))}
-                </nav>
-            </div>
-            <div className="dh-topbar-right">
-                <button type="button" className="dh-icon-btn" title="Search">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                    </svg>
-                </button>
-                <button type="button" className="dh-icon-btn" title="Notifications">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-                    </svg>
-                </button>
-                <div className="dh-avatar">U</div>
-            </div>
-        </div>
-    );
-}
 
 // ─── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, accent }) {
@@ -79,18 +49,20 @@ function DiffBadge({ value, label }) {
 // ─── Label mini-bars ───────────────────────────────────────────────────────────
 function VersionLabelBars({ distribution, total }) {
     if (!distribution || !total) return null;
-    const COLORS = ["#1359db","#22c47a","#f97316","#8b5cf6","#ec4899"];
+    const COLORS = ["#1359db", "#22c47a", "#f97316", "#8b5cf6", "#ec4899"];
     return (
         <div className="dh-ver-label-bars">
-            {Object.entries(distribution).slice(0,5).map(([lbl, cnt], i) => (
+            {Object.entries(distribution).slice(0, 5).map(([lbl, cnt], i) => (
                 <div key={lbl} className="dh-ver-label-row">
                     <span className="dh-ver-label-name" title={lbl}>{lbl}</span>
                     <div className="dh-ver-label-bar">
                         <div className="dh-ver-label-fill"
-                            style={{ width:`${Math.round(cnt/total*100)}%`,
-                                background: COLORS[i % COLORS.length] }} />
+                            style={{
+                                width: `${Math.round(cnt / total * 100)}%`,
+                                background: COLORS[i % COLORS.length]
+                            }} />
                     </div>
-                    <span className="dh-ver-label-pct">{Math.round(cnt/total*100)}%</span>
+                    <span className="dh-ver-label-pct">{Math.round(cnt / total * 100)}%</span>
                 </div>
             ))}
         </div>
@@ -104,12 +76,12 @@ function VersionCard({ version, isActive, isLast, onSelect, onEdit, onDelete, on
 
     const cardClass = [
         "dh-ver-card",
-        isActive           ? "active"    : "",
+        isActive ? "active" : "",
         version.is_current ? "is-latest" : "",
-        version.is_pinned  ? "is-pinned" : "",
+        version.is_pinned ? "is-pinned" : "",
     ].filter(Boolean).join(" ");
 
-    const statColors = { validated:"#22c47a", flagged:"#f97316", rejected:"#ef4444", pending:"#f59e0b" };
+    const statColors = { validated: "#22c47a", flagged: "#f97316", rejected: "#ef4444", pending: "#f59e0b" };
 
     return (
         <div className="dh-ver-spine">
@@ -123,11 +95,11 @@ function VersionCard({ version, isActive, isLast, onSelect, onEdit, onDelete, on
 
                     {/* Head */}
                     <div className="dh-ver-card-head">
-                        <div style={{ minWidth:0, flex:1 }}>
-                            <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                                 <span className="dh-ver-tag">{version.tag}</span>
                                 {version.is_current && <span className="dh-ver-badge-latest">Latest</span>}
-                                {version.is_pinned  && <span className="dh-ver-badge-pinned">📌 In Use</span>}
+                                {version.is_pinned && <span className="dh-ver-badge-pinned">📌 In Use</span>}
                                 {isActive && !version.is_current && <span className="dh-ver-badge-viewing">Viewing</span>}
                             </div>
                             {version.label && <p className="dh-ver-label">{version.label}</p>}
@@ -154,12 +126,12 @@ function VersionCard({ version, isActive, isLast, onSelect, onEdit, onDelete, on
                     {/* Stats */}
                     <div className="dh-ver-stats">
                         {[
-                            { key:"validated", count:version.validated_samples },
-                            { key:"flagged",   count:version.flagged_samples   },
-                            { key:"rejected",  count:version.rejected_samples  },
-                            { key:"pending",   count:version.pending_samples   },
+                            { key: "validated", count: version.validated_samples },
+                            { key: "flagged", count: version.flagged_samples },
+                            { key: "rejected", count: version.rejected_samples },
+                            { key: "pending", count: version.pending_samples },
                         ].filter(s => s.count > 0).map(({ key, count }) => (
-                            <span key={key} className="dh-ver-stat" style={{ color:statColors[key] }}>
+                            <span key={key} className="dh-ver-stat" style={{ color: statColors[key] }}>
                                 {count?.toLocaleString()} {key}
                             </span>
                         ))}
@@ -169,8 +141,8 @@ function VersionCard({ version, isActive, isLast, onSelect, onEdit, onDelete, on
                     {version.diff && Object.values(version.diff).some(v => v !== 0) && (
                         <div className="dh-ver-diffs">
                             <DiffBadge value={version.diff.validated_samples} label="validated" />
-                            <DiffBadge value={version.diff.total_samples}     label="total"     />
-                            <DiffBadge value={version.diff.flagged_samples}   label="flagged"   />
+                            <DiffBadge value={version.diff.total_samples} label="total" />
+                            <DiffBadge value={version.diff.flagged_samples} label="flagged" />
                         </div>
                     )}
 
@@ -215,8 +187,8 @@ function VersionCard({ version, isActive, isLast, onSelect, onEdit, onDelete, on
 
 // ─── Edit version modal ────────────────────────────────────────────────────────
 function EditVersionModal({ version, onSave, onClose }) {
-    const [label,  setLabel]  = useState(version.label || "");
-    const [notes,  setNotes]  = useState(version.notes || "");
+    const [label, setLabel] = useState(version.label || "");
+    const [notes, setNotes] = useState(version.notes || "");
     const [saving, setSaving] = useState(false);
 
     const handleSave = async () => {
@@ -235,11 +207,11 @@ function EditVersionModal({ version, onSave, onClose }) {
                 <input className="dh-modal-input" value={label}
                     onChange={e => setLabel(e.target.value)}
                     placeholder="e.g. Pre-launch freeze" />
-                <label className="dh-modal-label" style={{ marginTop:10 }}>NOTES</label>
+                <label className="dh-modal-label" style={{ marginTop: 10 }}>NOTES</label>
                 <textarea className="dh-modal-input" value={notes} rows={3}
                     onChange={e => setNotes(e.target.value)}
                     placeholder="What changed in this version?"
-                    style={{ resize:"vertical", minHeight:64, fontFamily:"inherit" }} />
+                    style={{ resize: "vertical", minHeight: 64, fontFamily: "inherit" }} />
                 <div className="dh-modal-actions">
                     <button className="dh-modal-cancel" onClick={onClose}>Cancel</button>
                     <button className="dh-modal-confirm" onClick={handleSave} disabled={saving}>
@@ -255,13 +227,13 @@ function EditVersionModal({ version, onSave, onClose }) {
 function VersionControl({ versions, loading, onCreateVersion, onUpdateVersion, onDeleteVersion,
     onSelectVersion, activeVersion, onRefresh, pinnedTag, onPin, pinning }) {
 
-    const [showModal,      setShowModal]      = useState(false);
+    const [showModal, setShowModal] = useState(false);
     const [editingVersion, setEditingVersion] = useState(null);
-    const [tag,      setTag]      = useState("");
-    const [label,    setLabel]    = useState("");
-    const [notes,    setNotes]    = useState("");
+    const [tag, setTag] = useState("");
+    const [label, setLabel] = useState("");
+    const [notes, setNotes] = useState("");
     const [creating, setCreating] = useState(false);
-    const [error,    setError]    = useState(null);
+    const [error, setError] = useState(null);
 
     const handleCreate = async () => {
         setCreating(true);
@@ -284,7 +256,7 @@ function VersionControl({ versions, loading, onCreateVersion, onUpdateVersion, o
             {/* Header */}
             <div className="dh-version-header">
                 <span className="dh-version-title">VERSION CONTROL</span>
-                <div style={{ display:"flex", gap:6 }}>
+                <div style={{ display: "flex", gap: 6 }}>
                     {activeVersion && (
                         <button className="dh-ver-clear-btn" onClick={() => onSelectVersion(null)}>
                             ✕ Clear filter
@@ -292,9 +264,9 @@ function VersionControl({ versions, loading, onCreateVersion, onUpdateVersion, o
                     )}
                     <button className="dh-version-icon-btn" onClick={onRefresh} title="Refresh">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="1 4 1 10 7 10"/>
-                            <polyline points="23 20 23 14 17 14"/>
-                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                            <polyline points="1 4 1 10 7 10" />
+                            <polyline points="23 20 23 14 17 14" />
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
                         </svg>
                     </button>
                 </div>
@@ -376,19 +348,19 @@ function VersionControl({ versions, loading, onCreateVersion, onUpdateVersion, o
                         <input className="dh-modal-input" value={tag}
                             onChange={e => setTag(e.target.value)}
                             placeholder="e.g. v1.3  (auto-generated if blank)" />
-                        <label className="dh-modal-label" style={{ marginTop:10 }}>
+                        <label className="dh-modal-label" style={{ marginTop: 10 }}>
                             LABEL (optional)
                         </label>
                         <input className="dh-modal-input" value={label}
                             onChange={e => setLabel(e.target.value)}
                             placeholder="e.g. Pre-launch validation freeze" />
-                        <label className="dh-modal-label" style={{ marginTop:10 }}>
+                        <label className="dh-modal-label" style={{ marginTop: 10 }}>
                             NOTES (optional)
                         </label>
                         <textarea className="dh-modal-input" value={notes} rows={3}
                             onChange={e => setNotes(e.target.value)}
                             placeholder="Describe what changed in this version…"
-                            style={{ resize:"vertical", minHeight:60, fontFamily:"inherit" }} />
+                            style={{ resize: "vertical", minHeight: 60, fontFamily: "inherit" }} />
                         <div className="dh-modal-actions">
                             <button className="dh-modal-cancel"
                                 onClick={() => { setShowModal(false); setError(null); }}>
@@ -432,19 +404,19 @@ function EmbeddingVisualizer() {
 
 // ─── Main DatasetHub page ───────────────────────────────────────────────────────
 export default function DatasetHub() {
-    const { id: competitionId } = useParams();
+    const { competitionId } = useParams();
 
-    const [competition,     setCompetition]     = useState(null);
-    const [health,          setHealth]          = useState(null);
-    const [healthLoading,   setHealthLoading]   = useState(true);
-    const [versions,        setVersions]        = useState([]);
+    const [competition, setCompetition] = useState(null);
+    const [health, setHealth] = useState(null);
+    const [healthLoading, setHealthLoading] = useState(true);
+    const [versions, setVersions] = useState([]);
     const [versionsLoading, setVersionsLoading] = useState(true);
-    const [isOrganizer,     setIsOrganizer]     = useState(false);
-    const [activeVersion,   setActiveVersion]   = useState(null);
-    const [pinnedTag,       setPinnedTag]       = useState(null);
-    const [pinning,         setPinning]         = useState(false);
-    const [downloadFormat,  setDownloadFormat]  = useState("csv");
-    const [downloading,     setDownloading]     = useState(false);
+    const [isOrganizer, setIsOrganizer] = useState(false);
+    const [activeVersion, setActiveVersion] = useState(null);
+    const [pinnedTag, setPinnedTag] = useState(null);
+    const [pinning, setPinning] = useState(false);
+    const [downloadFormat, setDownloadFormat] = useState("csv");
+    const [downloading, setDownloading] = useState(false);
 
     // Competition detail
     useEffect(() => {
@@ -455,7 +427,7 @@ export default function DatasetHub() {
     // Role (for informational use only — does not gate any actions in this page)
     useEffect(() => {
         fetch(`${API}/competitions/${competitionId}/my-role`, { headers: authHeader() })
-            .then(r => r.ok ? r.json() : { role:"guest", is_organizer:false })
+            .then(r => r.ok ? r.json() : { role: "guest", is_organizer: false })
             .then(d => setIsOrganizer(d.role === "organizer" || d.is_organizer === true))
             .catch(() => setIsOrganizer(false));
     }, [competitionId]);
@@ -497,7 +469,7 @@ export default function DatasetHub() {
         try {
             const res = await fetch(`${API}/competitions/${competitionId}/versions`, {
                 method: "POST",
-                headers: { "Content-Type":"application/json", ...authHeader() },
+                headers: { "Content-Type": "application/json", ...authHeader() },
                 body: JSON.stringify(body),
             });
             if (res.status === 409) return (await res.json()).detail || "Tag already exists.";
@@ -512,7 +484,7 @@ export default function DatasetHub() {
         try {
             await fetch(`${API}/competitions/${competitionId}/versions/${tag}`, {
                 method: "PATCH",
-                headers: { "Content-Type":"application/json", ...authHeader() },
+                headers: { "Content-Type": "application/json", ...authHeader() },
                 body: JSON.stringify(body),
             });
             loadVersions();
@@ -523,7 +495,7 @@ export default function DatasetHub() {
     const handleDeleteVersion = async (tag) => {
         try {
             const res = await fetch(`${API}/competitions/${competitionId}/versions/${tag}`,
-                { method:"DELETE", headers: authHeader() });
+                { method: "DELETE", headers: authHeader() });
             if (res.status === 409) { alert((await res.json()).detail); return; }
             loadVersions();
             if (activeVersion === tag) setActiveVersion(null);
@@ -536,11 +508,11 @@ export default function DatasetHub() {
         try {
             if (pinnedTag === tag) {
                 await fetch(`${API}/competitions/${competitionId}/versions/pin`,
-                    { method:"DELETE", headers: authHeader() });
+                    { method: "DELETE", headers: authHeader() });
                 setPinnedTag(null);
             } else {
                 await fetch(`${API}/competitions/${competitionId}/versions/${tag}/pin`,
-                    { method:"POST", headers: authHeader() });
+                    { method: "POST", headers: authHeader() });
                 setPinnedTag(tag);
             }
             loadVersions();
@@ -558,13 +530,13 @@ export default function DatasetHub() {
                 `${API}/competitions/${competitionId}/export?${params}`,
                 { headers: authHeader() });
             if (!res.ok) {
-                alert((await res.json().catch(()=>({}))).detail || "Download failed.");
+                alert((await res.json().catch(() => ({}))).detail || "Download failed.");
                 return;
             }
             const blob = await res.blob();
-            const url  = URL.createObjectURL(blob);
-            const a    = document.createElement("a");
-            a.href     = url;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
             a.download = `dataset-${competitionId}${activeVersion ? `-${activeVersion}` : ""}.${downloadFormat}`;
             a.click();
             URL.revokeObjectURL(url);
@@ -572,8 +544,8 @@ export default function DatasetHub() {
         finally { setDownloading(false); }
     };
 
-    const total     = health?.total || 0;
-    const avgLen    = health?.avg_text_length || 0;
+    const total = health?.total || 0;
+    const avgLen = health?.avg_text_length || 0;
     const vocabSize = total > 0 ? `${Math.round(total * 10.2 / 1000 * 10) / 10}k` : "—";
 
     return (
@@ -585,7 +557,12 @@ export default function DatasetHub() {
             />
 
             <div className="dh-main">
-                <CompetitionTopbar competition={competition} />
+                <CompetitionTopbar
+    competitionId={competitionId}
+    competitionTitle={competition?.title || "Competition"}
+    status="LAB ACTIVE"
+    showDatasetHub={false}
+/>
 
                 <div className="dh-body">
                     {/* Page header */}
@@ -617,10 +594,10 @@ export default function DatasetHub() {
                     {/* Stats + Health */}
                     <div className="dh-stats-health-row">
                         <div className="dh-stats-row">
-                            <StatCard label="TOTAL SAMPLES"   value={total.toLocaleString()} accent="#1359db" />
+                            <StatCard label="TOTAL SAMPLES" value={total.toLocaleString()} accent="#1359db" />
                             <StatCard label="AVG TEXT LENGTH" value={avgLen || "—"}
                                 sub={avgLen ? "tokens" : undefined} />
-                            <StatCard label="VOCAB SIZE"      value={total > 0 ? vocabSize : "—"} />
+                            <StatCard label="VOCAB SIZE" value={total > 0 ? vocabSize : "—"} />
                             <StatCard label="LABEL DIST."
                                 value={Object.keys(health?.label_distribution || {}).length || "—"}
                                 sub="categories" />
