@@ -39,10 +39,10 @@ function IconTrophy({ size = 13 }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6 9H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2"/>
-            <path d="M18 9h2a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2"/>
-            <path d="M6 2h12v10a6 6 0 0 1-12 0V2z"/>
-            <path d="M12 18v4"/><path d="M8 22h8"/>
+            <path d="M6 9H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2" />
+            <path d="M18 9h2a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2" />
+            <path d="M6 2h12v10a6 6 0 0 1-12 0V2z" />
+            <path d="M12 18v4" /><path d="M8 22h8" />
         </svg>
     );
 }
@@ -50,7 +50,7 @@ function IconChevronLeft({ size = 13 }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6"/>
+            <polyline points="15 18 9 12 15 6" />
         </svg>
     );
 }
@@ -58,8 +58,8 @@ function IconRefresh({ size = 13 }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="1 4 1 10 7 10"/>
-            <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 1 0 .49-4.5" />
         </svg>
     );
 }
@@ -67,8 +67,8 @@ function IconTag({ size = 11 }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
-            <line x1="7" y1="7" x2="7.01" y2="7"/>
+            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+            <line x1="7" y1="7" x2="7.01" y2="7" />
         </svg>
     );
 }
@@ -76,7 +76,7 @@ function IconSearch({ size = 14 }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
     );
 }
@@ -84,7 +84,7 @@ function IconCheck({ size = 20 }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12"/>
+            <polyline points="20 6 9 17 4 12" />
         </svg>
     );
 }
@@ -92,7 +92,7 @@ function IconXClose({ size = 14 }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
         </svg>
     );
 }
@@ -100,9 +100,9 @@ function IconWarning({ size = 28 }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
     );
 }
@@ -121,8 +121,8 @@ function fmtDate(iso) {
 
 function metricBadgeClass(val) {
     const n = parseFloat(val);
-    if (isNaN(n))  return "er-badge er-badge--neutral";
-    if (n >= 0.9)  return "er-badge er-badge--high";
+    if (isNaN(n)) return "er-badge er-badge--neutral";
+    if (n >= 0.9) return "er-badge er-badge--high";
     if (n >= 0.75) return "er-badge er-badge--mid";
     return "er-badge er-badge--low";
 }
@@ -230,17 +230,17 @@ export default function ExperimentRegistry() {
     const { competitionId } = useParams();
     const navigate = useNavigate();
 
-    const [data, setData]         = useState(null);
-    const [loading, setLoading]   = useState(true);
-    const [error, setError]       = useState("");
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
 
-    const [search, setSearch]     = useState("");
+    const [search, setSearch] = useState("");
     const [onlyMine, setOnlyMine] = useState(false);
-    const [sortKey, setSortKey]   = useState("created_at");
-    const [sortDir, setSortDir]   = useState("desc");
+    const [sortKey, setSortKey] = useState("created_at");
+    const [sortDir, setSortDir] = useState("desc");
 
-    const [selectedRun, setSelectedRun]   = useState(null);
-    const [submitting, setSubmitting]     = useState(false);
+    const [selectedRun, setSelectedRun] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
     const [submitResult, setSubmitResult] = useState(null);
 
     const [toast, setToast] = useState("");
@@ -363,9 +363,9 @@ export default function ExperimentRegistry() {
 
     if (loading) {
         return (
-            <div className="er-root" style={{background:"#f4f6fa",color:"#111827"}}>
+            <div className="er-root" style={{ background: "#f4f6fa", color: "#111827" }}>
                 <CompetitionSidebar competitionId={competitionId} />
-                <div className="er-main" style={{background:"#f4f6fa"}}>
+                <div className="er-main" style={{ background: "#f4f6fa" }}>
                     <div className="er-loading">
                         <span className="er-spinner er-spinner--lg" />
                         <p>Loading experiment registry…</p>
@@ -377,9 +377,9 @@ export default function ExperimentRegistry() {
 
     if (error === "__401__") {
         return (
-            <div className="er-root" style={{background:"#f4f6fa",color:"#111827"}}>
+            <div className="er-root" style={{ background: "#f4f6fa", color: "#111827" }}>
                 <CompetitionSidebar competitionId={competitionId} />
-                <div className="er-main" style={{background:"#f4f6fa"}}>
+                <div className="er-main" style={{ background: "#f4f6fa" }}>
                     <div className="er-error">
                         <IconWarning size={28} />
                         <p>Your session has expired.</p>
@@ -395,9 +395,9 @@ export default function ExperimentRegistry() {
 
     if (error) {
         return (
-            <div className="er-root" style={{background:"#f4f6fa",color:"#111827"}}>
+            <div className="er-root" style={{ background: "#f4f6fa", color: "#111827" }}>
                 <CompetitionSidebar competitionId={competitionId} />
-                <div className="er-main" style={{background:"#f4f6fa"}}>
+                <div className="er-main" style={{ background: "#f4f6fa" }}>
                     <div className="er-error">
                         <IconWarning size={28} />
                         <p>{error}</p>
@@ -408,21 +408,21 @@ export default function ExperimentRegistry() {
         );
     }
 
-    const experiments        = filteredRuns;
-    const totalAll           = data?.total ?? 0;
-    const taskType           = data?.task_type || "";
-    const primaryMetric      = data?.primary_metric || "accuracy";
-    const teamName           = data?.team_name;
-    const teamMemberCount    = data?.team_member_ids?.length ?? 0;
-    const isOrganizerView    = data?.is_organizer_view ?? false;
-    const myRunsCount        = data?.experiments?.filter((r) => r.is_mine).length ?? 0;
+    const experiments = filteredRuns;
+    const totalAll = data?.total ?? 0;
+    const taskType = data?.task_type || "";
+    const primaryMetric = data?.primary_metric || "accuracy";
+    const teamName = data?.team_name;
+    const teamMemberCount = data?.team_member_ids?.length ?? 0;
+    const isOrganizerView = data?.is_organizer_view ?? false;
+    const myRunsCount = data?.experiments?.filter((r) => r.is_mine).length ?? 0;
     const uniqueContributors = new Set(data?.experiments?.map((r) => r.user_id) ?? []).size;
 
     return (
-        <div className="er-root" style={{background:"#f4f6fa",color:"#111827"}}>
+        <div className="er-root" style={{ background: "#f4f6fa", color: "#111827" }}>
             <CompetitionSidebar competitionId={competitionId} />
 
-            <div className="er-main" style={{background:"#f4f6fa"}}>
+            <div className="er-main" style={{ background: "#f4f6fa" }}>
 
                 {/* ── Header ── */}
                 <div className="er-page-header">
@@ -472,11 +472,9 @@ export default function ExperimentRegistry() {
                 </div>
 
                 {/* ── Context banner ── */}
-                {!isOrganizerView && (
+                {!isOrganizerView && teamName && (
                     <div className="er-scope-banner">
-                        {teamName
-                            ? `Showing all experiments from your team "${teamName}". Other teams' experiments are hidden.`
-                            : "You are participating solo — showing only your own experiments."}
+                        Team view — showing experiments from team "{teamName}".
                     </div>
                 )}
                 {isOrganizerView && (
@@ -562,8 +560,8 @@ export default function ExperimentRegistry() {
                                         {onlyMine
                                             ? "You have no saved experiment runs yet. Train a model in your workspace and click Save Model."
                                             : teamName
-                                            ? `No experiment runs from team "${teamName}" yet.`
-                                            : "No experiment runs found yet."}
+                                                ? `No experiment runs from team "${teamName}" yet.`
+                                                : "No experiment runs found yet."}
                                     </td>
                                 </tr>
                             ) : (
