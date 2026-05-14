@@ -7,16 +7,16 @@ function Sidebar() {
 
   const competitionsActive =
     location.pathname === "/competitions" ||
-    location.pathname === "/create-competition";
+    location.pathname === "/create-competition" ||
+    location.pathname.startsWith("/competitions/") ||
+    location.pathname.startsWith("/edit-competition/");
 
   return (
     <aside className="sidebar">
       <div>
-        <div className="sidebar-brand">
-          <div className="sidebar-brand">
-            <img src={logo} alt="Lexivia logo" className="sidebar-logo" />
-          </div>
-        </div>
+        <NavLink to="/dashboard" className="sidebar-brand">
+          <img src={logo} alt="Lexivia logo" className="sidebar-logo" />
+        </NavLink>
 
         <nav className="sidebar-nav">
           <NavLink
@@ -47,18 +47,28 @@ function Sidebar() {
             <span>Teams</span>
           </NavLink>
 
-          <div className="sidebar-link muted">
+          <NavLink
+            to="/datasets"
+            className={({ isActive }) =>
+              isActive ? "sidebar-link active" : "sidebar-link"
+            }
+          >
             <span className="sidebar-icon">▤</span>
             <span>Datasets</span>
-          </div>
+          </NavLink>
         </nav>
       </div>
 
       <div className="sidebar-bottom">
-        <div className="sidebar-link muted">
+        <NavLink
+          to="/resources"
+          className={({ isActive }) =>
+            isActive ? "sidebar-link active" : "sidebar-link"
+          }
+        >
           <span className="sidebar-icon">◌</span>
           <span>Resources</span>
-        </div>
+        </NavLink>
 
         <NavLink
           to="/profile/settings"
@@ -83,7 +93,6 @@ function Sidebar() {
           </span>
           <span>Settings</span>
         </NavLink>
-
       </div>
     </aside>
   );

@@ -1,0 +1,3 @@
+id,text_content,label,audio_url,quality_score,version_tag,submitted_at,annotation_json
+589b1865-e2fa-48ad-a0d1-6e6f7ad60b76,I love this product,positive,,0.952,,2026-05-13 23:51:04.782690+00:00,"{""label"": ""positive"", ""aspects"": [], ""sentiment"": ""positive"", ""confidence"": 0.8}"
+b5eec46b-a35b-4c34-ad53-31836b16c848,The support team was helpful,positive,,0.957,,2026-05-13 23:52:43.681770+00:00,"{""label"": ""positive"", ""aspects"": [], ""sentiment"": ""positive"", ""confidence"": 0.8}"

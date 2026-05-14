@@ -1,0 +1,72 @@
+[
+  {
+    "id": "5ca1ea41-1c0b-4eb6-9d12-b750ac7730b3",
+    "text_content": "The price is too expensive",
+    "label": "negative",
+    "audio_url": "",
+    "quality_score": 0.957,
+    "version_tag": "",
+    "submitted_at": "2026-05-13 23:53:58.489550+00:00",
+    "annotation_json": "{\"label\": \"negative\", \"aspects\": [], \"sentiment\": \"negative\", \"confidence\": 0.8}"
+  },
+  {
+    "id": "83d70aeb-0833-4813-8e45-75012bbd6a56",
+    "text_content": "Customer support solved my issue quickly",
+    "label": "positive",
+    "audio_url": "",
+    "quality_score": 0.963,
+    "version_tag": "",
+    "submitted_at": "2026-05-13 23:54:54.561247+00:00",
+    "annotation_json": "{\"label\": \"positive\", \"aspects\": [], \"sentiment\": \"positive\", \"confidence\": 0.8}"
+  },
+  {
+    "id": "c20e149f-64fa-47aa-a8c4-787abca2040c",
+    "text_content": "The app crashes constantly",
+    "label": "negative",
+    "audio_url": "",
+    "quality_score": 0.952,
+    "version_tag": "",
+    "submitted_at": "2026-05-13 23:55:11.993424+00:00",
+    "annotation_json": "{\"label\": \"negative\", \"aspects\": [], \"sentiment\": \"negative\", \"confidence\": 0.8}"
+  },
+  {
+    "id": "ef37afd8-aa08-4774-981e-4db77d90adc4",
+    "text_content": "The quality is amazing",
+    "label": "positive",
+    "audio_url": "",
+    "quality_score": 0.952,
+    "version_tag": "",
+    "submitted_at": "2026-05-13 23:54:18.507886+00:00",
+    "annotation_json": "{\"label\": \"positive\", \"aspects\": [], \"sentiment\": \"positive\", \"confidence\": 0.8}"
+  },
+  {
+    "id": "d2dfd661-2f47-443a-93da-6ef0d1803618",
+    "text_content": "It is okay, nothing special",
+    "label": "neutral",
+    "audio_url": "",
+    "quality_score": 0.957,
+    "version_tag": "",
+    "submitted_at": "2026-05-13 23:55:28.899174+00:00",
+    "annotation_json": "{\"label\": \"neutral\", \"aspects\": [], \"sentiment\": \"neutral\", \"confidence\": 0.8}"
+  },
+  {
+    "id": "383ac98c-e7cb-4bc0-a39f-3989a06340bd",
+    "text_content": "The delivery was very slow",
+    "label": "negative",
+    "audio_url": "",
+    "quality_score": 0.957,
+    "version_tag": "",
+    "submitted_at": "2026-05-13 23:53:41.474271+00:00",
+    "annotation_json": "{\"label\": \"negative\", \"aspects\": [], \"sentiment\": \"negative\", \"confidence\": 0.8}"
+  },
+  {
+    "id": "4f869f5e-de13-43a1-8f2f-5a60b4bdd5da",
+    "text_content": "The experience was average",
+    "label": "neutral",
+    "audio_url": "",
+    "quality_score": 0.952,
+    "version_tag": "",
+    "submitted_at": "2026-05-13 23:54:38.701471+00:00",
+    "annotation_json": "{\"label\": \"neutral\", \"aspects\": [], \"sentiment\": \"neutral\", \"confidence\": 0.8}"
+  }
+]
