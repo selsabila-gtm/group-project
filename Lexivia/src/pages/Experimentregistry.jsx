@@ -471,17 +471,8 @@ export default function ExperimentRegistry() {
                     </div>
                 </div>
 
-                {/* ── Context banner ── */}
-                {!isOrganizerView && teamName && (
-                    <div className="er-scope-banner">
-                        Team view — showing experiments from team "{teamName}".
-                    </div>
-                )}
-                {isOrganizerView && (
-                    <div className="er-scope-banner er-scope-banner--organizer">
-                        Organizer view — you can see all participants' experiments across all teams.
-                    </div>
-                )}
+               
+                
 
                 {/* ── Stats strip ── */}
                 <div className="er-stats-strip">
