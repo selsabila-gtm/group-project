@@ -34,16 +34,6 @@ const NAV_ITEMS = [
         ),
     },
     {
-        key: "models",
-        label: "Models",
-        icon: (
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11l3 3 3-3V3"/>
-                <path d="M3 9h18"/>
-            </svg>
-        ),
-    },
-    {
         key: "experiment-registry",
         label: "Experiments",
         icon: (
