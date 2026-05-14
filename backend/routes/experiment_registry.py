@@ -95,12 +95,13 @@ def _get_user_team_id(user_id: str, competition_id: str, db: Session) -> str | N
     """
     Returns the team_id (as string) for the user in this competition.
 
-    THE CORRECT SOURCE OF TRUTH:
-    competition_participants.team_id is written by _do_join_competition() in
-    competitions.py every time a user joins — both for auto-join and when an
-    organizer approves a manual join request. It is always set correctly.
-
-    So we simply read it directly from competition_participants.
+    Strategy (two-step fallback):
+      1. Check competition_participants.team_id — set when user joins via the
+         competition join flow with a team already selected.
+      2. If that is NULL, look up team_members for any team whose members
+         also appear as participants in this competition. This covers users
+         who joined a team via invite BEFORE or AFTER joining the competition,
+         where competition_participants.team_id was never backfilled.
     """
     participant = db.query(CompetitionParticipant).filter(
         CompetitionParticipant.competition_id == competition_id,
@@ -110,8 +111,42 @@ def _get_user_team_id(user_id: str, competition_id: str, db: Session) -> str | N
     if not participant:
         return None
 
-    # team_id is stored as a string (e.g. "42") or None for solo participants
-    return str(participant.team_id) if participant.team_id else None
+    # Step 1: fast path — team_id already stored on the participant row
+    if participant.team_id:
+        return str(participant.team_id)
+
+    # Step 2: fallback — look in team_members
+    # Find all teams this user belongs to
+    memberships = db.query(TeamMember).filter(
+        TeamMember.user_id == str(user_id)
+    ).all()
+
+    for membership in memberships:
+        team_id_candidate = str(membership.team_id)
+        # Check if any OTHER member of this team is also a participant
+        # in this competition — that confirms it's the right team
+        other_member_ids = [
+            str(m.user_id) for m in
+            db.query(TeamMember).filter(
+                TeamMember.team_id == membership.team_id,
+                TeamMember.user_id != str(user_id),
+            ).all()
+        ]
+        if other_member_ids:
+            match = db.query(CompetitionParticipant).filter(
+                CompetitionParticipant.competition_id == competition_id,
+                CompetitionParticipant.user_id.in_(other_member_ids),
+            ).first()
+            if match:
+                # Backfill so future calls are fast
+                participant.team_id = team_id_candidate
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                return team_id_candidate
+
+    return None
 
 
 def _get_team_user_ids(
@@ -123,28 +158,48 @@ def _get_team_user_ids(
     """
     Returns all user_ids on this team IN this competition.
 
-    We read directly from competition_participants filtered by team_id —
-    this is the correct source of truth. Every member of the team who
-    joined the competition has a row in competition_participants with
-    the same team_id.
+    Strategy (two-step):
+      1. Look in competition_participants filtered by team_id (fast path).
+      2. Also pull from team_members for this team_id, intersected with
+         competition_participants — catches teammates whose participant row
+         has team_id = NULL (never backfilled).
 
     If team_id is None (solo participant), returns just [current_user_id].
     """
     if not team_id:
         return [current_user_id]
 
+    visible = set()
+
+    # Step 1: participants whose team_id is already set correctly
     rows = db.query(CompetitionParticipant).filter(
         CompetitionParticipant.competition_id == competition_id,
         CompetitionParticipant.team_id == team_id,
     ).all()
+    for r in rows:
+        visible.add(str(r.user_id))
 
-    visible = [str(r.user_id) for r in rows]
+    # Step 2: all team_members for this team who are competition participants
+    # (covers rows where competition_participants.team_id was never set)
+    try:
+        all_team_member_ids = [
+            str(m.user_id) for m in
+            db.query(TeamMember).filter(TeamMember.team_id == int(team_id)).all()
+        ]
+        if all_team_member_ids:
+            participant_rows = db.query(CompetitionParticipant).filter(
+                CompetitionParticipant.competition_id == competition_id,
+                CompetitionParticipant.user_id.in_(all_team_member_ids),
+            ).all()
+            for r in participant_rows:
+                visible.add(str(r.user_id))
+    except Exception:
+        pass
 
-    # Always include current user in case their row was just inserted
-    if current_user_id not in visible:
-        visible.append(current_user_id)
+    # Always include current user
+    visible.add(current_user_id)
 
-    return visible
+    return list(visible)
 
 
 def _get_team_name(team_id: str | None, db: Session) -> str | None:
