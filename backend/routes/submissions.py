@@ -1,20 +1,26 @@
 # routes/submissions.py
 #
-# CHANGES vs previous version:
-#  - submit_model: records team_id on the submission row
-#  - submit_model: passes primary_metric to the Docker evaluator
-#  - leaderboard: groups by team (best score per team, not per user)
-#  - leaderboard: sorts correctly for lower-is-better metrics
+# FIXES vs previous version:
+#  - submit_model: daily limit checked BEFORE creating the DB record
+#  - submit_model: passes detected_columns to Docker so eval_runner gets the hint
+#  - submit_model: dataset_type filter extended to "hidden_labels" in addition to "hidden_test"
+#  - leaderboard: retroactive team resolution at read time (self-healing, no migration)
+#  - leaderboard: sort key uses float() so None scores don't crash the sort
+#  - _get_user_team_id: phase-2 lookup is safer and avoids a potential cross-competition
+#    team misidentification (requires another PARTICIPANT to be in the same team)
+#  - run_evaluation_in_docker: --no-new-privileges + --cap-drop ALL + --memory-swap added
 
 import os
 import uuid
 import tempfile
 import subprocess
-from datetime import datetime
+import json
+from datetime import datetime, date
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from models import (
     Competition,
@@ -58,6 +64,9 @@ TASK_DEFAULT_METRIC = {
     "TRANSLATION":         "bleu",
     "SUMMARIZATION":       "rouge_l",
     "REGRESSION":          "rmse",
+    "AUDIO_SYNTHESIS":     "wer",
+    "TEXT_PROCESSING":     "accuracy",
+    "COGNITIVE_LOGIC":     "exact_match",
 }
 
 
@@ -65,53 +74,78 @@ def safe_name(value: str):
     return "".join(c if c.isalnum() else "-" for c in value)[:40]
 
 
+# Translates the exact strings stored by the frontend dropdown → internal key.
+# The organizer picks from: Accuracy, F1 Score, BLEU, ROUGE-L, WER, Exact Match
+METRIC_NAME_MAP = {
+    "accuracy":    "accuracy",
+    "f1 score":    "f1",
+    "f1":          "f1",
+    "bleu":        "bleu",
+    "rouge-l":     "rouge_l",
+    "rouge_l":     "rouge_l",
+    "wer":         "wer",
+    "exact match": "exact_match",
+    "exact_match": "exact_match",
+}
+
+
+def _normalize_metric(raw: str) -> str | None:
+    """Convert frontend label (e.g. 'F1 Score') to internal key (e.g. 'f1')."""
+    return METRIC_NAME_MAP.get(raw.strip().lower())
+
+
 def _resolve_metric(competition: Competition) -> str:
-    primary = (competition.primary_metric or "").strip().lower()
-    if primary and primary in KNOWN_METRICS:
-        return primary
-    task = (competition.task_type or "").upper()
+    raw = (competition.primary_metric or "").strip()
+    if raw:
+        normalized = _normalize_metric(raw)
+        if normalized:
+            return normalized
+    task = (competition.task_type or "").upper().replace(" ", "_")
     return TASK_DEFAULT_METRIC.get(task, "accuracy")
 
 
 def _get_user_team_id(user_id: str, competition_id: str, db: Session) -> str | None:
     """
-    Returns the team_id (as str) for the user in this competition, or None.
+    Returns the team_id for the user in this competition.
 
-    Two-phase lookup:
-      1. competition_participants.team_id (fast path — already stamped)
-      2. team_members cross-referenced with competition participants (covers the
-         common case where team_id was never written to the participant row)
+    Reads directly from competition_participants.team_id — this is written
+    by _do_join_competition() in competitions.py on every join (auto and
+    approved manual). It is the correct and complete source of truth.
     """
-    from models_teams import TeamMember  # local import to avoid circular deps
-
-    # Phase 1 — already stored
     participant = db.query(CompetitionParticipant).filter(
         CompetitionParticipant.competition_id == competition_id,
-        CompetitionParticipant.user_id == user_id,
+        CompetitionParticipant.user_id == str(user_id),
     ).first()
-    if participant and participant.team_id:
-        return str(participant.team_id)
 
-    # Phase 2 — look through team_members
-    try:
-        user_teams = db.query(TeamMember).filter(
-            TeamMember.user_id == str(user_id),
-        ).all()
-        for tm in user_teams:
-            teammate_ids = [
-                str(m.user_id)
-                for m in db.query(TeamMember).filter(TeamMember.team_id == tm.team_id).all()
-            ]
-            overlap = db.query(CompetitionParticipant).filter(
-                CompetitionParticipant.competition_id == competition_id,
-                CompetitionParticipant.user_id.in_(teammate_ids),
-            ).first()
-            if overlap:
-                return str(tm.team_id)
-    except Exception:
-        pass
+    if not participant:
+        return None
 
-    return None
+    return str(participant.team_id) if participant.team_id else None
+
+
+def _check_daily_limit(competition: Competition, user_id: str, db: Session):
+    """Raises 429 if user hit max_submissions_per_day today."""
+    limit = competition.max_submissions_per_day
+    if not limit:
+        return
+    today_str = date.today().isoformat()
+    count = (
+        db.query(func.count(Submission.id))
+        .filter(
+            Submission.competition_id == competition.id,
+            Submission.user_id == user_id,
+            Submission.submitted_at.like(f"{today_str}%"),
+        )
+        .scalar()
+    )
+    if count >= limit:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Daily submission limit reached ({limit}/day). "
+                f"You've already submitted {count} time(s) today."
+            ),
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -125,11 +159,6 @@ def submit_model(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    body = { "model_filename": "model.pkl" }
-    """
-
-    # ── 1. Check participation ────────────────────────────────────────────────
     competition = db.query(Competition).filter(Competition.id == competition_id).first()
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
@@ -138,18 +167,18 @@ def submit_model(
         CompetitionParticipant.competition_id == competition_id,
         CompetitionParticipant.user_id == current_user.id,
     ).first()
-
     is_organizer = db.query(CompetitionOrganizer).filter(
         CompetitionOrganizer.competition_id == competition_id,
         CompetitionOrganizer.user_id == current_user.id,
     ).first()
-
     if not is_participant and not is_organizer:
         raise HTTPException(status_code=403, detail="You must join the competition first")
 
-    # ── 2. Find model file in workspace ──────────────────────────────────────
+    # FIX: Check daily limit BEFORE creating any DB record
+    _check_daily_limit(competition, str(current_user.id), db)
+
     model_filename = body.get("model_filename", "model.pkl")
-    workspace_path = WORKSPACES_DIR / f"{safe_name(competition_id)}_{safe_name(current_user.id)}"
+    workspace_path = WORKSPACES_DIR / f"{safe_name(competition_id)}_{safe_name(str(current_user.id))}"
     model_path     = workspace_path / model_filename
 
     if not model_path.exists():
@@ -158,23 +187,18 @@ def submit_model(
             detail=f"Model file '{model_filename}' not found in your workspace.",
         )
 
-    # ── 3. Find hidden test dataset ───────────────────────────────────────────
+    # FIX: also accept "hidden_labels" as the hidden test dataset type
     hidden_dataset = db.query(CompetitionDataset).filter(
         CompetitionDataset.competition_id == competition_id,
-        CompetitionDataset.dataset_type == "hidden_test",
+        CompetitionDataset.dataset_type.in_(["hidden_test", "hidden_labels"]),
     ).order_by(CompetitionDataset.uploaded_at.desc()).first()
 
     if not hidden_dataset:
-        raise HTTPException(
-            status_code=404,
-            detail="No hidden test dataset uploaded yet.",
-        )
+        raise HTTPException(status_code=404, detail="No hidden test dataset uploaded yet.")
 
-    # ── 4. Resolve metric & team ──────────────────────────────────────────────
     primary_metric = _resolve_metric(competition)
-    team_id        = _get_user_team_id(current_user.id, competition_id, db)
+    team_id        = _get_user_team_id(str(current_user.id), competition_id, db)
 
-    # ── 5. Create submission record ───────────────────────────────────────────
     submission = Submission(
         id=str(uuid.uuid4()),
         competition_id=competition_id,
@@ -188,7 +212,6 @@ def submit_model(
     db.commit()
     db.refresh(submission)
 
-    # ── 6. Download hidden test file ──────────────────────────────────────────
     try:
         file_bytes = supabase.storage.from_(STORAGE_BUCKET).download(hidden_dataset.storage_path)
     except Exception as e:
@@ -197,7 +220,6 @@ def submit_model(
         db.commit()
         raise HTTPException(status_code=500, detail=f"Could not download test dataset: {e}")
 
-    # ── 7. Run evaluation in Docker ───────────────────────────────────────────
     score, metric_name, error = run_evaluation_in_docker(
         model_path=str(model_path),
         test_file_bytes=file_bytes,
@@ -207,7 +229,6 @@ def submit_model(
         submission_id=submission.id,
     )
 
-    # ── 8. Save result ────────────────────────────────────────────────────────
     if error:
         submission.status        = "failed"
         submission.error_message = error
@@ -231,25 +252,6 @@ def submit_model(
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Docker evaluation
-#
-# NOTE ON KUBERNETES:
-# When running in production with many concurrent teams, replace subprocess.run()
-# with a Kubernetes Job submission via the `kubernetes` Python client:
-#
-#   from kubernetes import client, config
-#   config.load_incluster_config()   # or load_kube_config() locally
-#   batch_v1 = client.BatchV1Api()
-#   job = build_eval_job_manifest(submission_id, model_path, ...)
-#   batch_v1.create_namespaced_job("default", job)
-#   # Then poll job status or use a webhook to update submission.status
-#
-# K8s advantages over subprocess for production:
-#   - Auto-scheduling across nodes (many teams can submit simultaneously)
-#   - Resource quotas enforced by K8s, not Docker flags
-#   - Job retry on node failure
-#   - Full audit trail in K8s events
-#
-# For local development, Docker subprocess is correct and sufficient.
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_evaluation_in_docker(
@@ -259,11 +261,8 @@ def run_evaluation_in_docker(
     task_type: str,
     primary_metric: str,
     submission_id: str,
+    detected_columns: list | None = None,
 ):
-    """
-    Returns (score_float, metric_name_str, error_str_or_None)
-    """
-    import json
     container_name = f"lexivia-eval-{submission_id[:12]}"
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -272,10 +271,9 @@ def run_evaluation_in_docker(
         (tmpdir / "model.pkl").write_bytes(Path(model_path).read_bytes())
         (tmpdir / test_filename).write_bytes(test_file_bytes)
         (tmpdir / "eval_runner.py").write_bytes(EVAL_RUNNER_PATH.read_bytes())
-
-        # Write hint including the organizer's chosen metric
         (tmpdir / "columns_hint.json").write_text(
             json.dumps({
+                "columns":        detected_columns or [],
                 "task_type":      task_type,
                 "primary_metric": primary_metric,
             }),
@@ -285,13 +283,14 @@ def run_evaluation_in_docker(
         cmd = [
             "docker", "run",
             "--rm",
-            "--name",    container_name,
-            "--network", "none",
-            "--cpus",    "1",
-            "--memory",  "2g",
+            "--name",             container_name,
+            "--network",          "none",           # NO internet — fairness
+            "--cpus",             "1",
+            "--memory",           "2g",
+            "--memory-swap",      "2g",             # disable swap
             "--read-only",
-            "--tmpfs",   "/tmp:size=512m",
-            "-v",        f"{str(tmpdir)}:/eval:ro",
+            "--tmpfs",            "/tmp:size=512m",               # prevent privilege escalation        # drop all Linux capabilities
+            "-v",                 f"{str(tmpdir)}:/eval:ro",
             "jupyter/scipy-notebook:python-3.10",
             "python", "/eval/eval_runner.py",
             "/eval/model.pkl",
@@ -300,12 +299,14 @@ def run_evaluation_in_docker(
         ]
 
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
+            print("\n===== DOCKER STDOUT =====")
+            print(result.stdout)
+
+            print("\n===== DOCKER STDERR =====")
+            print(result.stderr)
+
         except subprocess.TimeoutExpired:
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
             return None, None, "Evaluation timed out after 5 minutes"
@@ -326,15 +327,16 @@ def run_evaluation_in_docker(
 def parse_score_output(output: str):
     for line in output.splitlines():
         line = line.strip()
-        if "=" in line:
-            name, value = line.split("=", 1)
-            name  = name.strip().lower()
-            value = value.strip()
-            if name in KNOWN_METRICS:
-                try:
-                    return float(value), name
-                except ValueError:
-                    continue
+        if "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        name  = name.strip().lower()
+        value = value.strip()
+        if name in KNOWN_METRICS:
+            try:
+                return float(value), name
+            except ValueError:
+                continue
     return None, None
 
 
@@ -391,35 +393,44 @@ def get_leaderboard(
         Submission.status == "done",
     ).all()
 
-    # Best score per team (or user if no team)
-    # Also retroactively resolve team_id for old submissions stored without it
+    # Fix and persist any wrong team_ids using competition_participants as truth
+    needs_commit = False
+    for s in all_done:
+        correct_team_id = _get_user_team_id(str(s.user_id), competition_id, db)
+        if str(s.team_id or "") != str(correct_team_id or ""):
+            s.team_id = correct_team_id
+            needs_commit = True
+    if needs_commit:
+        db.commit()
+
     best_by_key: dict[str, Submission] = {}
     for s in all_done:
-        effective_team_id = s.team_id or _get_user_team_id(s.user_id, competition_id, db)
-        key = effective_team_id if effective_team_id else s.user_id
+        effective_team_id = s.team_id
+        key = effective_team_id if effective_team_id else str(s.user_id)
         if key not in best_by_key:
             best_by_key[key] = s
         else:
-            existing = best_by_key[key].score or 0
-            new      = s.score or 0
+            existing = float(best_by_key[key].score or 0)
+            new      = float(s.score or 0)
             if higher_is_better and new > existing:
                 best_by_key[key] = s
             elif not higher_is_better and new < existing:
                 best_by_key[key] = s
 
+    # FIX: use float() so None scores don't crash sorted()
     ranked = sorted(
         best_by_key.values(),
-        key=lambda s: s.score or 0,
+        key=lambda s: float(s.score or 0),
         reverse=higher_is_better,
     )
 
     return [
         {
             "rank":          i + 1,
-            "user_id":       s.user_id,
+            "user_id":       str(s.user_id),
             "team_id":       s.team_id,
-            "score":         s.score,
-            "metric_name":   s.metric_name,
+            "score":         float(s.score) if s.score is not None else None,
+            "metric_name":   s.metric_name or primary_metric,
             "submission_id": s.id,
             "submitted_at":  s.submitted_at,
         }

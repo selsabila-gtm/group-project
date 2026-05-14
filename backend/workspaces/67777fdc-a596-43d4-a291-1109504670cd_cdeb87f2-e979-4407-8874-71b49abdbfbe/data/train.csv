@@ -1,0 +1,8 @@
+id,text_content,label,audio_url,quality_score,version_tag,submitted_at,annotation_json
+5ca1ea41-1c0b-4eb6-9d12-b750ac7730b3,The price is too expensive,negative,,0.957,,2026-05-13 23:53:58.489550+00:00,"{""label"": ""negative"", ""aspects"": [], ""sentiment"": ""negative"", ""confidence"": 0.8}"
+83d70aeb-0833-4813-8e45-75012bbd6a56,Customer support solved my issue quickly,positive,,0.963,,2026-05-13 23:54:54.561247+00:00,"{""label"": ""positive"", ""aspects"": [], ""sentiment"": ""positive"", ""confidence"": 0.8}"
+c20e149f-64fa-47aa-a8c4-787abca2040c,The app crashes constantly,negative,,0.952,,2026-05-13 23:55:11.993424+00:00,"{""label"": ""negative"", ""aspects"": [], ""sentiment"": ""negative"", ""confidence"": 0.8}"
+ef37afd8-aa08-4774-981e-4db77d90adc4,The quality is amazing,positive,,0.952,,2026-05-13 23:54:18.507886+00:00,"{""label"": ""positive"", ""aspects"": [], ""sentiment"": ""positive"", ""confidence"": 0.8}"
+d2dfd661-2f47-443a-93da-6ef0d1803618,"It is okay, nothing special",neutral,,0.957,,2026-05-13 23:55:28.899174+00:00,"{""label"": ""neutral"", ""aspects"": [], ""sentiment"": ""neutral"", ""confidence"": 0.8}"
+383ac98c-e7cb-4bc0-a39f-3989a06340bd,The delivery was very slow,negative,,0.957,,2026-05-13 23:53:41.474271+00:00,"{""label"": ""negative"", ""aspects"": [], ""sentiment"": ""negative"", ""confidence"": 0.8}"
+4f869f5e-de13-43a1-8f2f-5a60b4bdd5da,The experience was average,neutral,,0.952,,2026-05-13 23:54:38.701471+00:00,"{""label"": ""neutral"", ""aspects"": [], ""sentiment"": ""neutral"", ""confidence"": 0.8}"

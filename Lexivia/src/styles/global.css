@@ -22,21 +22,22 @@ body {
   height: 100vh;
 }
 
-form {
+/* ── Auth form styles (scoped — do NOT use bare selectors globally) ── */
+.auth-container form {
   background: white;
   padding: 30px;
   border-radius: 10px;
   width: 300px;
 }
 
-input {
+.auth-container input {
   display: block;
   margin-bottom: 10px;
   width: 100%;
   padding: 10px;
 }
 
-button {
+.auth-container button {
   width: 100%;
   padding: 10px;
   background: blue;

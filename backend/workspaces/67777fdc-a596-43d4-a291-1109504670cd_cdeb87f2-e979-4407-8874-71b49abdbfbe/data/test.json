@@ -1,0 +1,22 @@
+[
+  {
+    "id": "589b1865-e2fa-48ad-a0d1-6e6f7ad60b76",
+    "text_content": "I love this product",
+    "label": "positive",
+    "audio_url": "",
+    "quality_score": 0.952,
+    "version_tag": "",
+    "submitted_at": "2026-05-13 23:51:04.782690+00:00",
+    "annotation_json": "{\"label\": \"positive\", \"aspects\": [], \"sentiment\": \"positive\", \"confidence\": 0.8}"
+  },
+  {
+    "id": "b5eec46b-a35b-4c34-ad53-31836b16c848",
+    "text_content": "The support team was helpful",
+    "label": "positive",
+    "audio_url": "",
+    "quality_score": 0.957,
+    "version_tag": "",
+    "submitted_at": "2026-05-13 23:52:43.681770+00:00",
+    "annotation_json": "{\"label\": \"positive\", \"aspects\": [], \"sentiment\": \"positive\", \"confidence\": 0.8}"
+  }
+]
