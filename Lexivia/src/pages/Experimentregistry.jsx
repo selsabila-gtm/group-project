@@ -471,8 +471,8 @@ export default function ExperimentRegistry() {
                     </div>
                 </div>
 
-               
-                
+
+
 
                 {/* ── Stats strip ── */}
                 <div className="er-stats-strip">
